@@ -81,36 +81,65 @@ healthcheck:
                   └─────────────────────────────────┘
 ```
 
-- **nexad** — The daemon. Manages containers, networking, scheduling, and state.
-- **nexa** — The CLI. Deploys, scales, inspects, and streams logs.
-- **nexa-core** — Shared types, traits, and the container runtime abstraction.
+## Repositories
+
+NexaNet is organized as a multi-repo project under the [`nexa-net`](https://github.com/nexa-net) GitHub organization:
+
+| Repository | Description | Status |
+|------------|-------------|--------|
+| [`nexa-core`](https://github.com/nexa-net/nexa-core) | Shared types, domain models, port traits | Active |
+| [`nexad`](https://github.com/nexa-net/nexad) | Daemon — orchestrator, API, adapters | Active |
+| [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | CLI client (`nexa` binary) | Active |
+| [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | Reverse proxy sidecar with auto TLS | Planned |
+| [`nexa`](https://github.com/nexa-net/nexa) | This repo — specs, plans, project docs | Active |
+
+### Hexagonal Architecture
+
+```
+nexa-core (domain + ports)
+  ├── domain/         Pure business logic
+  │   ├── orchestrator.rs
+  │   ├── scheduler.rs
+  │   ├── health.rs
+  │   ├── restart.rs
+  │   └── models/
+  └── ports/          Trait definitions only
+      ├── runtime.rs  (ContainerRuntime)
+      ├── state.rs    (StateStore)
+      ├── secrets.rs  (SecretStore)
+      ├── proxy.rs    (ProxyBackend)
+      ├── dns.rs      (DnsProvider)
+      └── cluster.rs  (ClusterTransport)
+
+nexad (adapters + composition root)
+  └── adapters/
+      ├── runtime/    Docker, containerd
+      ├── state/      SQLite
+      ├── secrets/    AES-256-GCM encrypted
+      ├── proxy/      nexa-proxy, Caddy, Traefik, Nginx
+      ├── dns/        hickory-dns
+      └── cluster/    gRPC, local
+```
 
 ## Building from Source
 
 ```bash
-git clone https://github.com/nexa-net/nexa.git
-cd nexa
-cargo build --release
-```
+# Clone all repos
+gh repo clone nexa-net/nexa-core
+gh repo clone nexa-net/nexad
+gh repo clone nexa-net/nexa-cli
 
-Binaries are placed in `target/release/`:
-- `nexad` — the daemon
-- `nexa` — the CLI
+# Build the daemon
+cd nexad && cargo build --release
+
+# Build the CLI
+cd ../nexa-cli && cargo build --release
+```
 
 ## Requirements
 
 - Rust 1.85+
 - Docker (running)
-
-## Project Structure
-
-```
-crates/
-  nexa-core/    # Shared types, models, runtime abstraction
-  nexad/        # Daemon — orchestrator, API server
-  nexa-cli/     # CLI client
-examples/       # Example deployment specs
-```
 
 ## Roadmap
 
