@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
+> | Plan path prefix | Repo | Local path |
+> |---|---|---|
+> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
+> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
+> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
+>
+> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+
 **Goal:** Transform NexaNet from a single-node container orchestrator into a multi-node cluster with master/worker topology, gRPC transport, join-token authentication, heartbeat-based failure detection, and node-aware pod scheduling.
 
 **Architecture:** A new `ClusterTransport` port trait abstracts single-node vs. multi-node communication. `LocalTransport` wraps `ContainerRuntime` for single-node mode. `GrpcTransport` uses tonic gRPC for multi-node. The master runs a gRPC server (port 6444) accepting worker registrations, streaming heartbeats, and dispatching pod operations. Workers connect via `nexad --mode worker --join <ip>:6444 --token <token>`. A heartbeat monitor detects dead nodes and reschedules pods. Join tokens are random 32-byte hex strings (prefixed `nxa_`), stored SHA-256 hashed in SQLite. The orchestrator routes all pod lifecycle operations through `ClusterTransport` instead of calling `ContainerRuntime` directly.

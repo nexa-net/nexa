@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
+> | Plan path prefix | Repo | Local path |
+> |---|---|---|
+> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
+> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
+> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
+>
+> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+
 **Goal:** Make projects the universal isolation boundary for all NexaNet resources, add encrypted secrets management per project, and implement project lifecycle commands (suspend/resume/delete).
 
 **Architecture:** Every resource (deployments, pods, secrets, networks, volumes) is scoped to exactly one project. A `SecretStore` port trait in nexa-core defines encrypted secret CRUD. The `EncryptedSqliteSecretStore` adapter in nexad uses AES-256-GCM with a file-based master key. The orchestrator resolves and injects secrets into container env vars at deploy time, and gains three new commands for project lifecycle management (suspend stops all pods and blocks deploys, resume re-enables and reconciles, delete requires empty project).

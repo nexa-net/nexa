@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
+> | Plan path prefix | Repo | Local path |
+> |---|---|---|
+> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
+> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
+> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
+>
+> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+
 **Goal:** Persist all orchestrator state (projects, deployments, pods) to SQLite so nexad survives restarts without losing cluster state.
 
 **Architecture:** A `StateStore` port trait is defined in `nexa-core/src/ports/state.rs`, keeping the domain pure. An `SqliteStore` adapter in `nexad/src/adapters/state/sqlite.rs` implements it using sqlx with compile-time-checked migrations. An `InMemoryStore` in `nexa-core` serves unit tests. The orchestrator receives `Arc<dyn StateStore>` at spawn time, writes to it after every mutation, and loads from it on startup. A reconciliation pass on startup detects stale pods by querying the container runtime.

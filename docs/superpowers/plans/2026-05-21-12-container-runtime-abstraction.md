@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
+> | Plan path prefix | Repo | Local path |
+> |---|---|---|
+> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
+> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
+> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
+>
+> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+
 **Goal:** Add containerd as a second container runtime backend alongside Docker. Introduce runtime auto-detection, a CNI networking manager for containerd, file-based log tailing, and a unified integration test suite that validates both runtimes against the same `ContainerRuntime` trait.
 
 **Architecture:** The existing `ContainerRuntime` trait in `nexa-core` gains four new methods (`container_ip`, `events`, `dns` fields on `ContainerConfig`) that were specified but not yet implemented. A `RuntimeDetector` checks socket availability and CLI flags to select the runtime. `ContainerdRuntime` lives in `nexad/src/adapters/runtime/containerd.rs` and delegates networking to a `CniManager`. All containerd containers run in the `nexa` namespace. Logs are written to `{data_dir}/logs/{container_id}/` and tailed via `tokio::fs` + `tokio::io::BufReader`. The `nexa setup cni` CLI command downloads standard CNI plugin binaries.

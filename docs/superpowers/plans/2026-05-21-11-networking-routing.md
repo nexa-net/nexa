@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
+> | Plan path prefix | Repo | Local path |
+> |---|---|---|
+> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
+> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
+> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
+>
+> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+
 **Goal:** Add overlay networking (WireGuard via boringtun), a pluggable reverse proxy abstraction with four backends (nexa-proxy, caddy, traefik, nginx), and automated TLS certificate management to enable multi-node container routing with HTTPS.
 
 **Architecture:** Three layers compose into the hexagonal architecture. Layer 1 is a WireGuard overlay network: when a worker joins the cluster, the master assigns it a `/24` subnet from the cluster CIDR (`172.20.0.0/16`), generates a WireGuard keypair, and distributes peer configs via gRPC; each node runs a userspace WireGuard interface via `boringtun` so containers on different nodes can reach each other by IP. Layer 2 is a `ProxyBackend` port trait in `nexa-core` with four adapter implementations in `nexad` (nexa-proxy as a new crate, plus caddy/traefik/nginx config generators); the orchestrator calls `apply_routes` on deploy and `remove_route` on teardown. Layer 3 is TLS automation: certificates are stored encrypted in SQLite, and a daily renewal task uses `instant-acme` to issue/renew certificates 30 days before expiry.

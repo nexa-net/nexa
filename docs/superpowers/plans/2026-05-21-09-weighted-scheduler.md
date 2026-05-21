@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
+> | Plan path prefix | Repo | Local path |
+> |---|---|---|
+> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
+> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
+> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
+>
+> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+
 **Goal:** Implement a weighted scoring scheduler that assigns pods to cluster nodes based on configurable CPU, memory, load, and failure weights, supporting both spread and binpack strategies.
 
 **Architecture:** The scheduler lives in `nexa-core/src/domain/scheduler.rs` as a pure domain component with zero infrastructure dependencies. `WeightedScheduler` scores each candidate `NodeSnapshot` using a normalized weighted formula, returning the highest-scoring node. Failure penalty uses exponential decay over recent failure timestamps. The orchestrator calls `scheduler.select_node()` during pod creation, and a new `cluster config` CLI subcommand persists scheduler weights to a `cluster_config` table. In single-node mode the same code path runs -- the scheduler trivially returns the only candidate.

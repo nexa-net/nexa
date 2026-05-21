@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
+> | Plan path prefix | Repo | Local path |
+> |---|---|---|
+> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
+> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
+> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
+>
+> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+
 **Goal:** Extend the YAML deployment spec with `secrets`, polymorphic `volumes` (named + bind mounts), `resources`, and strict DNS-safe validation rules for names and ports.
 
 **Architecture:** `VolumeMount` is replaced by a `VolumeSpec` serde-untagged enum with `NamedVolume` and `BindMount` variants, each exposing `mount_point()` and `source_name()` methods. A new `ResourceSpec` struct handles `memory` + `cpu`. Validation moves from simple emptiness checks to regex-based DNS name validation, port range checks, and resource string parsing. The orchestrator's volume mapping is updated to use the new `VolumeSpec` API when building `VolumeBinding` for the container runtime.
