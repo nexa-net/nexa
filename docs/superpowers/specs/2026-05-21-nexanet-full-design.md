@@ -17,6 +17,190 @@
 | Orchestrator model | Actor with command channel | No locks, no block_on, clean async |
 | Volumes | Named volumes + bind mounts | Simple for users, flexible for power users |
 | Overlay networking | Embedded WireGuard via boringtun | Userspace, no kernel module, zero config |
+| Code architecture | Hexagonal (Ports & Adapters) | Domain logic isolated from infrastructure; adapters are swappable |
+
+---
+
+## Hexagonal Architecture
+
+NexaNet follows hexagonal architecture (ports & adapters). The domain core contains pure business logic with zero infrastructure dependencies. All external systems are accessed through port traits, with concrete adapters that can be swapped independently.
+
+### Layers
+
+```
+                    ┌─────────────────────────────────┐
+                    │         Driving Adapters          │
+                    │  (HTTP API, gRPC, CLI)            │
+                    └──────────┬──────────────────────┘
+                               │ calls
+                    ┌──────────▼──────────────────────┐
+                    │       Driving Ports (in)          │
+                    │  (OrchestratorHandle, traits)     │
+                    ├──────────────────────────────────┤
+                    │                                   │
+                    │         Domain Core                │
+                    │                                   │
+                    │  - Orchestrator loop               │
+                    │  - Deployment logic                │
+                    │  - Pod lifecycle                   │
+                    │  - Scheduling                      │
+                    │  - Health check logic              │
+                    │  - Restart policy logic            │
+                    │  - Project isolation rules         │
+                    │                                   │
+                    ├──────────────────────────────────┤
+                    │       Driven Ports (out)           │
+                    │  (trait ContainerRuntime,          │
+                    │   trait StateStore,                │
+                    │   trait ProxyBackend,              │
+                    │   trait DnsProvider,               │
+                    │   trait SecretStore,               │
+                    │   trait ClusterTransport)          │
+                    └──────────┬──────────────────────┘
+                               │ implemented by
+                    ┌──────────▼──────────────────────┐
+                    │        Driven Adapters            │
+                    │  Docker, containerd, SQLite,      │
+                    │  Caddy, Traefik, Nginx,           │
+                    │  nexa-proxy, hickory-dns,         │
+                    │  boringtun, tonic gRPC            │
+                    └──────────────────────────────────┘
+```
+
+### Driven Ports (outbound traits)
+
+The domain core defines these traits. It never imports a concrete adapter.
+
+| Port | Trait | Purpose | Adapters |
+|------|-------|---------|----------|
+| Container Runtime | `ContainerRuntime` | Create, start, stop, inspect containers | `DockerRuntime`, `ContainerdRuntime`, `MockRuntime` |
+| State Store | `StateStore` | Persist and query projects, deployments, pods | `SqliteStore`, `InMemoryStore` (tests) |
+| Secrets | `SecretStore` | Encrypt/decrypt/store secrets | `EncryptedSqliteSecretStore`, `PlaintextSecretStore` (tests) |
+| Proxy | `ProxyBackend` | Apply routes, reload, TLS | `NexaProxyBackend`, `CaddyBackend`, `TraefikBackend`, `NginxBackend` |
+| DNS | `DnsProvider` | Register/deregister service records | `HickoryDnsProvider`, `NoopDnsProvider` (single-node) |
+| Cluster Transport | `ClusterTransport` | Node registration, heartbeats, pod assignment | `GrpcTransport`, `LocalTransport` (single-node) |
+
+### Driving Ports (inbound interfaces)
+
+| Port | Interface | Callers |
+|------|-----------|---------|
+| `OrchestratorHandle` | mpsc command channel | HTTP API handlers, gRPC server |
+| HTTP API | axum routes | CLI (`nexa`), external tools |
+| gRPC API | tonic service | Worker nodes |
+
+### Crate / Module Mapping
+
+```
+crates/
+  nexa-core/
+    src/
+      domain/              ← Pure domain logic (NO infra imports)
+        mod.rs
+        orchestrator.rs    ← Actor loop, business rules
+        scheduler.rs       ← Weighted scoring logic
+        health.rs          ← Health check state machine
+        restart.rs         ← Restart policy + backoff logic
+        models/            ← Domain models (Deployment, Pod, Project, etc.)
+      ports/               ← Trait definitions (interfaces)
+        mod.rs
+        runtime.rs         ← trait ContainerRuntime
+        state.rs           ← trait StateStore
+        secrets.rs         ← trait SecretStore
+        proxy.rs           ← trait ProxyBackend
+        dns.rs             ← trait DnsProvider
+        cluster.rs         ← trait ClusterTransport
+      config.rs            ← YAML parsing, validation
+      error.rs             ← Error types
+
+  nexad/
+    src/
+      adapters/            ← All infrastructure implementations
+        runtime/
+          docker.rs        ← DockerRuntime (bollard)
+          containerd.rs    ← ContainerdRuntime (containerd-client + CNI)
+        state/
+          sqlite.rs        ← SqliteStore (sqlx)
+        secrets/
+          encrypted.rs     ← AES-256-GCM encrypted store
+        proxy/
+          nexa_proxy.rs    ← Custom Rust proxy management
+          caddy.rs         ← Caddyfile generation + reload
+          traefik.rs       ← Traefik YAML generation
+          nginx.rs         ← Nginx conf generation + reload
+        dns/
+          hickory.rs       ← hickory-dns embedded server
+        cluster/
+          grpc.rs          ← tonic gRPC server + client
+          local.rs         ← In-process local transport (single-node)
+        network/
+          wireguard.rs     ← boringtun overlay mesh
+      api/                 ← HTTP API (driving adapter)
+        handlers.rs
+        routes.rs
+      main.rs              ← Wires ports to adapters, starts daemon
+
+  nexa-cli/                ← CLI driving adapter (unchanged)
+    src/
+      main.rs
+      client.rs
+      commands.rs
+      output.rs
+
+  nexa-proxy/              ← Standalone reverse proxy binary
+    src/
+      main.rs
+      proxy.rs
+      acme.rs
+```
+
+### Key Rules
+
+1. **`nexa-core/src/domain/`** has zero `use` of bollard, sqlx, tonic, hickory, boringtun, or any infrastructure crate. It only depends on standard library, serde, chrono, uuid, and its own `ports/` traits.
+
+2. **`nexa-core/src/ports/`** defines traits only. No implementations. No infrastructure imports.
+
+3. **`nexad/src/adapters/`** implements the port traits. Each adapter depends on its specific infrastructure crate. Adapters are leaf modules — they don't import each other.
+
+4. **`nexad/src/main.rs`** is the composition root. It wires concrete adapters to port traits and starts the system:
+
+```rust
+// main.rs — composition root
+let runtime: Arc<dyn ContainerRuntime> = match cli.runtime {
+    RuntimeChoice::Docker => Arc::new(DockerRuntime::new()?),
+    RuntimeChoice::Containerd => Arc::new(ContainerdRuntime::new()?),
+};
+
+let state: Arc<dyn StateStore> = Arc::new(SqliteStore::new(&db_path).await?);
+let secrets: Arc<dyn SecretStore> = Arc::new(EncryptedSqliteSecretStore::new(&master_key, pool.clone()));
+let dns: Arc<dyn DnsProvider> = match cli.mode {
+    Mode::SingleNode => Arc::new(NoopDnsProvider),
+    _ => Arc::new(HickoryDnsProvider::new(port_53).await?),
+};
+let proxy: Arc<dyn ProxyBackend> = match proxy_config.backend {
+    ProxyChoice::NexaProxy => Arc::new(NexaProxyBackend::new()?),
+    ProxyChoice::Caddy => Arc::new(CaddyBackend::new(caddy_path)?),
+    ProxyChoice::Traefik => Arc::new(TraefikBackend::new(traefik_path)?),
+    ProxyChoice::Nginx => Arc::new(NginxBackend::new(nginx_path)?),
+};
+
+let handle = Orchestrator::spawn(runtime, state, secrets, dns, proxy);
+api::serve(handle, &addr).await?;
+```
+
+5. **Testing:** Domain logic is tested with mock adapters (`MockRuntime`, `InMemoryStore`, etc.) — no Docker, no SQLite needed. Integration tests wire real adapters.
+
+### Impact on Existing Specs
+
+This architecture is compatible with all 12 specs. The main changes:
+
+- **Spec #1** (Orchestrator): The actor loop lives in `domain/orchestrator.rs`. It receives port trait objects via constructor injection.
+- **Spec #3** (SQLite): Becomes the `SqliteStore` adapter implementing `trait StateStore`. The domain never sees sqlx.
+- **Spec #4** (Health Checking): Health check logic (state machine, threshold) lives in `domain/health.rs`. The HTTP probing is a utility in the domain (uses only `reqwest` or raw TCP — lightweight enough for domain).
+- **Spec #5** (Restart): Business logic in `domain/restart.rs`. The event watcher adapter pushes events into the orchestrator via the command channel.
+- **Spec #6** (Secrets): `trait SecretStore` in ports, `EncryptedSqliteSecretStore` adapter in nexad.
+- **Spec #10** (DNS): `trait DnsProvider` in ports, `HickoryDnsProvider` adapter in nexad.
+- **Spec #11** (Proxy): `trait ProxyBackend` already defined in the spec. Each backend is an adapter.
+- **Spec #12** (Runtime): `trait ContainerRuntime` already exists. Docker and containerd are adapters.
 
 ---
 
@@ -78,9 +262,31 @@ struct OrchestratorHandle {
 - Easy to add events: the loop can emit to health checker, metrics, etc.
 - `OrchestratorHandle` is trivially `Clone` for axum state sharing
 
+### Hexagonal Integration
+
+The orchestrator loop lives in `nexa-core/src/domain/orchestrator.rs`. It receives all external dependencies as port trait objects (`Arc<dyn ContainerRuntime>`, `Arc<dyn StateStore>`, etc.) via constructor injection. The loop has zero knowledge of Docker, SQLite, or any concrete adapter.
+
+```rust
+impl Orchestrator {
+    pub fn spawn(
+        runtime: Arc<dyn ContainerRuntime>,
+        state: Arc<dyn StateStore>,
+        secrets: Arc<dyn SecretStore>,
+        dns: Arc<dyn DnsProvider>,
+    ) -> OrchestratorHandle {
+        let (tx, rx) = mpsc::channel(256);
+        tokio::spawn(async move {
+            let mut orch = Self { runtime, state, secrets, dns, /* in-memory maps */ };
+            orch.run(rx).await;
+        });
+        OrchestratorHandle { tx }
+    }
+}
+```
+
 ### Migration Path
 
-Replace `Orchestrator` struct with `OrchestratorHandle` + background loop. API layer changes minimally.
+Replace `Orchestrator` struct with `OrchestratorHandle` + background loop. Move domain logic to `nexa-core/src/domain/`, move Docker impl to `nexad/src/adapters/runtime/docker.rs`. API layer changes minimally.
 
 ---
 
@@ -173,7 +379,37 @@ All state is in-memory. Restarting nexad loses everything. We need durable persi
 
 ### Design
 
-SQLite via sqlx at `{data_dir}/nexa.db`. The orchestrator loop owns the `SqlitePool`. WAL mode for concurrent reads.
+SQLite via sqlx at `{data_dir}/nexa.db`. WAL mode for concurrent reads. The orchestrator loop accesses storage through the `StateStore` port trait — it never imports sqlx.
+
+**Port trait** (in `nexa-core/src/ports/state.rs`):
+
+```rust
+#[async_trait]
+pub trait StateStore: Send + Sync {
+    // Projects
+    async fn insert_project(&self, project: &Project) -> Result<()>;
+    async fn get_project(&self, name: &str) -> Result<Option<Project>>;
+    async fn list_projects(&self) -> Result<Vec<Project>>;
+    async fn update_project_status(&self, name: &str, status: ProjectStatus) -> Result<()>;
+    async fn delete_project(&self, name: &str) -> Result<()>;
+
+    // Deployments
+    async fn insert_deployment(&self, deployment: &Deployment) -> Result<()>;
+    async fn get_deployment(&self, project: &str, name: &str) -> Result<Option<Deployment>>;
+    async fn list_deployments(&self, project: Option<&str>) -> Result<Vec<Deployment>>;
+    async fn update_deployment(&self, deployment: &Deployment) -> Result<()>;
+    async fn delete_deployment(&self, id: &Uuid) -> Result<()>;
+
+    // Pods
+    async fn insert_pod(&self, pod: &Pod) -> Result<()>;
+    async fn list_pods(&self, project: Option<&str>) -> Result<Vec<Pod>>;
+    async fn update_pod(&self, pod: &Pod) -> Result<()>;
+    async fn delete_pod(&self, id: &Uuid) -> Result<()>;
+    async fn pods_by_deployment(&self, deployment_id: &Uuid) -> Result<Vec<Pod>>;
+}
+```
+
+**Adapter** (in `nexad/src/adapters/state/sqlite.rs`): `SqliteStore` implements `StateStore` using sqlx.
 
 ### Schema
 
