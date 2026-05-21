@@ -1,0 +1,24 @@
+project: ecommerce
+
+deployment:
+  name: api
+
+replicas: 3
+
+image: ghcr.io/company/api:latest
+
+ports:
+  - 3000
+
+network:
+  public: true
+  domain: api.example.com
+  https: true
+
+env:
+  DATABASE_URL: "postgres://localhost/ecommerce"
+  REDIS_URL: "redis://localhost:6379"
+
+healthcheck:
+  path: /health
+  interval: 10s

@@ -1,0 +1,18 @@
+project: demo
+
+deployment:
+  name: nginx
+
+replicas: 1
+
+image: nginx:alpine
+
+ports:
+  - 8080
+
+network:
+  public: true
+
+healthcheck:
+  path: /
+  interval: 10s
