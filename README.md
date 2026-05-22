@@ -255,76 +255,6 @@ Docker and containerd supported out of the box. Auto-detected at startup — no 
 
 ---
 
-## Architecture
-
-```
-                        nexa (CLI)
-                           │
-                       HTTP REST API
-                           │
-   ┌───────────────────────┴────────────────────────┐
-   │                     nexad                       │
-   │                                                 │
-   │   Orchestrator ─── actor model (mpsc/oneshot)   │
-   │       │          │          │          │         │
-   │   Scheduler   Health    Events    Secrets       │
-   │       │       Checker   Watcher   (AES-256)     │
-   │       │          │          │                    │
-   │   ┌──────┐  ┌────────┐  ┌───────┐  ┌────────┐  │
-   │   │Docker│  │ SQLite  │  │ Proxy │  │Cluster │  │
-   │   │contrd│  │  State  │  │ nginx │  │  gRPC  │  │
-   │   └──────┘  └────────┘  │ caddy │  └────────┘  │
-   │                         │traefik│               │
-   │                         │ nexa  │               │
-   │                         └───────┘               │
-   └─────────────────────────────────────────────────┘
-             │                           │
-       nexa-core                    nexa-proxy
-   (domain types & traits)    (HTTP/HTTPS reverse proxy)
-```
-
-NexaNet follows **hexagonal architecture** — domain logic is completely separated from infrastructure adapters. The core defines port traits; the daemon provides concrete implementations.
-
-<details>
-<summary><b>Hexagonal layers</b></summary>
-
-```
-nexa-core (domain + ports)                 nexad (adapters + composition root)
-─────────────────────────                  ────────────────────────────────────
-domain/                                    adapters/
-  orchestrator.rs   Actor-model loop         runtime/    Docker, containerd
-  scheduler.rs      Placement decisions      state/      SQLite persistence
-  health.rs         Probe evaluation         secrets/    AES-256-GCM encrypted
-  restart.rs        Policy enforcement       proxy/      nexa-proxy, Caddy, Traefik, Nginx
-  models/           Pure domain types        dns/        Hickory DNS embedded server
-                                             cluster/    gRPC + local transport
-ports/
-  runtime.rs    ContainerRuntime trait
-  state.rs      StateStore trait
-  secrets.rs    SecretStore trait
-  proxy.rs      ProxyBackend trait
-  dns.rs        DnsProvider trait
-  cluster.rs    ClusterTransport trait
-```
-
-</details>
-
----
-
-## Repositories
-
-NexaNet is organized as a multi-repo project under the [`nexa-net`](https://github.com/nexa-net) GitHub organization:
-
-| Repository | Description | |
-|:--|:--|:--|
-| **[`nexa`](https://github.com/nexa-net/nexa)** | This repo — documentation, specs, install script | [![CI](https://img.shields.io/badge/-docs-blue)](#) |
-| **[`nexa-core`](https://github.com/nexa-net/nexa-core)** | Core library — domain types, port traits, orchestrator | [![CI](https://github.com/nexa-net/nexa-core/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-core/actions) |
-| **[`nexad`](https://github.com/nexa-net/nexad)** | Daemon — runtime adapters, REST API, clustering | [![CI](https://github.com/nexa-net/nexad/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexad/actions) |
-| **[`nexa-cli`](https://github.com/nexa-net/nexa-cli)** | CLI tool — deploy, scale, manage from the terminal | [![CI](https://github.com/nexa-net/nexa-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-cli/actions) |
-| **[`nexa-proxy`](https://github.com/nexa-net/nexa-proxy)** | Reverse proxy — HTTP/HTTPS with weighted load balancing | [![CI](https://github.com/nexa-net/nexa-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-proxy/actions) |
-
----
-
 ## CLI Reference
 
 ```bash
@@ -387,6 +317,20 @@ nexa pods --json | jq '.[] | .name'
 | Built-in proxy | **Yes** | No (ingress controller) | Routing mesh | No |
 | Learning curve | **Hours** | Weeks-months | Days | Days |
 | Written in | **Rust** | Go | Go | Go |
+
+---
+
+## Repositories
+
+NexaNet is organized as a multi-repo project under the [`nexa-net`](https://github.com/nexa-net) GitHub organization:
+
+| Repository | Description | |
+|:--|:--|:--|
+| **[`nexa`](https://github.com/nexa-net/nexa)** | This repo — documentation, specs, install script | [![CI](https://img.shields.io/badge/-docs-blue)](#) |
+| **[`nexa-core`](https://github.com/nexa-net/nexa-core)** | Core library — domain types, port traits, orchestrator | [![CI](https://github.com/nexa-net/nexa-core/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-core/actions) |
+| **[`nexad`](https://github.com/nexa-net/nexad)** | Daemon — runtime adapters, REST API, clustering | [![CI](https://github.com/nexa-net/nexad/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexad/actions) |
+| **[`nexa-cli`](https://github.com/nexa-net/nexa-cli)** | CLI tool — deploy, scale, manage from the terminal | [![CI](https://github.com/nexa-net/nexa-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-cli/actions) |
+| **[`nexa-proxy`](https://github.com/nexa-net/nexa-proxy)** | Reverse proxy — HTTP/HTTPS with weighted load balancing | [![CI](https://github.com/nexa-net/nexa-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-proxy/actions) |
 
 ---
 
