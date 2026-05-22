@@ -9,8 +9,3 @@ nexa-core/
 nexa-proxy/
 nexa-std/
 nexad/
-target/
-Cargo.lock
-.claude
-.agents
-skills-lock.json
