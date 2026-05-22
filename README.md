@@ -1,35 +1,90 @@
-# NexaNet
+<div align="center">
 
-**Simple distributed container orchestration.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/white_logo.png" width="180">
+  <source media="(prefers-color-scheme: light)" srcset="assets/black_logo.png" width="180">
+  <img alt="NexaNet" src="assets/black_logo.png" width="180">
+</picture>
 
-80% of Kubernetes use-cases with 20% of the complexity.
+<br><br>
 
-NexaNet orchestrates containers across machines with minimal configuration. No CRDs, no operators, no YAML explosion — just deploy and run.
+**Container orchestration for the rest of us.**
+
+80% of Kubernetes. 20% of the complexity. Two binaries. Zero dependencies.
+
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org)
+[![nexa-core CI](https://github.com/nexa-net/nexa-core/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-core/actions)
+[![nexad CI](https://github.com/nexa-net/nexad/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexad/actions)
+[![nexa-cli CI](https://github.com/nexa-net/nexa-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-cli/actions)
+[![nexa-proxy CI](https://github.com/nexa-net/nexa-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-proxy/actions)
+
+[Install](#install) · [Quick Start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Docs](#documentation)
+
+</div>
+
+---
+
+## Why NexaNet?
+
+Kubernetes is powerful — and overwhelming. etcd, kubelet, kube-proxy, CRDs, operators, Helm charts, YAML-of-YAML... For most teams, it's 10x more infrastructure than they actually need.
+
+**NexaNet is the alternative.** A single daemon (`nexad`) and a single CLI (`nexa`). Deploy containers, scale across nodes, get automatic TLS, and call it a day. No PhD in YAML required.
+
+```
+You know this:                     You can skip this:
+─────────────                      ──────────────────
+nexa deploy app.yaml               etcd cluster setup
+nexa scale api 5                   Custom Resource Definitions
+nexa logs api --tail 100           Helm chart templating
+nexa route add api.example.com     Ingress controller config
+                                   Service mesh sidecar injection
+                                   Pod security policies
+                                   ...you get the idea
+```
+
+---
+
+## Install
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/nexa-net/nexa/main/install.sh | sh
+```
+
+This installs both `nexad` (daemon) and `nexa` (CLI) to `/usr/local/bin`. Supports Linux (amd64/arm64) and macOS (amd64/arm64).
+
+<details>
+<summary><b>Build from source</b></summary>
+
+```bash
+# Requires Rust 1.85+ and Docker or containerd running on the host
+
+# Build the daemon
+git clone https://github.com/nexa-net/nexad.git
+cd nexad && cargo build --release
+
+# Build the CLI
+git clone https://github.com/nexa-net/nexa-cli.git
+cd nexa-cli && cargo build --release
+```
+
+</details>
+
+---
 
 ## Quick Start
 
+**1. Start the daemon**
+
 ```bash
-# Start the daemon
 nexad
-
-# Deploy a service
-nexa deploy app.yaml
-
-# Check status
-nexa pods
-nexa deployments
-
-# Stream logs
-nexa logs api
-
-# Scale up
-nexa scale api 5
 ```
 
-## Deployment Spec
+**2. Deploy a service**
 
 ```yaml
-project: ecommerce
+# app.yaml
+project: myapp
 
 deployment:
   name: api
@@ -45,115 +100,300 @@ network:
   domain: api.example.com
   https: true
 
-env:
-  DATABASE_URL: "postgres://localhost/db"
-
 healthcheck:
   path: /health
   interval: 10s
 ```
 
-## Core Concepts
+```bash
+nexa deploy app.yaml
+```
 
-| Concept    | Description                                    |
-|------------|------------------------------------------------|
-| Project    | Isolation boundary for deployments and networks |
-| Deployment | A service definition with image, replicas, config |
-| Pod        | A running container instance of a deployment    |
-| Network    | Automatic per-project container networking      |
-| Route      | Public exposure with optional TLS               |
-| Secret     | Encrypted environment configuration             |
-| Volume     | Persistent storage mount                        |
+**3. You're live**
+
+```bash
+nexa status          # cluster overview
+nexa pods            # running containers
+nexa logs api        # stream logs
+nexa scale api 10    # scale to 10 replicas
+```
+
+That's it. No init scripts, no cluster bootstrapping, no 47-page getting-started guide.
+
+---
+
+## Features
+
+<table>
+<tr>
+<td width="50%">
+
+### Deploy in seconds
+
+```bash
+nexa deploy app.yaml
+nexa status
+```
+
+Write a simple YAML spec. Deploy with one command. No Helm, no Kustomize, no templating engine.
+
+</td>
+<td width="50%">
+
+### Multi-node clustering
+
+```bash
+# On the master
+nexad --mode master
+
+# On workers — one command to join
+nexad --mode worker \
+  --join 10.0.1.1:6444 \
+  --token <TOKEN>
+```
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Automatic TLS
+
+```yaml
+network:
+  domain: api.example.com
+  https: true
+```
+
+Let's Encrypt certificates provisioned and renewed automatically. Zero config.
+
+</td>
+<td width="50%">
+
+### Built-in service discovery
+
+Every deployment gets a DNS name:
+
+```
+<deployment>.<project>.internal
+```
+
+No CoreDNS setup. No service mesh. It just works.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Encrypted secrets
+
+```bash
+nexa secret set DB_PASS s3cret -p myapp
+```
+
+AES-256-GCM encryption at rest. Per-node master keys. Injected as environment variables.
+
+</td>
+<td width="50%">
+
+### Health checking & restart
+
+```yaml
+healthcheck:
+  path: /health
+  interval: 10s
+  timeout: 5s
+  retries: 3
+
+restart: always
+```
+
+HTTP, TCP, and exec probes with automatic restart on failure.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Weighted scheduling
+
+Spread or bin-pack strategies across heterogeneous nodes. Weighted round-robin load balancing for traffic.
+
+</td>
+<td width="50%">
+
+### Runtime flexibility
+
+Docker and containerd supported out of the box. Auto-detected at startup — no config needed.
+
+</td>
+</tr>
+</table>
+
+<br>
+
+<details>
+<summary><b>Full feature list</b></summary>
+
+| Category | Feature |
+|---|---|
+| **Orchestration** | Declarative YAML deployments, rolling updates, replica scaling |
+| **Clustering** | Master/worker topology, gRPC transport, join tokens, heartbeat monitoring |
+| **Scheduling** | Weighted spread/bin-pack strategies, automatic pod rescheduling on node failure |
+| **Networking** | WireGuard overlay mesh, per-project subnet allocation, CNI plugin support |
+| **Service Discovery** | Embedded DNS server resolving `<service>.<project>.internal` |
+| **Routing** | Built-in reverse proxy, nginx/Caddy/Traefik backends, host-based routing |
+| **TLS** | ACME auto-provisioning, certificate import, daily renewal |
+| **Secrets** | AES-256-GCM encryption at rest, per-node master keys |
+| **Health** | HTTP/TCP/exec probes, configurable thresholds, automatic restart policies |
+| **Projects** | Logical isolation with suspend/resume, resource management |
+| **Runtimes** | Docker (bollard) and containerd (ctr) with auto-detection |
+| **State** | SQLite persistence — no external database required |
+| **CLI** | Full resource management, JSON output mode, styled terminal tables |
+
+</details>
+
+---
 
 ## Architecture
 
 ```
-┌─────────┐       ┌─────────────────────────────────┐
-│ nexa CLI │──────▶│            nexad                 │
-└─────────┘  HTTP │  ┌───────────┐  ┌─────────────┐  │
-                  │  │ API Layer │  │ Orchestrator │  │
-                  │  └───────────┘  └──────┬──────┘  │
-                  │                        │         │
-                  │  ┌─────────────────────▼───────┐ │
-                  │  │    Container Runtime         │ │
-                  │  │  (Docker / containerd)       │ │
-                  │  └─────────────────────────────┘ │
-                  └─────────────────────────────────┘
+                        nexa (CLI)
+                           │
+                       HTTP REST API
+                           │
+   ┌───────────────────────┴────────────────────────┐
+   │                     nexad                       │
+   │                                                 │
+   │   Orchestrator ─── actor model (mpsc/oneshot)   │
+   │       │          │          │          │         │
+   │   Scheduler   Health    Events    Secrets       │
+   │       │       Checker   Watcher   (AES-256)     │
+   │       │          │          │                    │
+   │   ┌──────┐  ┌────────┐  ┌───────┐  ┌────────┐  │
+   │   │Docker│  │ SQLite  │  │ Proxy │  │Cluster │  │
+   │   │contrd│  │  State  │  │ nginx │  │  gRPC  │  │
+   │   └──────┘  └────────┘  │ caddy │  └────────┘  │
+   │                         │traefik│               │
+   │                         │ nexa  │               │
+   │                         └───────┘               │
+   └─────────────────────────────────────────────────┘
+             │                           │
+       nexa-core                    nexa-proxy
+   (domain types & traits)    (HTTP/HTTPS reverse proxy)
 ```
+
+NexaNet follows **hexagonal architecture** — domain logic is completely separated from infrastructure adapters. The core defines port traits; the daemon provides concrete implementations.
+
+<details>
+<summary><b>Hexagonal layers</b></summary>
+
+```
+nexa-core (domain + ports)                 nexad (adapters + composition root)
+─────────────────────────                  ────────────────────────────────────
+domain/                                    adapters/
+  orchestrator.rs   Actor-model loop         runtime/    Docker, containerd
+  scheduler.rs      Placement decisions      state/      SQLite persistence
+  health.rs         Probe evaluation         secrets/    AES-256-GCM encrypted
+  restart.rs        Policy enforcement       proxy/      nexa-proxy, Caddy, Traefik, Nginx
+  models/           Pure domain types        dns/        Hickory DNS embedded server
+                                             cluster/    gRPC + local transport
+ports/
+  runtime.rs    ContainerRuntime trait
+  state.rs      StateStore trait
+  secrets.rs    SecretStore trait
+  proxy.rs      ProxyBackend trait
+  dns.rs        DnsProvider trait
+  cluster.rs    ClusterTransport trait
+```
+
+</details>
+
+---
 
 ## Repositories
 
 NexaNet is organized as a multi-repo project under the [`nexa-net`](https://github.com/nexa-net) GitHub organization:
 
-| Repository | Description | Status |
-|------------|-------------|--------|
-| [`nexa-core`](https://github.com/nexa-net/nexa-core) | Shared types, domain models, port traits | Active |
-| [`nexad`](https://github.com/nexa-net/nexad) | Daemon — orchestrator, API, adapters | Active |
-| [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | CLI client (`nexa` binary) | Active |
-| [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | Reverse proxy sidecar with auto TLS | Planned |
-| [`nexa`](https://github.com/nexa-net/nexa) | This repo — specs, plans, project docs | Active |
+| Repository | Description | |
+|:--|:--|:--|
+| **[`nexa`](https://github.com/nexa-net/nexa)** | This repo — documentation, specs, install script | [![CI](https://img.shields.io/badge/-docs-blue)](#) |
+| **[`nexa-core`](https://github.com/nexa-net/nexa-core)** | Core library — domain types, port traits, orchestrator | [![CI](https://github.com/nexa-net/nexa-core/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-core/actions) |
+| **[`nexad`](https://github.com/nexa-net/nexad)** | Daemon — runtime adapters, REST API, clustering | [![CI](https://github.com/nexa-net/nexad/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexad/actions) |
+| **[`nexa-cli`](https://github.com/nexa-net/nexa-cli)** | CLI tool — deploy, scale, manage from the terminal | [![CI](https://github.com/nexa-net/nexa-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-cli/actions) |
+| **[`nexa-proxy`](https://github.com/nexa-net/nexa-proxy)** | Reverse proxy — HTTP/HTTPS with weighted load balancing | [![CI](https://github.com/nexa-net/nexa-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-proxy/actions) |
 
-### Hexagonal Architecture
+---
 
-```
-nexa-core (domain + ports)
-  ├── domain/         Pure business logic
-  │   ├── orchestrator.rs
-  │   ├── scheduler.rs
-  │   ├── health.rs
-  │   ├── restart.rs
-  │   └── models/
-  └── ports/          Trait definitions only
-      ├── runtime.rs  (ContainerRuntime)
-      ├── state.rs    (StateStore)
-      ├── secrets.rs  (SecretStore)
-      ├── proxy.rs    (ProxyBackend)
-      ├── dns.rs      (DnsProvider)
-      └── cluster.rs  (ClusterTransport)
-
-nexad (adapters + composition root)
-  └── adapters/
-      ├── runtime/    Docker, containerd
-      ├── state/      SQLite
-      ├── secrets/    AES-256-GCM encrypted
-      ├── proxy/      nexa-proxy, Caddy, Traefik, Nginx
-      ├── dns/        hickory-dns
-      └── cluster/    gRPC, local
-```
-
-## Building from Source
+## CLI Reference
 
 ```bash
-# Clone all repos
-gh repo clone nexa-net/nexa-core
-gh repo clone nexa-net/nexad
-gh repo clone nexa-net/nexa-cli
+# Deployments
+nexa init [NAME] [--image IMAGE]     # scaffold a project interactively
+nexa deploy <FILE>                   # deploy from YAML spec
+nexa scale <NAME> <N> [-p PROJECT]   # scale replicas
+nexa stop <NAME> [-p PROJECT]        # stop a deployment
+nexa rm <NAME> [-p PROJECT]          # remove a deployment
+nexa logs <NAME> [-p PROJECT]        # stream container logs
 
-# Build the daemon
-cd nexad && cargo build --release
+# Cluster
+nexa status                          # cluster overview
+nexa pods [-p PROJECT]               # list running containers
+nexa deployments [-p PROJECT]        # list deployments
+nexa nodes                           # list cluster nodes
 
-# Build the CLI
-cd ../nexa-cli && cargo build --release
+# Projects
+nexa project create <NAME>           # create isolation boundary
+nexa project suspend <NAME>          # pause all deployments
+nexa project resume <NAME>           # resume paused project
+nexa project delete <NAME>           # tear down everything
+
+# Networking
+nexa route add <DOMAIN> -p PROJECT --deployment NAME [--https]
+nexa routes [-p PROJECT]             # list routes
+nexa cert import <DOMAIN> --cert FILE --key FILE
+
+# Secrets
+nexa secret set <NAME> <VALUE> -p PROJECT
+nexa secret list -p PROJECT
+
+# All commands support --json for scripting
+nexa pods --json | jq '.[] | .name'
 ```
 
-## Requirements
+---
 
-- Rust 1.85+
-- Docker (running)
+## Documentation
 
-## Roadmap
+| Topic | Link |
+|:--|:--|
+| Deployment spec format | [`nexad` README](https://github.com/nexa-net/nexad#deployment-specs) |
+| REST API reference | [`nexad` README](https://github.com/nexa-net/nexad#rest-api) |
+| CLI commands | [`nexa-cli` README](https://github.com/nexa-net/nexa-cli#command-reference) |
+| Proxy configuration | [`nexa-proxy` README](https://github.com/nexa-net/nexa-proxy#configuration) |
+| Clustering guide | [`nexad` README](https://github.com/nexa-net/nexad#clustering) |
 
-- [x] Phase 1: Single-node deployments, pod lifecycle, CLI
-- [ ] Phase 2: Multi-node clustering, scheduler, node management
-- [ ] Phase 3: Automatic networking, routing, TLS
-- [ ] Phase 4: Web dashboard
+---
 
-## Philosophy
+## Comparison
 
-NexaNet is intentionally opinionated and minimal. It targets developers, startups, self-hosters, and small teams who need container orchestration without enterprise complexity.
+| | NexaNet | Kubernetes | Docker Swarm | Nomad |
+|---|:---:|:---:|:---:|:---:|
+| Binaries to install | **2** | 5+ | 1 (Docker) | 1 |
+| External dependencies | **None** | etcd, container runtime | Docker | Consul (optional) |
+| Config language | **YAML** | YAML + Helm/Kustomize | YAML | HCL |
+| Built-in TLS | **Yes** | No (cert-manager) | No | No (Vault) |
+| Built-in DNS | **Yes** | CoreDNS (separate) | Yes | Consul |
+| Built-in proxy | **Yes** | No (ingress controller) | Routing mesh | No |
+| Learning curve | **Hours** | Weeks-months | Days | Days |
+| Written in | **Rust** | Go | Go | Go |
 
-Every feature must justify its complexity. If it makes the system harder to understand or operate, it doesn't ship.
+---
+
+## Contributing
+
+NexaNet is Apache-2.0 licensed and contributions are welcome. Each repository has its own CI pipeline — make sure `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test` pass before submitting a PR.
 
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE)
