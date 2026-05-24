@@ -1,0 +1,164 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
+  "title": "NexaNet Overview",
+  "uid": "nexanet-overview",
+  "version": 1,
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "type": "query",
+        "query": "label_values(nexa_http_requests_total, instance)",
+        "datasource": "${DS_PROMETHEUS}",
+        "multi": true,
+        "includeAll": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "API Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexa_http_requests_total{instance=~\"$instance\"}[5m])) by (method)",
+          "legendFormat": "{{method}}"
+        }
+      ]
+    },
+    {
+      "title": "API Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "title": "API Error Rate (5xx %)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexa_http_requests_total{instance=~\"$instance\",status=~\"5..\"}[5m])) / sum(rate(nexa_http_requests_total{instance=~\"$instance\"}[5m])) * 100",
+          "legendFormat": "5xx %"
+        }
+      ]
+    },
+    {
+      "title": "Container Events",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexa_container_events_total{instance=~\"$instance\"}[5m])) by (event)",
+          "legendFormat": "{{event}}"
+        }
+      ]
+    },
+    {
+      "title": "Cluster Gauges",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        { "expr": "nexa_nodes_total{instance=~\"$instance\"}", "legendFormat": "Nodes" },
+        { "expr": "nexa_pods_total{instance=~\"$instance\"}", "legendFormat": "Pods" },
+        { "expr": "nexa_deployments_total{instance=~\"$instance\"}", "legendFormat": "Deployments" }
+      ]
+    },
+    {
+      "title": "Deployment Operations",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexa_deployment_ops_total{instance=~\"$instance\"}[5m])) by (op)",
+          "legendFormat": "{{op}}"
+        }
+      ]
+    },
+    {
+      "title": "Scheduler Decision Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(nexa_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
+          "legendFormat": "p99 {{strategy}}"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(nexa_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
+          "legendFormat": "p50 {{strategy}}"
+        }
+      ]
+    },
+    {
+      "title": "Scheduler Decisions/min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexa_schedule_duration_seconds_count{instance=~\"$instance\"}[5m])) by (strategy) * 60",
+          "legendFormat": "{{strategy}}"
+        }
+      ]
+    },
+    {
+      "title": "Proxy Throughput",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexa_proxy_requests_total{instance=~\"$instance\"}[5m])) by (domain)",
+          "legendFormat": "{{domain}}"
+        }
+      ]
+    },
+    {
+      "title": "Proxy Upstream Latency (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(nexa_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
+          "legendFormat": "p50 {{domain}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(nexa_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
+          "legendFormat": "p95 {{domain}}"
+        }
+      ]
+    },
+    {
+      "title": "Proxy Error Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum(rate(nexa_proxy_errors_total{instance=~\"$instance\"}[5m])) by (domain, error_type)",
+          "legendFormat": "{{domain}} - {{error_type}}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+groups:
+  - name: nexanet
+    rules:
+      - alert: NexaHighErrorRate
+        expr: >
+          sum(rate(nexa_http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(nexa_http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API error rate"
+          description: "5xx error rate is above 5% for the last 5 minutes."
+
+      - alert: NexaContainerOOM
+        expr: increase(nexa_container_events_total{event="oom"}[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container OOM detected"
+          description: "A container was killed due to out-of-memory in the last 5 minutes."
+
+      - alert: NexaNodeDown
+        expr: nexa_nodes_total < 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No cluster nodes"
+          description: "nexa_nodes_total has been below 1 for 2 minutes."
+
+      - alert: NexaHighAPILatency
+        expr: >
+          histogram_quantile(0.99,
+            sum(rate(nexa_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency"
+          description: "API p99 latency is above 2 seconds for the last 5 minutes."
+
+      - alert: NexaProxyUpstreamErrors
+        expr: >
+          sum(rate(nexa_proxy_errors_total[5m]))
+          /
+          (sum(rate(nexa_proxy_requests_total[5m])) + sum(rate(nexa_proxy_errors_total[5m])))
+          > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High proxy error rate"
+          description: "Proxy error rate is above 10% for the last 5 minutes."
+
+      - alert: NexaSchedulerSlow
+        expr: >
+          histogram_quantile(0.99,
+            sum(rate(nexa_schedule_duration_seconds_bucket[5m])) by (le)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow scheduler decisions"
+          description: "Scheduler p99 latency is above 500ms for the last 5 minutes."
