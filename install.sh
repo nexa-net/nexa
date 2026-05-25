@@ -9,6 +9,7 @@ set -e
 #   VERSION       Install a specific version (default: latest)
 #   NO_SERVICE    Set to 1 to skip auto-start service installation
 #   NO_START      Set to 1 to skip launching nexad after install
+#   FORCE         Set to 1 to skip upgrade prompt and always overwrite
 
 GITHUB_ORG="nexa-net"
 NEXA_HOME="${HOME}/.nexa"
@@ -27,6 +28,10 @@ success() {
     printf '  \033[32m%s\033[0m\n' "$1"
 }
 
+dim() {
+    printf '  \033[2m%s\033[0m\n' "$1"
+}
+
 error() {
     printf 'Error: %s\n' "$1" >&2
     exit 1
@@ -34,6 +39,65 @@ error() {
 
 check_command() {
     command -v "$1" >/dev/null 2>&1 || error "'$1' is required but not found. Please install it first."
+}
+
+# Read a single character from the terminal (works even when piped via curl | sh)
+ask_yes_no() {
+    PROMPT="$1"
+    DEFAULT="$2"
+
+    # Non-interactive — use default
+    if [ ! -t 0 ] && [ ! -e /dev/tty ]; then
+        [ "$DEFAULT" = "y" ] && return 0 || return 1
+    fi
+
+    if [ "$DEFAULT" = "y" ]; then
+        printf '  %s [Y/n] ' "$PROMPT"
+    else
+        printf '  %s [y/N] ' "$PROMPT"
+    fi
+
+    # Read from /dev/tty so it works in curl | sh
+    if [ -e /dev/tty ]; then
+        REPLY=$(dd bs=1 count=1 2>/dev/null < /dev/tty) || true
+    else
+        read -r REPLY
+    fi
+    printf '\n'
+
+    case "$REPLY" in
+        [yY]) return 0 ;;
+        [nN]) return 1 ;;
+        '')   [ "$DEFAULT" = "y" ] && return 0 || return 1 ;;
+        *)    [ "$DEFAULT" = "y" ] && return 0 || return 1 ;;
+    esac
+}
+
+# Ask the user to pick between numbered choices (returns via $CHOICE)
+ask_choice() {
+    PROMPT="$1"
+    shift
+
+    printf '\n'
+    info "$PROMPT"
+    printf '\n'
+
+    I=1
+    for OPT in "$@"; do
+        printf '  \033[1m%d)\033[0m %s\n' "$I" "$OPT"
+        I=$((I + 1))
+    done
+    printf '\n'
+    printf '  Choice: '
+
+    if [ -e /dev/tty ]; then
+        REPLY=$(dd bs=1 count=1 2>/dev/null < /dev/tty) || true
+    else
+        read -r REPLY
+    fi
+    printf '\n'
+
+    CHOICE="${REPLY:-1}"
 }
 
 # ────────────────────── detection ──────────────────────
@@ -72,6 +136,14 @@ detect_shell_profile() {
     fi
 }
 
+# Get the version of an installed binary (e.g. "0.1.0")
+get_installed_version() {
+    BINARY_PATH="$1"
+    if [ -f "$BINARY_PATH" ]; then
+        "$BINARY_PATH" --version 2>/dev/null | awk '{print $NF}' || true
+    fi
+}
+
 # ────────────────────── download ──────────────────────
 
 get_latest_version() {
@@ -90,8 +162,6 @@ download_and_install() {
     REPO="$1"
     BINARY="$2"
 
-    info "Downloading ${BINARY}..."
-
     if [ -n "$VERSION" ]; then
         VERSION_TAG="v${VERSION#v}"
     else
@@ -99,6 +169,40 @@ download_and_install() {
             warn "Warning: no release found for ${REPO}, skipping"
             return 0
         }
+    fi
+
+    REMOTE_VERSION="${VERSION_TAG#v}"
+    LOCAL_VERSION=$(get_installed_version "${INSTALL_DIR}/${BINARY}")
+
+    if [ -n "$LOCAL_VERSION" ]; then
+        if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
+            success "${BINARY} ${LOCAL_VERSION} is already up to date"
+            return 0
+        fi
+
+        # Different version — needs upgrade/downgrade
+        if [ "$FORCE" = "1" ]; then
+            info "Updating ${BINARY}: ${LOCAL_VERSION} -> ${REMOTE_VERSION}"
+        elif [ ! -e /dev/tty ]; then
+            # Non-interactive (piped) — update automatically
+            info "Updating ${BINARY}: ${LOCAL_VERSION} -> ${REMOTE_VERSION}"
+        else
+            ask_choice "${BINARY} ${LOCAL_VERSION} is installed. Version ${REMOTE_VERSION} is available." \
+                "Update to ${REMOTE_VERSION}" \
+                "Reinstall ${REMOTE_VERSION} (overwrite)" \
+                "Skip"
+
+            case "$CHOICE" in
+                1) info "Updating ${BINARY}..." ;;
+                2) info "Reinstalling ${BINARY}..." ;;
+                3) dim "Skipped ${BINARY}"; return 0 ;;
+                *) dim "Skipped ${BINARY}"; return 0 ;;
+            esac
+        fi
+
+        NEEDS_RESTART=1
+    else
+        info "Downloading ${BINARY}..."
     fi
 
     URL="https://github.com/${GITHUB_ORG}/${REPO}/releases/download/${VERSION_TAG}/${BINARY}-${PLATFORM}-${ARCH}.tar.gz"
@@ -122,7 +226,11 @@ download_and_install() {
 
     if [ -f "$TMPDIR/${BINARY}" ]; then
         install -m 755 "$TMPDIR/${BINARY}" "${INSTALL_DIR}/${BINARY}"
-        success "Installed ${BINARY} ${VERSION_TAG} -> ${INSTALL_DIR}/${BINARY}"
+        if [ -n "$LOCAL_VERSION" ]; then
+            success "Updated ${BINARY}: ${LOCAL_VERSION} -> ${REMOTE_VERSION}"
+        else
+            success "Installed ${BINARY} ${REMOTE_VERSION}"
+        fi
     else
         warn "Warning: binary '${BINARY}' not found in archive"
     fi
@@ -159,7 +267,22 @@ setup_path() {
     export PATH="${INSTALL_DIR}:$PATH"
 }
 
-# ────────────────────── auto-start service ──────────────────────
+# ────────────────────── service management ──────────────────────
+
+stop_nexad_service() {
+    if [ "$PLATFORM" = "darwin" ]; then
+        PLIST_FILE="${HOME}/Library/LaunchAgents/net.nexa.nexad.plist"
+        if [ -f "$PLIST_FILE" ]; then
+            launchctl bootout "gui/$(id -u)" "$PLIST_FILE" 2>/dev/null || true
+            sleep 1
+        fi
+    elif command -v systemctl >/dev/null 2>&1; then
+        systemctl --user stop nexad.service 2>/dev/null || true
+        sleep 1
+    fi
+    # Also kill any stray nexad process
+    pkill -x nexad 2>/dev/null || true
+}
 
 install_launchd_service() {
     PLIST_DIR="${HOME}/Library/LaunchAgents"
@@ -199,7 +322,6 @@ install_launchd_service() {
 </plist>
 PLIST
 
-    launchctl bootout "gui/$(id -u)" "$PLIST_FILE" 2>/dev/null || true
     launchctl bootstrap "gui/$(id -u)" "$PLIST_FILE" 2>/dev/null || \
         launchctl load "$PLIST_FILE" 2>/dev/null || true
 
@@ -310,6 +432,8 @@ main() {
     detect_platform
     detect_arch
 
+    NEEDS_RESTART=""
+
     # Determine install directory
     if [ -z "$INSTALL_DIR" ]; then
         INSTALL_DIR="/usr/local/bin"
@@ -321,6 +445,10 @@ main() {
 
     mkdir -p "$INSTALL_DIR" "${NEXA_HOME}/data" "${NEXA_HOME}/log"
 
+    # Detect existing installation
+    EXISTING_NEXAD=$(get_installed_version "${INSTALL_DIR}/nexad")
+    EXISTING_NEXA=$(get_installed_version "${INSTALL_DIR}/nexa")
+
     printf '\n'
     printf '  _   _                _   _      _   \n'
     printf ' | \\ | | _____  ____ | \\ | | ___| |_ \n'
@@ -328,11 +456,27 @@ main() {
     printf ' | |\\  |  __/>  < (_|| |\\  |  __/ |_ \n'
     printf ' |_| \\_|\\___/_/\\_\\__||_| \\_|\\___|\\__|\n'
     printf '\n'
-    printf '  NexaNet Installer\n'
+
+    if [ -n "$EXISTING_NEXAD" ] || [ -n "$EXISTING_NEXA" ]; then
+        printf '  NexaNet Updater\n'
+    else
+        printf '  NexaNet Installer\n'
+    fi
+
     printf '\n'
     info "Platform:     ${PLATFORM}/${ARCH}"
     info "Install dir:  ${INSTALL_DIR}"
+
+    if [ -n "$EXISTING_NEXAD" ]; then
+        info "Installed:    nexad ${EXISTING_NEXAD}, nexa ${EXISTING_NEXA:-n/a}"
+    fi
+
     printf '\n'
+
+    # Stop running nexad before overwriting binaries (if updating)
+    if [ -n "$EXISTING_NEXAD" ]; then
+        stop_nexad_service
+    fi
 
     download_and_install "nexad" "nexad"
     download_and_install "nexa-cli" "nexa"
@@ -344,7 +488,11 @@ main() {
     start_nexad
 
     printf '\n'
-    success "Installation complete!"
+    if [ -n "$EXISTING_NEXAD" ]; then
+        success "Update complete!"
+    else
+        success "Installation complete!"
+    fi
     printf '\n'
     info "Try it now:"
     info "  nexa status           # Check cluster status"
