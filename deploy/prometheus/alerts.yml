@@ -16,6 +16,7 @@ groups:
 
       - alert: NexaContainerOOM
         expr: increase(nexa_container_events_total{event="oom"}[5m]) > 0
+        for: 1m
         labels:
           severity: critical
         annotations:

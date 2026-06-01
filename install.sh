@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e
+set -eu
 
 # NexaNet Installer
 # Usage: curl -sSfL https://raw.githubusercontent.com/nexa-net/nexa/main/install.sh | sh
@@ -13,6 +13,14 @@ set -e
 #   NO_START      Set to 1 to skip launching nexad after install
 #   FORCE         Set to 1 to skip upgrade prompt and always overwrite
 #   UNINSTALL     Set to 1 to uninstall NexaNet
+
+# Default optional environment variables (safe under set -u)
+INSTALL_DIR="${INSTALL_DIR:-}"
+VERSION="${VERSION:-}"
+NO_SERVICE="${NO_SERVICE:-}"
+NO_START="${NO_START:-}"
+FORCE="${FORCE:-}"
+UNINSTALL="${UNINSTALL:-}"
 
 GITHUB_ORG="nexa-net"
 NEXA_HOME="${HOME}/.nexa"
@@ -124,9 +132,9 @@ detect_arch() {
 }
 
 detect_shell_profile() {
-    if [ -n "$ZSH_VERSION" ] || [ "$(basename "$SHELL")" = "zsh" ]; then
+    if [ -n "${ZSH_VERSION:-}" ] || [ "$(basename "${SHELL:-sh}")" = "zsh" ]; then
         SHELL_PROFILE="${HOME}/.zshrc"
-    elif [ -n "$BASH_VERSION" ] || [ "$(basename "$SHELL")" = "bash" ]; then
+    elif [ -n "${BASH_VERSION:-}" ] || [ "$(basename "${SHELL:-sh}")" = "bash" ]; then
         if [ -f "${HOME}/.bash_profile" ]; then
             SHELL_PROFILE="${HOME}/.bash_profile"
         else
