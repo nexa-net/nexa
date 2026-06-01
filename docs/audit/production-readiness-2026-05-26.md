@@ -1,6 +1,7 @@
 # Audit Production-Readiness — NexaNet
 
 **Date**: 2026-05-26  
+**Derniere mise a jour**: 2026-06-01  
 **Scope**: 3 crates (~53K lignes Rust), infra, CI/CD, proto, monitoring  
 **Auditeur**: Claude (automated deep audit)
 
@@ -8,41 +9,43 @@
 
 ## Vue d'ensemble
 
-| Severite | nexa-core | nexad | nexa-cli | Infra | **Total** |
-|----------|-----------|-------|----------|-------|-----------|
-| CRITICAL | 1 | 4 | 1 | 2 | **8** |
-| HIGH | 8 | 10 | 7 | 7 | **32** |
-| MEDIUM | 13 | 9 | 10 | 14 | **46** |
-| LOW | 8 | 9 | 12 | 11 | **40** |
+| Severite | nexa-core | nexad | nexa-cli | Infra | **Total** | **Corrige** |
+|----------|-----------|-------|----------|-------|-----------|-------------|
+| CRITICAL | 1 | 4 | 1 | 2 | **8** | **8 (100%)** |
+| HIGH | 8 | 10 | 7 | 7 | **32** | 0 |
+| MEDIUM | 13 | 9 | 10 | 14 | **46** | 0 |
+| LOW | 8 | 9 | 12 | 11 | **40** | 0 |
 
-**Verdict : pas production-ready en l'etat.** Les 8 critiques bloquent tout deploiement. Les 32 HIGH sont a traiter avant une beta publique. Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
+**Progression : 8/126 issues corrigees (6%).** Les 8 CRITICAL sont tous resolus — plus aucun bloqueur de deploiement. Les 32 HIGH restent a traiter avant une beta publique.
+
+Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
 
 ---
 
-## CRITICAL (8) — Bloqueurs absolus
+## CRITICAL (8) — Bloqueurs absolus — ✅ TOUS RESOLUS
 
 ### Securite — API & Auth
 
-| # | Crate | Issue | Fichier |
-|---|-------|-------|---------|
-| 1 | nexad | **Aucune authentification sur l'API HTTP** — deploy, secrets, drain, token rotation accessibles sans auth | `src/api/routes.rs` |
-| 2 | nexad | **API ecoute sur 0.0.0.0 par defaut** — combine avec zero auth = daemon ouvert au reseau | `src/main.rs:35` |
-| 3 | nexad | **Join token stocke en clair** dans SQLite — seul le hash devrait etre persiste | `src/api/handlers.rs:284` |
-| 4 | nexa-cli | **Secrets passes en arguments CLI** — visibles via `ps aux`, shell history, audit logs | `src/main.rs:200-201` |
+| # | Crate | Issue | Status | Commit |
+|---|-------|-------|--------|--------|
+| 1 | nexad | **Aucune authentification sur l'API HTTP** — deploy, secrets, drain, token rotation accessibles sans auth | ✅ Corrige | `c50f153` — Bearer token auth middleware (Argon2id), routes publiques/protegees separees |
+| 2 | nexad | **API ecoute sur 0.0.0.0 par defaut** — combine avec zero auth = daemon ouvert au reseau | ✅ Corrige | `8334bd6` — Default bind 127.0.0.1 (API + DNS) |
+| 3 | nexad | **Join token stocke en clair** dans SQLite — seul le hash devrait etre persiste | ✅ Corrige | `aedcfc8` — Seul le hash est persiste, plaintext affiche une seule fois |
+| 4 | nexa-cli | **Secrets passes en arguments CLI** — visibles via `ps aux`, shell history, audit logs | ✅ Corrige | `e9b2f5d` — Lecture depuis stdin (pipe ou prompt interactif) |
 
 ### Cluster — Pods fantomes
 
-| # | Crate | Issue | Fichier |
-|---|-------|-------|---------|
-| 5 | nexad | **`stop_pod` et `remove_pod` sont des no-ops** dans ClusterServer — retournent `success: true` sans rien faire | `src/cluster/server.rs:251-273` |
-| 6 | nexad | **Aucun graceful shutdown** du daemon — containers orphelins, etat incoherent | `src/main.rs` |
+| # | Crate | Issue | Status | Commit |
+|---|-------|-------|--------|--------|
+| 5 | nexad | **`stop_pod` et `remove_pod` sont des no-ops** dans ClusterServer — retournent `success: true` sans rien faire | ✅ Corrige | `c50f153` — stop_container + remove_container avec timeout |
+| 6 | nexad | **Aucun graceful shutdown** du daemon — containers orphelins, etat incoherent | ✅ Corrige | `4179300` — CancellationToken + SIGINT/SIGTERM handler + axum graceful shutdown |
 
 ### Supply Chain
 
-| # | Crate | Issue | Fichier |
-|---|-------|-------|---------|
-| 7 | infra | **Install script sans verification d'integrite** — binaires telecharges sans checksum/signature | `install.sh` |
-| 8 | infra | **Release artifacts non signes** — aucun SHA-256, cosign, ou GPG dans les workflows | CI workflows |
+| # | Crate | Issue | Status | Commit |
+|---|-------|-------|--------|--------|
+| 7 | infra | **Install script sans verification d'integrite** — binaires telecharges sans checksum/signature | ✅ Corrige | `2a65a0e` — install.sh verifie SHA-256 checksums |
+| 8 | infra | **Release artifacts non signes** — aucun SHA-256, cosign, ou GPG dans les workflows | ✅ Corrige | `d53ded4` / `8d0029a` — sha256sums.txt genere et publie avec chaque release |
 
 ---
 
@@ -301,16 +304,16 @@ Points faibles :
 
 #### Securite
 
-- **Aucune auth** sur l'API HTTP — tous les endpoints management accessibles sans credentials
-- **API sur 0.0.0.0** par defaut
-- **Join token en clair** dans SQLite
+- ~~**Aucune auth** sur l'API HTTP~~ → ✅ Bearer token auth middleware (Argon2id)
+- ~~**API sur 0.0.0.0** par defaut~~ → ✅ Default bind 127.0.0.1
+- ~~**Join token en clair** dans SQLite~~ → ✅ Seul le hash persiste
 - **gRPC sans TLS** — communication cluster en plaintext
 - **import_cert** stocke la cle privee non chiffree malgre le champ `key_pem_enc`
 - Token verification non constant-time
 
 #### Container Runtime
 
-- `stop_pod`/`remove_pod` dans ClusterServer sont des **no-ops** qui retournent success
+- ~~`stop_pod`/`remove_pod` dans ClusterServer sont des **no-ops**~~ → ✅ Implementes (stop_container + remove_container)
 - `stream_logs` retourne un **stream vide**
 - Containerd ne redirige pas stdout/stderr vers les fichiers de log
 - CNI `attach`/`detach` sont des stubs `bail!("not implemented")`
@@ -330,7 +333,7 @@ Points faibles :
 
 #### Production
 
-- **Aucun graceful shutdown** — pas de handler SIGTERM/SIGINT
+- ~~**Aucun graceful shutdown**~~ → ✅ CancellationToken + SIGINT/SIGTERM + axum graceful shutdown
 - Reschedule callback est un **TODO** — pods perdus quand un worker meurt
 - Health checker interval hardcode a 1s
 - `node_stats` bloque 200ms par appel
@@ -352,7 +355,7 @@ Points faibles :
 
 #### Securite
 
-- **Secrets en arguments CLI** — visibles dans `ps aux` et shell history
+- ~~**Secrets en arguments CLI**~~ → ✅ Lecture depuis stdin (pipe ou prompt interactif)
 - **Aucun support d'authentification** dans le client HTTP
 - Cle privee TLS et secrets envoyes potentiellement en HTTP non chiffre
 
@@ -383,7 +386,7 @@ Points faibles :
 
 #### Install Script (`install.sh`)
 
-- Telecharge et installe des binaires **sans verification de checksum**
+- ~~Telecharge et installe des binaires **sans verification de checksum**~~ → ✅ SHA-256 verification ajoutee
 - `pkill -x nexad` peut tuer le process d'un autre utilisateur
 - Pas de `set -u` — variables non definies silencieusement vides
 
@@ -391,7 +394,7 @@ Points faibles :
 
 - **Aucun security scanning** (`cargo audit`, `cargo deny`) dans aucun pipeline
 - Release workflow publie meme si le build echoue (`if: always()`)
-- Aucune signature d'artifacts
+- ~~Aucune signature d'artifacts~~ → ✅ sha256sums.txt publie avec chaque release
 - nexa-core CI ne lance que `cargo test --lib`
 - Pas de CI multi-plateforme (macOS non teste)
 - `cross` installe depuis git sans version pin
