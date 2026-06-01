@@ -240,7 +240,7 @@ Docker and containerd supported out of the box. Auto-detected at startup — no 
 | **Orchestration** | Declarative YAML deployments, rolling updates, replica scaling |
 | **Clustering** | Master/worker topology, gRPC transport, join tokens, heartbeat monitoring |
 | **Scheduling** | Weighted spread/bin-pack strategies, automatic pod rescheduling on node failure |
-| **Networking** | WireGuard overlay mesh, per-project subnet allocation, CNI plugin support |
+| **Networking** | Per-project Docker networks, CNI support (experimental), WireGuard overlay (experimental) |
 | **Service Discovery** | Embedded DNS server resolving `<service>.<project>.internal` |
 | **Routing** | Built-in reverse proxy, nginx/Caddy/Traefik backends, host-based routing |
 | **TLS** | ACME auto-provisioning, certificate import, daily renewal |
