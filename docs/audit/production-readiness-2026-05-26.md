@@ -13,10 +13,10 @@
 |----------|-----------|-------|----------|-------|-----------|-------------|
 | CRITICAL | 1 | 4 | 1 | 2 | **8** | **8 (100%)** |
 | HIGH | 8 | 10 | 7 | 7 | **32** | **32 (100%)** |
-| MEDIUM | 13 | 9 | 10 | 14 | **46** | **24 (52%)** |
-| LOW | 8 | 9 | 12 | 11 | **40** | 0 |
+| MEDIUM | 13 | 9 | 10 | 14 | **46** | **25 (54%)** |
+| LOW | 8 | 9 | 12 | 11 | **40** | **25 (63%)** |
 
-**Progression : 64/126 issues corrigees (51%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 24/46 MEDIUM corriges. Les 22 MEDIUM restants et 40 LOW restent pour le polish production.
+**Progression : 90/126 issues corrigees (71%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 25/46 MEDIUM corriges. 25/40 LOW corriges. Les 21 MEDIUM restants et 15 LOW restants sont soit trop invasifs, soit necessitent un effort significatif.
 
 Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
 
@@ -122,7 +122,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - `Command` enum expose le protocole interne (requis par `command_sender()`)
 - ~~`SchedulerConfig.strategy` est un String~~ → ✅ `SchedulerStrategy` enum
 - ~~O(n) lookup par nom de deployment~~ → ✅ `deployment_index` HashMap O(1)
-- O(n) filtrage des pods par deployment_id (multiple sites)
+- ~~O(n) filtrage des pods par deployment_id (multiple sites)~~ → ✅ `pods_by_deployment` HashMap index O(1)
 - ~~`tokio features = ["full"]`~~ → ✅ Features minimales `sync/rt/time/macros`
 - Pas de validation de configuration au demarrage
 
@@ -174,54 +174,54 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 ### nexa-core (8)
 
-- Glob re-export dans models (`pub use deployment::*`) — risque de collision
-- Clippy suppression blanket (`too_many_arguments`)
-- `HealthTracker` non Send+Sync
+- ~~Glob re-export dans models (`pub use deployment::*`)~~ → ✅ Re-exports explicites nommes
+- ~~Clippy suppression blanket (`too_many_arguments`)~~ → ✅ `#[allow]` cible sur `Orchestrator::spawn` uniquement
+- ~~`HealthTracker` non Send+Sync~~ → ✅ Assertion statique Send+Sync
 - Cloning excessif dans le path de persistence
-- Channel buffer size hardcode a 256
-- Tests avec timing sensible (`sleep(100ms)`)
-- CI `cargo test --lib` rate les integration tests
-- Pas de schema versioning dans l'etat persiste
+- ~~Channel buffer size hardcode a 256~~ → ✅ Constante `COMMAND_CHANNEL_CAPACITY`
+- ~~Tests avec timing sensible (`sleep(100ms)`)~~ → ✅ Tolerances augmentees (150ms-500ms)
+- ~~CI `cargo test --lib` rate les integration tests~~ → ✅ `cargo test` (tous les tests)
+- ~~Pas de schema versioning dans l'etat persiste~~ → ✅ `STATE_SCHEMA_VERSION` constant
 
 ### nexad (9)
 
-- Master key genere avec `thread_rng()` au lieu de `OsRng` (`src/crypto/master_key.rs:41`)
+- ~~Master key genere avec `thread_rng()` au lieu de `OsRng`~~ → ✅ `OsRng` directement
 - Dead schema : table `secrets` dans les migrations jamais utilisee
 - Subnet allocator wrap correct mais message misleading
-- Event watcher reconnection sans backoff (`src/adapters/event_watcher.rs:29`)
-- Heartbeat sender reconnection sans backoff (`src/cluster/worker.rs:86`)
-- `expect()` dans HealthChecker constructor (`src/adapters/health/mod.rs:19`)
+- ~~Event watcher reconnection sans backoff~~ → ✅ Backoff exponentiel (1s→60s cap)
+- ~~Heartbeat sender reconnection sans backoff~~ → ✅ Backoff exponentiel (1s→60s cap)
+- ~~`expect()` dans HealthChecker constructor~~ → ✅ Retourne `Result`, degradation gracieuse
 - Dual SQLite (sqlx + rusqlite) augmente la surface d'attaque
 - `rand` 0.8 outdated (0.9 disponible)
 - Broadcast channel capacity hardcode a 256 (`src/main.rs:301`)
 
 ### nexa-cli (12)
 
-- Pas de validation du `--server` URL
-- Pas de shell completion (`clap_complete`)
-- `nexa rm` / `project delete` sans confirmation `--yes`
-- `event::poll()` unwrap dans le thread TUI
-- `spinner expect()` sur template
-- Status message TUI jamais cleared
+- ~~Pas de validation du `--server` URL~~ → ✅ Validation `reqwest::Url::parse()` avant utilisation
+- ~~Pas de shell completion (`clap_complete`)~~ → ✅ Subcommande `completions` (bash/zsh/fish/powershell)
+- ~~`nexa rm` / `project delete` sans confirmation `--yes`~~ → ✅ Prompt `dialoguer::Confirm` + flag `--yes`
+- ~~`event::poll()` unwrap dans le thread TUI~~ → ✅ Deja gere via `unwrap_or(false)`
+- ~~`spinner expect()` sur template~~ → ✅ Fallback si template invalide
+- ~~Status message TUI jamais cleared~~ → ✅ Auto-clear apres 5s via `status_message_at`
 - TUI log view est un snapshot statique, pas un live tail
-- `status` commande hardcode "single-node"
-- `nexa setup cni` hardcode `linux` dans l'URL de telechargement
-- `nexa deploy` timeout hardcode a 60s
-- `tracing` et `uuid` declares mais jamais utilises
-- ~~`nexa-core` git dependency sans rev/tag~~ → ✅ Pinne a `tag = "v0.1.2"`
+- ~~`status` commande hardcode "single-node"~~ → ✅ Detection dynamique via `/api/v1/nodes`
+- ~~`nexa setup cni` hardcode `linux` dans l'URL de telechargement~~ → ✅ `std::env::consts::OS`
+- ~~`nexa deploy` timeout hardcode a 60s~~ → ✅ Flag `--timeout` (defaut 60s)
+- ~~`tracing` et `uuid` declares mais jamais utilises~~ → ✅ Supprimes du Cargo.toml
+- ~~`nexa-core` git dependency sans rev/tag~~ → ✅ Pinne a `tag = "v0.1.4"`
 
 ### Infra (10)
 
-- `set -e` sans `-u` dans install.sh
+- ~~`set -e` sans `-u` dans install.sh~~ → ✅ `set -eu` avec valeurs par defaut pour variables optionnelles
 - Pas de code coverage en CI
-- Benchmarks sur chaque push (bruyant)
+- ~~Benchmarks sur chaque push (bruyant)~~ → ✅ Schedule hebdomadaire + workflow_dispatch
 - Custom `Empty` message dans le proto au lieu de `google.protobuf.Empty`
 - Pas de proto linting (`buf`)
-- Pas de `cargo doc` en CI
-- Example YAML avec credentials hardcodes (`nexad/examples/app.yaml:19`)
-- Pas de fichier NOTICE (Apache-2.0 section 4d)
+- ~~Pas de `cargo doc` en CI~~ → ✅ `cargo doc --no-deps` ajoute au CI nexa-core
+- ~~Example YAML avec credentials hardcodes~~ → ✅ Placeholders `<db-user>:<db-password>`
+- ~~Pas de fichier NOTICE (Apache-2.0 section 4d)~~ → ✅ Fichier NOTICE cree
 - Pas de SBOM generation
-- OOM alert sans `for` duration
+- ~~OOM alert sans `for` duration~~ → ✅ `for: 1m` ajoute a `NexaContainerOOM`
 
 ---
 
