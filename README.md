@@ -17,7 +17,7 @@
 [![nexa-core CI](https://github.com/nexa-net/nexa-core/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-core/actions)
 [![nexad CI](https://github.com/nexa-net/nexad/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexad/actions)
 [![nexa-cli CI](https://github.com/nexa-net/nexa-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-cli/actions)
-[![nexa-proxy CI](https://github.com/nexa-net/nexa-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-proxy/actions)
+
 
 [Install](#install) · [Quick Start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Docs](#documentation)
 
@@ -300,7 +300,7 @@ nexa pods --json | jq '.[] | .name'
 | Deployment spec format | [`nexad` README](https://github.com/nexa-net/nexad#deployment-specs) |
 | REST API reference | [`nexad` README](https://github.com/nexa-net/nexad#rest-api) |
 | CLI commands | [`nexa-cli` README](https://github.com/nexa-net/nexa-cli#command-reference) |
-| Proxy configuration | [`nexa-proxy` README](https://github.com/nexa-net/nexa-proxy#configuration) |
+
 | Clustering guide | [`nexad` README](https://github.com/nexa-net/nexad#clustering) |
 
 ---
@@ -330,7 +330,7 @@ NexaNet is organized as a multi-repo project under the [`nexa-net`](https://gith
 | **[`nexa-core`](https://github.com/nexa-net/nexa-core)** | Core library — domain types, port traits, orchestrator | [![CI](https://github.com/nexa-net/nexa-core/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-core/actions) |
 | **[`nexad`](https://github.com/nexa-net/nexad)** | Daemon — runtime adapters, REST API, clustering | [![CI](https://github.com/nexa-net/nexad/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexad/actions) |
 | **[`nexa-cli`](https://github.com/nexa-net/nexa-cli)** | CLI tool — deploy, scale, manage from the terminal | [![CI](https://github.com/nexa-net/nexa-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-cli/actions) |
-| **[`nexa-proxy`](https://github.com/nexa-net/nexa-proxy)** | Reverse proxy — HTTP/HTTPS with weighted load balancing | [![CI](https://github.com/nexa-net/nexa-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/nexa-net/nexa-proxy/actions) |
+
 
 ---
 

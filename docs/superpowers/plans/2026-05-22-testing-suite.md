@@ -4,7 +4,7 @@
 
 **Goal:** Add integration tests, E2E tests with real Docker, and Criterion benchmarks with CI regression detection across all NexaNet repos.
 
-**Architecture:** Three test layers, each independent. Layer 1 adds integration tests to nexad (API + SQLite), nexa-cli (command parsing + output), and nexa-proxy (real HTTP proxying). Layer 2 adds full-stack E2E tests to nexad using real Docker containers. Layer 3 adds Criterion benchmarks to nexa-core, nexad, and nexa-proxy with CI regression gating via `github-action-benchmark`.
+**Architecture:** Three test layers, each independent. Layer 1 adds integration tests to nexad (API + SQLite) and nexa-cli (command parsing + output). Layer 2 adds full-stack E2E tests to nexad using real Docker containers. Layer 3 adds Criterion benchmarks to nexa-core and nexad with CI regression gating via `github-action-benchmark`.
 
 **Tech Stack:** Rust test framework, criterion 0.5, reqwest 0.12 (test HTTP client), tempfile 3 (temp dirs), hyper 1 (test HTTP servers), tokio (async test runtime), github-action-benchmark (CI regression detection)
 
@@ -12,7 +12,6 @@
 - nexa-core: `/Users/nassime/GitHub/NexaNet/nexa-core`
 - nexad: `/Users/nassime/GitHub/NexaNet/nexad`
 - nexa-cli: `/Users/nassime/GitHub/NexaNet/nexa-cli`
-- nexa-proxy: `/Users/nassime/GitHub/NexaNet/nexa-proxy`
 
 ---
 
@@ -41,13 +40,6 @@
 - **Modify:** `src/output/table.rs` — add tests for table rendering + JSON mode
 - **Modify:** `src/output/mod.rs` — add tests for style functions
 - **Modify:** `src/main.rs` — add tests for CLI argument parsing
-
-### nexa-proxy changes
-- **Modify:** `Cargo.toml` — add `criterion`, `hyper-util` dev-dependencies
-- **Create:** `tests/proxy_integration.rs` — proxy integration tests with real HTTP backends
-- **Create:** `benches/routing.rs` — routing benchmark
-- **Modify:** `.github/workflows/ci.yml` — add integration job
-- **Create:** `.github/workflows/bench.yml` — benchmark CI
 
 ---
 
@@ -1003,277 +995,10 @@ git commit -m "test: add CLI argument parsing and table output tests"
 
 ---
 
-### Task 7: nexa-proxy integration tests
-
-**Files:**
-- Modify: `nexa-proxy/Cargo.toml`
-- Create: `nexa-proxy/tests/proxy_integration.rs`
-
-- [ ] **Step 1: Add dev-dependencies**
-
-Add to `nexa-proxy/Cargo.toml`:
-
-```toml
-[dev-dependencies]
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-```
-
-- [ ] **Step 2: Create proxy integration test file**
-
-Create `nexa-proxy/tests/proxy_integration.rs`:
-
-```rust
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-
-use nexa_proxy::config::{ProxyConfig, ProxyRouteConfig, UpstreamEntry};
-use nexa_proxy::proxy::{ProxyState, run_http};
-
-/// Spawn a tiny HTTP server that echoes the given `body_id` in every response.
-async fn spawn_backend(body_id: &str) -> SocketAddr {
-    use hyper::body::Incoming;
-    use hyper::server::conn::http1;
-    use hyper::service::service_fn;
-    use hyper::{Request, Response};
-    use http_body_util::Full;
-    use hyper::body::Bytes;
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let id = body_id.to_string();
-
-    tokio::spawn(async move {
-        loop {
-            let (stream, _) = listener.accept().await.unwrap();
-            let id = id.clone();
-            tokio::spawn(async move {
-                let service = service_fn(move |_req: Request<Incoming>| {
-                    let id = id.clone();
-                    async move {
-                        Ok::<_, hyper::Error>(
-                            Response::new(Full::new(Bytes::from(id)))
-                        )
-                    }
-                });
-                let _ = http1::Builder::new()
-                    .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
-                    .await;
-            });
-        }
-    });
-
-    addr
-}
-
-/// Spawn nexa-proxy on a random port with the given config, return its address.
-async fn spawn_proxy(config: ProxyConfig) -> SocketAddr {
-    let listen_addr = {
-        let tmp = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = tmp.local_addr().unwrap();
-        drop(tmp);
-        addr
-    };
-    let state = Arc::new(ProxyState::from_config(&config));
-    let addr_str = listen_addr.to_string();
-
-    tokio::spawn(async move {
-        run_http(&addr_str, state).await.unwrap();
-    });
-
-    // Wait for the proxy to be ready
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    listen_addr
-}
-
-#[tokio::test]
-async fn route_to_single_upstream() {
-    let backend = spawn_backend("backend-1").await;
-
-    let config = ProxyConfig {
-        http_listen: "0.0.0.0:0".into(),
-        https_listen: None,
-        routes: HashMap::from([(
-            "test.local".into(),
-            ProxyRouteConfig {
-                upstreams: vec![UpstreamEntry {
-                    address: backend.to_string(),
-                    weight: 1,
-                }],
-                tls: None,
-            },
-        )]),
-    };
-    let proxy_addr = spawn_proxy(config).await;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .get(format!("http://{}/", proxy_addr))
-        .header("host", "test.local")
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), 200);
-    assert_eq!(resp.text().await.unwrap(), "backend-1");
-}
-
-#[tokio::test]
-async fn unknown_host_returns_502() {
-    let config = ProxyConfig {
-        http_listen: "0.0.0.0:0".into(),
-        https_listen: None,
-        routes: HashMap::new(),
-    };
-    let proxy_addr = spawn_proxy(config).await;
-
-    let client = reqwest::Client::new();
-    let resp = client
-        .get(format!("http://{}/", proxy_addr))
-        .header("host", "nonexistent.local")
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), 502);
-}
-
-#[tokio::test]
-async fn weighted_round_robin_distribution() {
-    let backend_a = spawn_backend("A").await;
-    let backend_b = spawn_backend("B").await;
-
-    let config = ProxyConfig {
-        http_listen: "0.0.0.0:0".into(),
-        https_listen: None,
-        routes: HashMap::from([(
-            "wrr.local".into(),
-            ProxyRouteConfig {
-                upstreams: vec![
-                    UpstreamEntry { address: backend_a.to_string(), weight: 1 },
-                    UpstreamEntry { address: backend_b.to_string(), weight: 2 },
-                ],
-                tls: None,
-            },
-        )]),
-    };
-    let proxy_addr = spawn_proxy(config).await;
-
-    let client = reqwest::Client::new();
-    let mut counts: HashMap<String, u32> = HashMap::new();
-
-    for _ in 0..90 {
-        let resp = client
-            .get(format!("http://{}/", proxy_addr))
-            .header("host", "wrr.local")
-            .send()
-            .await
-            .unwrap();
-        let body = resp.text().await.unwrap();
-        *counts.entry(body).or_default() += 1;
-    }
-
-    let a_count = *counts.get("A").unwrap_or(&0);
-    let b_count = *counts.get("B").unwrap_or(&0);
-
-    // Weight ratio is 1:2, so B should get ~60 and A ~30 (within 15% tolerance)
-    assert!(a_count >= 20 && a_count <= 40, "A got {a_count}, expected ~30");
-    assert!(b_count >= 50 && b_count <= 70, "B got {b_count}, expected ~60");
-}
-
-#[tokio::test]
-async fn multiple_domains_route_independently() {
-    let backend_x = spawn_backend("X").await;
-    let backend_y = spawn_backend("Y").await;
-
-    let config = ProxyConfig {
-        http_listen: "0.0.0.0:0".into(),
-        https_listen: None,
-        routes: HashMap::from([
-            (
-                "x.local".into(),
-                ProxyRouteConfig {
-                    upstreams: vec![UpstreamEntry { address: backend_x.to_string(), weight: 1 }],
-                    tls: None,
-                },
-            ),
-            (
-                "y.local".into(),
-                ProxyRouteConfig {
-                    upstreams: vec![UpstreamEntry { address: backend_y.to_string(), weight: 1 }],
-                    tls: None,
-                },
-            ),
-        ]),
-    };
-    let proxy_addr = spawn_proxy(config).await;
-
-    let client = reqwest::Client::new();
-
-    let resp = client
-        .get(format!("http://{}/", proxy_addr))
-        .header("host", "x.local")
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.text().await.unwrap(), "X");
-
-    let resp = client
-        .get(format!("http://{}/", proxy_addr))
-        .header("host", "y.local")
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.text().await.unwrap(), "Y");
-}
-```
-
-- [ ] **Step 3: Make proxy crate a library so integration tests can import it**
-
-The proxy is currently binary-only. Add a `[lib]` section to `nexa-proxy/Cargo.toml`:
-
-```toml
-[lib]
-name = "nexa_proxy"
-path = "src/lib.rs"
-
-[[bin]]
-name = "nexa-proxy"
-path = "src/main.rs"
-```
-
-Create `nexa-proxy/src/lib.rs`:
-
-```rust
-pub mod config;
-pub mod proxy;
-```
-
-Update `nexa-proxy/src/main.rs` — replace `mod config; mod proxy;` with:
-
-```rust
-use nexa_proxy::config::ProxyConfig;
-use nexa_proxy::proxy;
-```
-
-- [ ] **Step 4: Run tests**
-
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-proxy && cargo test --test proxy_integration`
-Expected: 4 tests pass
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy
-git add Cargo.toml src/lib.rs src/main.rs tests/proxy_integration.rs
-git commit -m "test: add proxy integration tests with real HTTP backends"
-```
-
----
-
-### Task 8: Update CI workflows — integration + E2E jobs
+### Task 7: Update CI workflows — integration + E2E jobs
 
 **Files:**
 - Modify: `nexad/.github/workflows/ci.yml`
-- Modify: `nexa-proxy/.github/workflows/ci.yml`
 
 - [ ] **Step 1: Update nexad CI with integration and E2E jobs**
 
@@ -1347,69 +1072,17 @@ jobs:
       - run: cargo test --test e2e -- --ignored --test-threads=1
 ```
 
-- [ ] **Step 2: Update nexa-proxy CI with integration job**
-
-Replace the full content of `nexa-proxy/.github/workflows/ci.yml`:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-env:
-  CARGO_TERM_COLOR: always
-
-jobs:
-  check:
-    name: Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test
-
-  integration:
-    name: Integration
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --test proxy_integration
-```
-
-- [ ] **Step 3: Commit**
+- [ ] **Step 2: Commit**
 
 ```bash
 cd /Users/nassime/GitHub/NexaNet/nexad
 git add .github/workflows/ci.yml
 git commit -m "ci: add integration and E2E test jobs"
-
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy
-git add .github/workflows/ci.yml
-git commit -m "ci: add proxy integration test job"
 ```
 
 ---
 
-### Task 9: nexad E2E tests with real Docker
+### Task 8: nexad E2E tests with real Docker
 
 **Files:**
 - Create: `nexad/tests/e2e.rs`
@@ -1763,7 +1436,7 @@ git commit -m "test: add E2E tests with real Docker containers"
 
 ---
 
-### Task 10: nexa-core Criterion benchmarks
+### Task 9: nexa-core Criterion benchmarks
 
 **Files:**
 - Modify: `nexa-core/Cargo.toml`
@@ -1940,7 +1613,7 @@ git commit -m "bench: add Criterion benchmarks for scheduler and config parsing"
 
 ---
 
-### Task 11: nexad Criterion benchmarks
+### Task 10: nexad Criterion benchmarks
 
 **Files:**
 - Modify: `nexad/Cargo.toml` (add bench targets)
@@ -2204,117 +1877,11 @@ git commit -m "bench: add Criterion benchmarks for SQLite, crypto, and DNS"
 
 ---
 
-### Task 12: nexa-proxy Criterion benchmarks
-
-**Files:**
-- Modify: `nexa-proxy/Cargo.toml`
-- Create: `nexa-proxy/benches/routing.rs`
-
-- [ ] **Step 1: Add criterion and bench target**
-
-Add to `nexa-proxy/Cargo.toml`:
-
-```toml
-[dev-dependencies]
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-criterion = { version = "0.5", features = ["html_reports"] }
-
-[[bench]]
-name = "routing"
-harness = false
-```
-
-- [ ] **Step 2: Create routing benchmark**
-
-Create `nexa-proxy/benches/routing.rs`:
-
-```rust
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use nexa_proxy::config::{ProxyConfig, ProxyRouteConfig, UpstreamEntry};
-use nexa_proxy::proxy::ProxyState;
-use std::collections::HashMap;
-
-fn make_config(num_routes: usize, upstreams_per_route: usize) -> ProxyConfig {
-    let mut routes = HashMap::new();
-    for i in 0..num_routes {
-        let upstreams: Vec<UpstreamEntry> = (0..upstreams_per_route)
-            .map(|j| UpstreamEntry {
-                address: format!("10.0.{}.{}:8080", i % 256, j % 256),
-                weight: ((j % 3) + 1) as u32,
-            })
-            .collect();
-        routes.insert(
-            format!("domain-{i}.example.com"),
-            ProxyRouteConfig {
-                upstreams,
-                tls: None,
-            },
-        );
-    }
-    ProxyConfig {
-        http_listen: "0.0.0.0:80".into(),
-        https_listen: None,
-        routes,
-    }
-}
-
-fn bench_routing(c: &mut Criterion) {
-    let mut group = c.benchmark_group("select_upstream");
-    for route_count in [10, 100, 1000] {
-        let config = make_config(route_count, 3);
-        let state = ProxyState::from_config(&config);
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{route_count}_routes")),
-            &state,
-            |b, state| {
-                b.iter(|| state.select_upstream(black_box("domain-0.example.com")))
-            },
-        );
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("weighted_round_robin");
-    for upstream_count in [3, 10] {
-        let config = make_config(1, upstream_count);
-        let state = ProxyState::from_config(&config);
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{upstream_count}_upstreams")),
-            &state,
-            |b, state| {
-                b.iter(|| state.select_upstream(black_box("domain-0.example.com")))
-            },
-        );
-    }
-    group.finish();
-}
-
-criterion_group!(benches, bench_routing);
-criterion_main!(benches);
-```
-
-- [ ] **Step 3: Run benchmarks**
-
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-proxy && cargo bench`
-Expected: Benchmarks run with timing output
-
-- [ ] **Step 4: Commit**
-
-```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy
-git add Cargo.toml benches/
-git commit -m "bench: add Criterion benchmarks for routing and weighted round-robin"
-```
-
----
-
-### Task 13: Benchmark CI workflows with regression detection
+### Task 11: Benchmark CI workflows with regression detection
 
 **Files:**
 - Create: `nexa-core/.github/workflows/bench.yml`
 - Create: `nexad/.github/workflows/bench.yml`
-- Create: `nexa-proxy/.github/workflows/bench.yml`
 
 - [ ] **Step 1: Create nexa-core bench workflow**
 
@@ -2392,44 +1959,7 @@ jobs:
           benchmark-data-dir-path: dev/bench
 ```
 
-- [ ] **Step 3: Create nexa-proxy bench workflow**
-
-Create `nexa-proxy/.github/workflows/bench.yml`:
-
-```yaml
-name: Benchmarks
-
-on:
-  push:
-    branches: [main]
-
-permissions:
-  contents: write
-  deployments: write
-
-jobs:
-  bench:
-    name: Performance
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Run benchmarks
-        run: cargo bench --bench routing -- --output-format bencher | tee output.txt
-      - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: cargo
-          output-file-path: output.txt
-          alert-threshold: '115%'
-          fail-on-alert: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
-          benchmark-data-dir-path: dev/bench
-```
-
-- [ ] **Step 4: Commit all bench workflows**
+- [ ] **Step 3: Commit all bench workflows**
 
 ```bash
 cd /Users/nassime/GitHub/NexaNet/nexa-core
@@ -2439,15 +1969,11 @@ git commit -m "ci: add benchmark workflow with regression detection"
 cd /Users/nassime/GitHub/NexaNet/nexad
 git add .github/workflows/bench.yml
 git commit -m "ci: add benchmark workflow with regression detection"
-
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy
-git add .github/workflows/bench.yml
-git commit -m "ci: add benchmark workflow with regression detection"
 ```
 
 ---
 
-### Task 14: Push all repos and verify CI
+### Task 12: Push all repos and verify CI
 
 - [ ] **Step 1: Push all repos**
 
@@ -2455,11 +1981,10 @@ git commit -m "ci: add benchmark workflow with regression detection"
 cd /Users/nassime/GitHub/NexaNet/nexa-core && git push
 cd /Users/nassime/GitHub/NexaNet/nexad && git push
 cd /Users/nassime/GitHub/NexaNet/nexa-cli && git push
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy && git push
 ```
 
 - [ ] **Step 2: Verify CI passes on all repos**
 
-Run: `gh run list --repo nexa-net/nexa-core --limit 1 && gh run list --repo nexa-net/nexad --limit 1 && gh run list --repo nexa-net/nexa-cli --limit 1 && gh run list --repo nexa-net/nexa-proxy --limit 1`
+Run: `gh run list --repo nexa-net/nexa-core --limit 1 && gh run list --repo nexa-net/nexad --limit 1 && gh run list --repo nexa-net/nexa-cli --limit 1`
 
 Expected: All CI runs succeed (E2E may take a few minutes on nexad).

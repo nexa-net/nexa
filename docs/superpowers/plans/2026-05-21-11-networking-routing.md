@@ -8,15 +8,14 @@
 > | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
 > | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
 > | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
-> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
 >
 > `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
 
-**Goal:** Add overlay networking (WireGuard via boringtun), a pluggable reverse proxy abstraction with four backends (nexa-proxy, caddy, traefik, nginx), and automated TLS certificate management to enable multi-node container routing with HTTPS.
+**Goal:** Add overlay networking (WireGuard via boringtun), a pluggable reverse proxy abstraction with three backends (traefik, caddy, nginx), and automated TLS certificate management to enable multi-node container routing with HTTPS.
 
-**Architecture:** Three layers compose into the hexagonal architecture. Layer 1 is a WireGuard overlay network: when a worker joins the cluster, the master assigns it a `/24` subnet from the cluster CIDR (`172.20.0.0/16`), generates a WireGuard keypair, and distributes peer configs via gRPC; each node runs a userspace WireGuard interface via `boringtun` so containers on different nodes can reach each other by IP. Layer 2 is a `ProxyBackend` port trait in `nexa-core` with four adapter implementations in `nexad` (nexa-proxy as a new crate, plus caddy/traefik/nginx config generators); the orchestrator calls `apply_routes` on deploy and `remove_route` on teardown. Layer 3 is TLS automation: certificates are stored encrypted in SQLite, and a daily renewal task uses `instant-acme` to issue/renew certificates 30 days before expiry.
+**Architecture:** Three layers compose into the hexagonal architecture. Layer 1 is a WireGuard overlay network: when a worker joins the cluster, the master assigns it a `/24` subnet from the cluster CIDR (`172.20.0.0/16`), generates a WireGuard keypair, and distributes peer configs via gRPC; each node runs a userspace WireGuard interface via `boringtun` so containers on different nodes can reach each other by IP. Layer 2 is a `ProxyBackend` port trait in `nexa-core` with three adapter implementations in `nexad` (traefik, caddy, and nginx config generators); the orchestrator calls `apply_routes` on deploy and `remove_route` on teardown. Layer 3 is TLS automation: certificates are stored encrypted in SQLite, and a daily renewal task uses `instant-acme` to issue/renew certificates 30 days before expiry.
 
-**Tech Stack:** boringtun 0.6, x25519-dalek 2, base64 0.22, hyper 1 (full), hyper-util 0.1, rustls 0.23, instant-acme 0.7, tokio, async-trait, chrono, serde, sqlx (existing)
+**Tech Stack:** boringtun 0.6, x25519-dalek 2, base64 0.22, instant-acme 0.7, tokio, async-trait, chrono, serde, sqlx (existing)
 
 ---
 
@@ -65,7 +64,7 @@ pub enum TlsConfig {
 
 /// Port trait for reverse proxy backends.
 ///
-/// Each backend (nexa-proxy, caddy, traefik, nginx) implements this trait
+/// Each backend (traefik, caddy, nginx) implements this trait
 /// to apply routing configuration, manage TLS, and perform health checks.
 #[async_trait]
 pub trait ProxyBackend: Send + Sync {
@@ -1872,825 +1871,7 @@ git commit -m "feat(proxy): implement TraefikBackend adapter with YAML config an
 
 ---
 
-### Task 7: Create nexa-proxy crate (Cargo.toml, main.rs with hyper + rustls reverse proxy)
-
-**Files:**
-- Create: `crates/nexa-proxy/Cargo.toml`
-- Create: `crates/nexa-proxy/src/main.rs`
-- Create: `crates/nexa-proxy/src/config.rs`
-- Create: `crates/nexa-proxy/src/proxy.rs`
-- Modify: `Cargo.toml` (workspace deps)
-
-- [ ] **Step 1: Add workspace dependencies**
-
-In `Cargo.toml` (workspace root), add to `[workspace.dependencies]`:
-
-```toml
-boringtun = "0.6"
-hyper = { version = "1", features = ["full"] }
-hyper-util = { version = "0.1", features = ["tokio", "server-auto", "http1", "http2"] }
-rustls = "0.23"
-instant-acme = "0.7"
-x25519-dalek = "2"
-base64 = "0.22"
-http-body-util = "0.1"
-tokio-rustls = "0.26"
-rustls-pemfile = "2"
-```
-
-- [ ] **Step 2: Create crate Cargo.toml**
-
-Create `crates/nexa-proxy/Cargo.toml`:
-
-```toml
-[package]
-name = "nexa-proxy"
-description = "NexaNet built-in reverse proxy — minimal HTTP/1.1+HTTP/2 proxy with ACME TLS"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
-
-[[bin]]
-name = "nexa-proxy"
-path = "src/main.rs"
-
-[dependencies]
-tokio = { workspace = true }
-hyper = { workspace = true }
-hyper-util = { workspace = true }
-http-body-util = { workspace = true }
-rustls = { workspace = true }
-tokio-rustls = { workspace = true }
-rustls-pemfile = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-anyhow = { workspace = true }
-clap = { workspace = true }
-reqwest = { workspace = true }
-```
-
-- [ ] **Step 3: Create the config module**
-
-Create `crates/nexa-proxy/src/config.rs`:
-
-```rust
-use std::collections::HashMap;
-use std::path::PathBuf;
-
-use serde::{Deserialize, Serialize};
-
-/// Configuration for nexa-proxy, read from a JSON file.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProxyConfig {
-    /// Address to listen on for HTTP (e.g., "0.0.0.0:80")
-    pub http_listen: String,
-    /// Address to listen on for HTTPS (e.g., "0.0.0.0:443")
-    pub https_listen: Option<String>,
-    /// Route table: domain -> route config
-    #[serde(default)]
-    pub routes: HashMap<String, ProxyRouteConfig>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProxyRouteConfig {
-    /// List of upstream addresses (host:port)
-    pub upstreams: Vec<UpstreamEntry>,
-    /// TLS configuration
-    #[serde(default)]
-    pub tls: Option<TlsEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpstreamEntry {
-    pub address: String,
-    pub weight: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TlsEntry {
-    pub cert_path: Option<PathBuf>,
-    pub key_path: Option<PathBuf>,
-    pub acme_email: Option<String>,
-}
-
-impl ProxyConfig {
-    pub fn load(path: &std::path::Path) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path)?;
-        let config: Self = serde_json::from_str(&content)?;
-        Ok(config)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_minimal_config() {
-        let json = r#"{
-            "http_listen": "0.0.0.0:80",
-            "routes": {}
-        }"#;
-        let config: ProxyConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.http_listen, "0.0.0.0:80");
-        assert!(config.routes.is_empty());
-    }
-
-    #[test]
-    fn parse_full_config() {
-        let json = r#"{
-            "http_listen": "0.0.0.0:80",
-            "https_listen": "0.0.0.0:443",
-            "routes": {
-                "api.example.com": {
-                    "upstreams": [
-                        {"address": "10.0.0.1:3000", "weight": 1},
-                        {"address": "10.0.0.2:3000", "weight": 2}
-                    ],
-                    "tls": {
-                        "acme_email": "admin@example.com"
-                    }
-                }
-            }
-        }"#;
-        let config: ProxyConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.routes.len(), 1);
-        let route = &config.routes["api.example.com"];
-        assert_eq!(route.upstreams.len(), 2);
-        assert_eq!(route.upstreams[1].weight, 2);
-        assert_eq!(route.tls.as_ref().unwrap().acme_email.as_deref(), Some("admin@example.com"));
-    }
-
-    #[test]
-    fn config_serializes_roundtrip() {
-        let config = ProxyConfig {
-            http_listen: "0.0.0.0:80".into(),
-            https_listen: None,
-            routes: HashMap::new(),
-        };
-        let json = serde_json::to_string(&config).unwrap();
-        let deser: ProxyConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(deser.http_listen, "0.0.0.0:80");
-    }
-}
-```
-
-- [ ] **Step 4: Create the proxy module (core HTTP proxy logic with weighted round-robin)**
-
-Create `crates/nexa-proxy/src/proxy.rs`:
-
-```rust
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-
-use http_body_util::Full;
-use hyper::body::{Bytes, Incoming};
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper::{Request, Response, StatusCode};
-use tokio::net::TcpListener;
-use tracing::{error, info};
-
-use crate::config::ProxyConfig;
-
-/// Shared state for the proxy server.
-pub struct ProxyState {
-    pub routes: HashMap<String, RouteState>,
-}
-
-pub struct RouteState {
-    pub upstreams: Vec<WeightedUpstream>,
-    pub counter: AtomicUsize,
-}
-
-pub struct WeightedUpstream {
-    pub address: String,
-    pub weight: u32,
-}
-
-impl ProxyState {
-    pub fn from_config(config: &ProxyConfig) -> Self {
-        let mut routes = HashMap::new();
-        for (domain, route_config) in &config.routes {
-            let upstreams: Vec<WeightedUpstream> = route_config
-                .upstreams
-                .iter()
-                .map(|u| WeightedUpstream {
-                    address: u.address.clone(),
-                    weight: u.weight,
-                })
-                .collect();
-            routes.insert(
-                domain.clone(),
-                RouteState {
-                    upstreams,
-                    counter: AtomicUsize::new(0),
-                },
-            );
-        }
-        Self { routes }
-    }
-
-    /// Select the next upstream using weighted round-robin.
-    pub fn select_upstream(&self, domain: &str) -> Option<&str> {
-        let route = self.routes.get(domain)?;
-        if route.upstreams.is_empty() {
-            return None;
-        }
-
-        let total_weight: u32 = route.upstreams.iter().map(|u| u.weight).sum();
-        if total_weight == 0 {
-            return None;
-        }
-
-        let idx = route.counter.fetch_add(1, Ordering::Relaxed);
-        let mut target = (idx as u32) % total_weight;
-
-        for upstream in &route.upstreams {
-            if target < upstream.weight {
-                return Some(&upstream.address);
-            }
-            target -= upstream.weight;
-        }
-
-        Some(&route.upstreams[0].address)
-    }
-}
-
-/// Run the HTTP proxy server.
-pub async fn run_http(listen_addr: &str, state: Arc<ProxyState>) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(listen_addr).await?;
-    info!(%listen_addr, "nexa-proxy HTTP listening");
-
-    loop {
-        let (stream, peer_addr) = listener.accept().await?;
-        let state = state.clone();
-
-        tokio::spawn(async move {
-            let service = service_fn(move |req: Request<Incoming>| {
-                let state = state.clone();
-                async move { handle_request(req, &state).await }
-            });
-
-            if let Err(e) = http1::Builder::new()
-                .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
-                .await
-            {
-                error!(%peer_addr, %e, "connection error");
-            }
-        });
-    }
-}
-
-/// Handle a single HTTP request by routing to the correct upstream.
-async fn handle_request(
-    req: Request<Incoming>,
-    state: &ProxyState,
-) -> std::result::Result<Response<Full<Bytes>>, hyper::Error> {
-    let host = req
-        .headers()
-        .get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("");
-
-    let upstream = match state.select_upstream(host) {
-        Some(addr) => addr.to_string(),
-        None => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(Full::new(Bytes::from("no upstream configured for this domain")))
-                .unwrap());
-        }
-    };
-
-    let uri = format!(
-        "http://{}{}",
-        upstream,
-        req.uri().path_and_query().map(|pq| pq.as_str()).unwrap_or("/")
-    );
-
-    let parts = req.into_parts().0;
-    let method = match parts.method.as_str() {
-        "GET" => reqwest::Method::GET,
-        "POST" => reqwest::Method::POST,
-        "PUT" => reqwest::Method::PUT,
-        "DELETE" => reqwest::Method::DELETE,
-        "PATCH" => reqwest::Method::PATCH,
-        "HEAD" => reqwest::Method::HEAD,
-        "OPTIONS" => reqwest::Method::OPTIONS,
-        _ => reqwest::Method::GET,
-    };
-
-    let client = reqwest::Client::new();
-    let mut builder = client.request(method, &uri);
-
-    for (name, value) in &parts.headers {
-        if name != "host" && name != "connection" {
-            if let Ok(v) = value.to_str() {
-                builder = builder.header(name.as_str(), v);
-            }
-        }
-    }
-
-    match builder.send().await {
-        Ok(upstream_resp) => {
-            let status = StatusCode::from_u16(upstream_resp.status().as_u16())
-                .unwrap_or(StatusCode::BAD_GATEWAY);
-            let body_bytes = upstream_resp.bytes().await.unwrap_or_default();
-
-            Ok(Response::builder()
-                .status(status)
-                .body(Full::new(body_bytes))
-                .unwrap())
-        }
-        Err(e) => {
-            error!(%upstream, %e, "upstream request failed");
-            Ok(Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(Full::new(Bytes::from(format!("upstream error: {e}"))))
-                .unwrap())
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::{ProxyConfig, ProxyRouteConfig, UpstreamEntry};
-
-    fn make_state() -> ProxyState {
-        let config = ProxyConfig {
-            http_listen: "0.0.0.0:80".into(),
-            https_listen: None,
-            routes: HashMap::from([
-                (
-                    "api.example.com".into(),
-                    ProxyRouteConfig {
-                        upstreams: vec![
-                            UpstreamEntry { address: "10.0.0.1:3000".into(), weight: 1 },
-                            UpstreamEntry { address: "10.0.0.2:3000".into(), weight: 2 },
-                        ],
-                        tls: None,
-                    },
-                ),
-                (
-                    "web.example.com".into(),
-                    ProxyRouteConfig {
-                        upstreams: vec![
-                            UpstreamEntry { address: "10.0.0.5:80".into(), weight: 1 },
-                        ],
-                        tls: None,
-                    },
-                ),
-            ]),
-        };
-        ProxyState::from_config(&config)
-    }
-
-    #[test]
-    fn select_upstream_known_domain() {
-        let state = make_state();
-        let upstream = state.select_upstream("web.example.com");
-        assert_eq!(upstream, Some("10.0.0.5:80"));
-    }
-
-    #[test]
-    fn select_upstream_unknown_domain() {
-        let state = make_state();
-        assert!(state.select_upstream("unknown.example.com").is_none());
-    }
-
-    #[test]
-    fn weighted_round_robin() {
-        let state = make_state();
-        // Weights [1, 2]: over 3 requests, first gets 1 hit, second gets 2
-        let first = state.select_upstream("api.example.com").unwrap();
-        assert_eq!(first, "10.0.0.1:3000");
-
-        let second = state.select_upstream("api.example.com").unwrap();
-        assert_eq!(second, "10.0.0.2:3000");
-
-        let third = state.select_upstream("api.example.com").unwrap();
-        assert_eq!(third, "10.0.0.2:3000");
-
-        // Cycle repeats
-        let fourth = state.select_upstream("api.example.com").unwrap();
-        assert_eq!(fourth, "10.0.0.1:3000");
-    }
-
-    #[test]
-    fn from_config_empty_routes() {
-        let config = ProxyConfig {
-            http_listen: "0.0.0.0:80".into(),
-            https_listen: None,
-            routes: HashMap::new(),
-        };
-        let state = ProxyState::from_config(&config);
-        assert!(state.routes.is_empty());
-    }
-}
-```
-
-- [ ] **Step 5: Create the main entry point**
-
-Create `crates/nexa-proxy/src/main.rs`:
-
-```rust
-mod config;
-mod proxy;
-
-use std::sync::Arc;
-
-use clap::Parser;
-use tracing::info;
-use tracing_subscriber::EnvFilter;
-
-#[derive(Parser)]
-#[command(name = "nexa-proxy", about = "NexaNet built-in reverse proxy", version)]
-struct Cli {
-    /// Path to the proxy config JSON file
-    #[arg(long, default_value = "/var/lib/nexa/proxy.json")]
-    config: String,
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
-
-    let cli = Cli::parse();
-    info!("starting nexa-proxy");
-
-    let config = config::ProxyConfig::load(std::path::Path::new(&cli.config))?;
-    info!(http = %config.http_listen, "loaded proxy config with {} routes", config.routes.len());
-
-    let state = Arc::new(proxy::ProxyState::from_config(&config));
-
-    proxy::run_http(&config.http_listen, state).await
-}
-```
-
-- [ ] **Step 6: Verify compilation**
-
-Run: `cargo check -p nexa-proxy 2>&1`
-Expected: compiles with no errors
-
-- [ ] **Step 7: Run the tests**
-
-Run: `cargo test -p nexa-proxy 2>&1`
-Expected: 7 tests pass (3 config + 4 proxy)
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add crates/nexa-proxy/ Cargo.toml
-git commit -m "feat(proxy): create nexa-proxy crate with hyper HTTP reverse proxy and weighted round-robin LB"
-```
-
----
-
-### Task 8: Implement NexaProxyBackend adapter (manages nexa-proxy child process, writes config)
-
-**Files:**
-- Create: `crates/nexad/src/adapters/proxy/nexa_proxy.rs`
-- Modify: `crates/nexad/src/adapters/proxy/mod.rs`
-
-- [ ] **Step 1: Implement NexaProxyBackend**
-
-Create `crates/nexad/src/adapters/proxy/nexa_proxy.rs`:
-
-```rust
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::process::Stdio;
-use std::sync::Mutex;
-
-use async_trait::async_trait;
-use tokio::process::{Child, Command};
-use tracing::{info, warn};
-
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::proxy::{ProxyBackend, RouteConfig, TlsConfig, Upstream};
-
-/// NexaProxy backend -- manages nexa-proxy as a child process.
-///
-/// Writes a JSON config file and (re)starts the nexa-proxy binary.
-pub struct NexaProxyBackend {
-    config_path: PathBuf,
-    binary_path: String,
-    http_listen: String,
-    https_listen: Option<String>,
-    child: Mutex<Option<Child>>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct NexaProxyConfig {
-    http_listen: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    https_listen: Option<String>,
-    routes: HashMap<String, NexaProxyRoute>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct NexaProxyRoute {
-    upstreams: Vec<NexaProxyUpstream>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tls: Option<NexaProxyTls>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct NexaProxyUpstream {
-    address: String,
-    weight: u32,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct NexaProxyTls {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    cert_path: Option<PathBuf>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    key_path: Option<PathBuf>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    acme_email: Option<String>,
-}
-
-impl NexaProxyBackend {
-    pub fn new(
-        config_path: impl Into<PathBuf>,
-        binary_path: impl Into<String>,
-        http_listen: impl Into<String>,
-        https_listen: Option<String>,
-    ) -> Self {
-        Self {
-            config_path: config_path.into(),
-            binary_path: binary_path.into(),
-            http_listen: http_listen.into(),
-            https_listen,
-            child: Mutex::new(None),
-        }
-    }
-
-    fn build_config(&self, routes: &[RouteConfig]) -> NexaProxyConfig {
-        let mut route_map = HashMap::new();
-
-        for route in routes {
-            let upstreams: Vec<NexaProxyUpstream> = route
-                .upstream
-                .iter()
-                .map(|u| NexaProxyUpstream {
-                    address: u.address.clone(),
-                    weight: u.weight,
-                })
-                .collect();
-
-            let tls = match &route.tls {
-                TlsConfig::None => None,
-                TlsConfig::Auto { email } => Some(NexaProxyTls {
-                    cert_path: None,
-                    key_path: None,
-                    acme_email: Some(email.clone()),
-                }),
-                TlsConfig::Manual { cert, key } => Some(NexaProxyTls {
-                    cert_path: Some(cert.clone()),
-                    key_path: Some(key.clone()),
-                    acme_email: None,
-                }),
-            };
-
-            route_map.insert(
-                route.domain.clone(),
-                NexaProxyRoute { upstreams, tls },
-            );
-        }
-
-        NexaProxyConfig {
-            http_listen: self.http_listen.clone(),
-            https_listen: self.https_listen.clone(),
-            routes: route_map,
-        }
-    }
-
-    fn write_config_sync(&self, config: &NexaProxyConfig) -> Result<()> {
-        let json = serde_json::to_string_pretty(config)
-            .map_err(|e| NexaError::Proxy(format!("failed to serialize nexa-proxy config: {e}")))?;
-        std::fs::write(&self.config_path, &json).map_err(|e| {
-            NexaError::Proxy(format!(
-                "failed to write nexa-proxy config {}: {e}",
-                self.config_path.display()
-            ))
-        })?;
-        Ok(())
-    }
-
-    fn start_child(&self) -> Result<()> {
-        let mut child_lock = self.child.lock().unwrap();
-
-        if let Some(ref mut child) = *child_lock {
-            let _ = child.start_kill();
-        }
-
-        let child = Command::new(&self.binary_path)
-            .arg("--config")
-            .arg(&self.config_path)
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(|e| {
-                NexaError::Proxy(format!(
-                    "failed to spawn nexa-proxy binary '{}': {e}",
-                    self.binary_path
-                ))
-            })?;
-
-        info!(pid = child.id().unwrap_or(0), "nexa-proxy child started");
-        *child_lock = Some(child);
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl ProxyBackend for NexaProxyBackend {
-    async fn apply_routes(&self, routes: &[RouteConfig]) -> Result<()> {
-        let config = self.build_config(routes);
-        self.write_config_sync(&config)?;
-        info!(path = %self.config_path.display(), routes = routes.len(), "nexa-proxy config written");
-        Ok(())
-    }
-
-    async fn remove_route(&self, domain: &str) -> Result<()> {
-        let content = match std::fs::read_to_string(&self.config_path) {
-            Ok(c) => c,
-            Err(_) => {
-                warn!(domain, "nexa-proxy config not found");
-                return Ok(());
-            }
-        };
-
-        let mut config: NexaProxyConfig = serde_json::from_str(&content)
-            .map_err(|e| NexaError::Proxy(format!("failed to parse nexa-proxy config: {e}")))?;
-
-        config.routes.remove(domain);
-        self.write_config_sync(&config)?;
-        info!(domain, "route removed from nexa-proxy config");
-        Ok(())
-    }
-
-    async fn reload(&self) -> Result<()> {
-        self.start_child()?;
-        Ok(())
-    }
-
-    async fn health(&self) -> Result<bool> {
-        let child_lock = self.child.lock().unwrap();
-        match &*child_lock {
-            Some(child) => Ok(child.id().is_some()),
-            None => Ok(false),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    fn make_routes() -> Vec<RouteConfig> {
-        vec![
-            RouteConfig {
-                domain: "api.example.com".into(),
-                upstream: vec![
-                    Upstream { address: "10.0.0.1:3000".into(), weight: 1 },
-                    Upstream { address: "10.0.0.2:3000".into(), weight: 2 },
-                ],
-                tls: TlsConfig::Auto { email: "admin@example.com".into() },
-            },
-            RouteConfig {
-                domain: "static.example.com".into(),
-                upstream: vec![
-                    Upstream { address: "10.0.0.5:80".into(), weight: 1 },
-                ],
-                tls: TlsConfig::None,
-            },
-        ]
-    }
-
-    #[test]
-    fn build_config_json() {
-        let backend = NexaProxyBackend::new(
-            "/tmp/test-nexa-proxy.json",
-            "nexa-proxy",
-            "0.0.0.0:80",
-            Some("0.0.0.0:443".into()),
-        );
-        let config = backend.build_config(&make_routes());
-        assert_eq!(config.routes.len(), 2);
-        assert!(config.routes.contains_key("api.example.com"));
-        assert!(config.routes.contains_key("static.example.com"));
-
-        let api = &config.routes["api.example.com"];
-        assert_eq!(api.upstreams.len(), 2);
-        assert_eq!(api.upstreams[1].weight, 2);
-        assert_eq!(api.tls.as_ref().unwrap().acme_email.as_deref(), Some("admin@example.com"));
-
-        let st = &config.routes["static.example.com"];
-        assert!(st.tls.is_none());
-    }
-
-    #[test]
-    fn build_config_manual_tls() {
-        let routes = vec![RouteConfig {
-            domain: "manual.example.com".into(),
-            upstream: vec![Upstream { address: "10.0.0.1:443".into(), weight: 1 }],
-            tls: TlsConfig::Manual {
-                cert: PathBuf::from("/certs/cert.pem"),
-                key: PathBuf::from("/certs/key.pem"),
-            },
-        }];
-        let backend = NexaProxyBackend::new("/tmp/test.json", "nexa-proxy", "0.0.0.0:80", None);
-        let config = backend.build_config(&routes);
-        let tls = config.routes["manual.example.com"].tls.as_ref().unwrap();
-        assert_eq!(tls.cert_path.as_ref().unwrap(), &PathBuf::from("/certs/cert.pem"));
-        assert!(tls.acme_email.is_none());
-    }
-
-    #[tokio::test]
-    async fn apply_routes_writes_json_file() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join("proxy.json");
-        let backend = NexaProxyBackend::new(&config_path, "nexa-proxy", "0.0.0.0:80", None);
-
-        backend.apply_routes(&make_routes()).await.unwrap();
-
-        let content = std::fs::read_to_string(&config_path).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert!(parsed["routes"]["api.example.com"].is_object());
-        assert!(parsed["routes"]["static.example.com"].is_object());
-    }
-
-    #[tokio::test]
-    async fn remove_route_from_config() {
-        let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join("proxy.json");
-        let backend = NexaProxyBackend::new(&config_path, "nexa-proxy", "0.0.0.0:80", None);
-
-        backend.apply_routes(&make_routes()).await.unwrap();
-        backend.remove_route("api.example.com").await.unwrap();
-
-        let content = std::fs::read_to_string(&config_path).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert!(parsed["routes"]["api.example.com"].is_null());
-        assert!(parsed["routes"]["static.example.com"].is_object());
-    }
-
-    #[tokio::test]
-    async fn health_returns_false_when_no_child() {
-        let backend = NexaProxyBackend::new("/tmp/nope.json", "nexa-proxy", "0.0.0.0:80", None);
-        assert!(!backend.health().await.unwrap());
-    }
-}
-```
-
-- [ ] **Step 2: Update proxy module exports**
-
-Update `crates/nexad/src/adapters/proxy/mod.rs`:
-
-```rust
-mod caddy;
-mod nexa_proxy;
-mod nginx;
-mod traefik;
-
-pub use caddy::CaddyBackend;
-pub use nexa_proxy::NexaProxyBackend;
-pub use nginx::NginxBackend;
-pub use traefik::TraefikBackend;
-```
-
-- [ ] **Step 3: Verify and test**
-
-Run: `cargo test -p nexad -- adapters::proxy::nexa_proxy 2>&1`
-Expected: 5 tests pass
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add crates/nexad/src/adapters/proxy/nexa_proxy.rs crates/nexad/src/adapters/proxy/mod.rs
-git commit -m "feat(proxy): implement NexaProxyBackend adapter managing nexa-proxy child process"
-```
-
----
-
-### Task 9: WireGuard overlay: subnet allocator, keypair generation, boringtun interface setup
+### Task 7: WireGuard overlay: subnet allocator, keypair generation, boringtun interface setup
 
 **Files:**
 - Create: `crates/nexad/src/adapters/network/mod.rs`
@@ -3091,7 +2272,7 @@ git commit -m "feat(network): implement WireGuard overlay with subnet allocator 
 
 ---
 
-### Task 10: Route commands in orchestrator (AddRoute/RemoveRoute/ListRoutes)
+### Task 8: Route commands in orchestrator (AddRoute/RemoveRoute/ListRoutes)
 
 **Files:**
 - Modify: `crates/nexad/src/engine/orchestrator.rs`
@@ -3334,7 +2515,7 @@ git commit -m "feat(routing): add AddRoute/RemoveRoute/ListRoutes commands to or
 
 ---
 
-### Task 11: TLS certificate storage + ACME integration + auto-renewal task
+### Task 9: TLS certificate storage + ACME integration + auto-renewal task
 
 **Files:**
 - Create: `crates/nexad/src/adapters/tls/mod.rs`
@@ -3651,7 +2832,7 @@ git commit -m "feat(tls): add ACME certificate manager and auto-renewal backgrou
 
 ---
 
-### Task 12: API endpoints for routes and proxy config
+### Task 10: API endpoints for routes and proxy config
 
 **Files:**
 - Modify: `crates/nexad/src/api/handlers.rs`
@@ -3750,7 +2931,7 @@ pub struct ProxyConfigResponse {
 
 pub async fn get_proxy_config(State(_orch): AppState) -> impl IntoResponse {
     Json(ProxyConfigResponse {
-        backend: "nexa-proxy".into(),
+        backend: "traefik".into(),
         acme_email: None,
     })
 }
@@ -3766,7 +2947,7 @@ pub async fn set_proxy_config(
     Json(req): Json<SetProxyConfigRequest>,
 ) -> impl IntoResponse {
     Json(serde_json::json!({
-        "backend": req.backend.unwrap_or("nexa-proxy".into()),
+        "backend": req.backend.unwrap_or("traefik".into()),
         "acme_email": req.acme_email,
         "status": "updated"
     }))
@@ -3803,7 +2984,7 @@ git commit -m "feat(api): add REST endpoints for routes, cert import, and proxy 
 
 ---
 
-### Task 13: CLI commands: routes, route add/rm, cert import, proxy config
+### Task 11: CLI commands: routes, route add/rm, cert import, proxy config
 
 **Files:**
 - Modify: `crates/nexa-cli/src/main.rs`
@@ -4048,7 +3229,7 @@ git commit -m "feat(cli): add route, cert import, and cluster config CLI command
 
 ---
 
-### Task 14: Wire ProxyBackend into nexad main.rs composition root
+### Task 12: Wire ProxyBackend into nexad main.rs composition root
 
 **Files:**
 - Modify: `crates/nexad/src/main.rs`
@@ -4058,8 +3239,8 @@ git commit -m "feat(cli): add route, cert import, and cluster config CLI command
 In `crates/nexad/src/main.rs`, add to the `Cli` struct:
 
 ```rust
-/// Proxy backend: "nexa-proxy", "nginx", "caddy", "traefik"
-#[arg(long, default_value = "nexa-proxy")]
+/// Proxy backend: "nginx", "caddy", "traefik"
+#[arg(long, default_value = "traefik")]
 proxy_backend: String,
 
 /// Proxy config directory
@@ -4088,7 +3269,7 @@ overlay: bool,
 ```rust
 use std::path::PathBuf;
 
-use adapters::proxy::{CaddyBackend, NexaProxyBackend, NginxBackend, TraefikBackend};
+use adapters::proxy::{CaddyBackend, NginxBackend, TraefikBackend};
 use adapters::network::{SubnetAllocator, WireguardManager};
 use adapters::state::memory_route_store::InMemoryRouteStore;
 use adapters::tls::{AcmeManager, spawn_renewal_task};
@@ -4108,18 +3289,9 @@ let proxy: Arc<dyn ProxyBackend> = match cli.proxy_backend.as_str() {
         let caddyfile = PathBuf::from(&cli.proxy_config_dir).join("Caddyfile");
         Arc::new(CaddyBackend::new(caddyfile, "http://localhost:2019"))
     }
-    "traefik" => {
+    _ => {
         let config_path = PathBuf::from(&cli.proxy_config_dir).join("nexa-dynamic.yml");
         Arc::new(TraefikBackend::new(config_path))
-    }
-    _ => {
-        let config_path = PathBuf::from(&cli.proxy_config_dir).join("proxy.json");
-        Arc::new(NexaProxyBackend::new(
-            config_path,
-            "nexa-proxy",
-            "0.0.0.0:80",
-            Some("0.0.0.0:443".into()),
-        ))
     }
 };
 
@@ -4199,16 +3371,15 @@ git commit -m "feat(nexad): wire proxy backend, WireGuard overlay, and TLS renew
 
 ### Final verification checklist
 
-After all 14 tasks are complete:
+After all 12 tasks are complete:
 
-- [ ] `cargo check 2>&1` -- workspace compiles (including nexa-proxy crate)
+- [ ] `cargo check 2>&1` -- workspace compiles
 - [ ] `cargo test 2>&1` -- all tests pass
 - [ ] `cargo test -p nexa-core -- ports::proxy 2>&1` -- proxy port tests pass
 - [ ] `cargo test -p nexa-core -- models::route 2>&1` -- route model tests pass
-- [ ] `cargo test -p nexad -- adapters::proxy 2>&1` -- all 4 proxy adapter tests pass
+- [ ] `cargo test -p nexad -- adapters::proxy 2>&1` -- all 3 proxy adapter tests pass
 - [ ] `cargo test -p nexad -- adapters::network 2>&1` -- subnet + wireguard tests pass
 - [ ] `cargo test -p nexad -- adapters::tls 2>&1` -- ACME + renewal tests pass
-- [ ] `cargo test -p nexa-proxy 2>&1` -- nexa-proxy crate tests pass
 - [ ] `cargo clippy 2>&1` -- no warnings (fix any that appear)
 - [ ] `cargo run -p nexad -- --help 2>&1` -- shows proxy/overlay/tls flags
 - [ ] `cargo run -p nexa-cli -- route add --help 2>&1` -- shows route CLI

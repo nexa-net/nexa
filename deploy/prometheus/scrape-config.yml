@@ -7,9 +7,3 @@ scrape_configs:
       - targets: ["localhost:6443"]
     metrics_path: /metrics
     scrape_interval: 15s
-
-  - job_name: "nexa-proxy"
-    static_configs:
-      - targets: ["localhost:8080"]
-    metrics_path: /metrics
-    scrape_interval: 15s

@@ -13,7 +13,7 @@
 | State persistence | SQLite on master (Raft replication deferred to Phase 4+) | Persistence without external DB; HA via openraft is a future concern |
 | Secrets | Encrypted at rest in SQLite (AES-256-GCM) | Self-contained, no external deps |
 | Proxy architecture | Separate sidecar process | Modular; multiple backends supported |
-| Proxy backends | Custom Rust proxy (default) + Caddy + Traefik + Nginx | User choice; all managed by nexad |
+| Proxy backends | Traefik (default) + Nginx + Caddy | User choice; all managed by nexad |
 | Orchestrator model | Actor with command channel | No locks, no block_on, clean async |
 | Volumes | Named volumes + bind mounts | Simple for users, flexible for power users |
 | Overlay networking | Embedded WireGuard via boringtun | Userspace, no kernel module, zero config |
@@ -61,9 +61,9 @@ NexaNet follows hexagonal architecture (ports & adapters). The domain core conta
                     ┌──────────▼──────────────────────┐
                     │        Driven Adapters            │
                     │  Docker, containerd, SQLite,      │
-                    │  Caddy, Traefik, Nginx,           │
-                    │  nexa-proxy, hickory-dns,         │
-                    │  boringtun, tonic gRPC            │
+                    │  Traefik, Caddy, Nginx,           │
+                    │  hickory-dns, boringtun,          │
+                    │  tonic gRPC                       │
                     └──────────────────────────────────┘
 ```
 
@@ -76,7 +76,7 @@ The domain core defines these traits. It never imports a concrete adapter.
 | Container Runtime | `ContainerRuntime` | Create, start, stop, inspect containers | `DockerRuntime`, `ContainerdRuntime`, `MockRuntime` |
 | State Store | `StateStore` | Persist and query projects, deployments, pods | `SqliteStore`, `InMemoryStore` (tests) |
 | Secrets | `SecretStore` | Encrypt/decrypt/store secrets | `EncryptedSqliteSecretStore`, `PlaintextSecretStore` (tests) |
-| Proxy | `ProxyBackend` | Apply routes, reload, TLS | `NexaProxyBackend`, `CaddyBackend`, `TraefikBackend`, `NginxBackend` |
+| Proxy | `ProxyBackend` | Apply routes, reload, TLS | `TraefikBackend` (default), `CaddyBackend`, `NginxBackend` |
 | DNS | `DnsProvider` | Register/deregister service records | `HickoryDnsProvider`, `NoopDnsProvider` (single-node) |
 | Cluster Transport | `ClusterTransport` | Node registration, heartbeats, pod assignment | `GrpcTransport`, `LocalTransport` (single-node) |
 
@@ -123,9 +123,8 @@ crates/
         secrets/
           encrypted.rs     ← AES-256-GCM encrypted store
         proxy/
-          nexa_proxy.rs    ← Custom Rust proxy management
+          traefik.rs       ← Traefik YAML generation (default)
           caddy.rs         ← Caddyfile generation + reload
-          traefik.rs       ← Traefik YAML generation
           nginx.rs         ← Nginx conf generation + reload
         dns/
           hickory.rs       ← hickory-dns embedded server
@@ -146,11 +145,6 @@ crates/
       commands.rs
       output.rs
 
-  nexa-proxy/              ← Standalone reverse proxy binary
-    src/
-      main.rs
-      proxy.rs
-      acme.rs
 ```
 
 ### Key Rules
@@ -177,9 +171,8 @@ let dns: Arc<dyn DnsProvider> = match cli.mode {
     _ => Arc::new(HickoryDnsProvider::new(port_53).await?),
 };
 let proxy: Arc<dyn ProxyBackend> = match proxy_config.backend {
-    ProxyChoice::NexaProxy => Arc::new(NexaProxyBackend::new()?),
+    ProxyChoice::Traefik => Arc::new(TraefikBackend::new(traefik_path)?),  // default
     ProxyChoice::Caddy => Arc::new(CaddyBackend::new(caddy_path)?),
-    ProxyChoice::Traefik => Arc::new(TraefikBackend::new(traefik_path)?),
     ProxyChoice::Nginx => Arc::new(NginxBackend::new(nginx_path)?),
 };
 
@@ -1063,21 +1056,17 @@ enum TlsConfig {
 }
 ```
 
-**Four backends:**
+**Three backends:**
 
 | Backend | Management | TLS |
 |---------|-----------|-----|
-| `nexa-proxy` (default) | Child process, custom Rust proxy | Built-in ACME |
+| `traefik` (default) | Generate YAML config, hot-reload | Built-in ACME |
 | `caddy` | Generate Caddyfile, signal reload | Native auto HTTPS |
-| `traefik` | Generate YAML config, hot-reload | Built-in ACME |
 | `nginx` | Generate conf.d/*.conf, `nginx -s reload` | Paired with certbot |
 
-**nexa-proxy:** New crate `crates/nexa-proxy/`. Minimal reverse proxy using `hyper` + `rustls` + `instant-acme`. HTTP/1.1, HTTP/2, round-robin LB, health-aware routing, graceful reload.
-
 ```bash
-nexa cluster config set proxy.backend nexa-proxy  # default
+nexa cluster config set proxy.backend traefik  # default
 nexa cluster config set proxy.backend caddy
-nexa cluster config set proxy.backend traefik
 nexa cluster config set proxy.backend nginx
 ```
 

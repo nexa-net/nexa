@@ -6,13 +6,13 @@ Add a comprehensive, layered test suite across all NexaNet repositories: integra
 
 **Current state:** 349 unit tests + 7 integration tests (ignored in CI). Zero benchmarks. Very light CLI and proxy test coverage.
 
-**Target state:** Integration tests running in CI with real Docker, full-stack E2E scenarios, Criterion benchmarks with CI regression gates, and significantly improved coverage for nexa-cli and nexa-proxy.
+**Target state:** Integration tests running in CI with real Docker, full-stack E2E scenarios, Criterion benchmarks with CI regression gates, and significantly improved coverage for nexa-cli.
 
 ## Scope
 
 This spec covers testing infrastructure only. Observability and Prometheus integration are a separate spec.
 
-**Repositories affected:** nexa-core, nexad, nexa-cli, nexa-proxy.
+**Repositories affected:** nexa-core, nexad, nexa-cli.
 
 ---
 
@@ -98,28 +98,6 @@ Add scenarios:
 - JSON output is valid JSON matching expected schema
 - Age formatting for various durations (already has 6 tests, add edge cases)
 - Status colorization maps correct colors to pod/node statuses
-
-### nexa-proxy
-
-**File:** `tests/proxy_integration.rs`
-
-**Test setup:**
-- Spawn 2-3 lightweight HTTP servers (using `hyper`) on random ports as upstream backends
-- Each backend returns a unique identifier in the response body
-- Create a ProxyState config pointing to these backends
-- Spawn the proxy on a random port
-
-**Test scenarios:**
-
-| Scenario | What it verifies |
-|---|---|
-| Route to single upstream | Request with matching Host header reaches the backend |
-| Weighted round-robin distribution | Send 100 requests, verify distribution matches weight ratios (within 10% tolerance) |
-| Unknown host returns 502/404 | Request with unmatched Host header gets an error response |
-| Multiple domains | Configure 3 domains, verify each routes to its own backend |
-| Header forwarding | X-Forwarded-For, X-Real-IP, Host headers are set correctly |
-| Large request body | Forward a 1MB POST body without truncation |
-| Upstream timeout | Backend that sleeps 30s triggers proxy timeout |
 
 ---
 
@@ -269,18 +247,6 @@ All E2E tests are marked `#[ignore]` so `cargo test` locally skips them by defau
 | `lookup_1000_records` | DNS lookup with 1000 registered services |
 | `register_deregister` | Register + deregister throughput |
 
-### nexa-proxy benchmarks
-
-**File:** `benches/routing.rs`
-
-| Benchmark | Parameters |
-|---|---|
-| `select_upstream_10_routes` | Route selection with 10 configured domains |
-| `select_upstream_100_routes` | Route selection with 100 configured domains |
-| `select_upstream_1000_routes` | Route selection with 1000 configured domains |
-| `weighted_round_robin_3_upstreams` | WRR selection with 3 backends |
-| `weighted_round_robin_10_upstreams` | WRR selection with 10 backends |
-
 ### Cargo.toml changes
 
 Each repo adds to `[dev-dependencies]`:
@@ -367,15 +333,6 @@ After implementation, each repo's CI pipeline will have these jobs:
 | `check` | push + PR | fmt, clippy |
 | `test` | push + PR | `cargo test` (all tests including new command/output tests) |
 
-### nexa-proxy
-
-| Job | Trigger | Tests |
-|---|---|---|
-| `check` | push + PR | fmt, clippy |
-| `test` | push + PR | `cargo test` (unit tests) |
-| `integration` | push + PR | Proxy integration tests (spawns real HTTP backends) |
-| `bench` | push to main only | Criterion benchmarks with regression gate |
-
 ---
 
 ## Dependencies Added
@@ -386,8 +343,6 @@ After implementation, each repo's CI pipeline will have these jobs:
 | nexad | `criterion = "0.5"` (dev) | Performance benchmarks |
 | nexad | `tokio-test = "0.4"` (dev) | Async test utilities |
 | nexa-core | `criterion = "0.5"` (dev) | Performance benchmarks |
-| nexa-proxy | `criterion = "0.5"` (dev) | Performance benchmarks |
-| nexa-proxy | `tokio = { features = ["test-util"] }` (dev) | Test async HTTP servers |
 
 ---
 

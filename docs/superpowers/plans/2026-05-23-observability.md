@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add Prometheus metrics exposition to nexad and nexa-proxy with full-stack coverage, Grafana dashboard, and alerting rules.
+**Goal:** Add Prometheus metrics exposition to nexad with full-stack coverage, Grafana dashboard, and alerting rules.
 
-**Architecture:** MetricsPort trait in nexa-core (hexagonal port), PrometheusMetrics adapter in nexad and nexa-proxy using the `prometheus` crate. Metrics recorded via dependency injection; HTTP metrics via Tower middleware; `/metrics` endpoint on existing servers.
+**Architecture:** MetricsPort trait in nexa-core (hexagonal port), PrometheusMetrics adapter in nexad using the `prometheus` crate. Metrics recorded via dependency injection; HTTP metrics via Tower middleware; `/metrics` endpoint on the nexad server.
 
-**Tech Stack:** `prometheus` crate (counters, gauges, histograms), `async-trait`, axum middleware (Tower), hyper (nexa-proxy)
+**Tech Stack:** `prometheus` crate (counters, gauges, histograms), `async-trait`, axum middleware (Tower)
 
 ---
 
@@ -31,15 +31,6 @@
 | `src/api/routes.rs` (MODIFY) | Add `/metrics` route, wire middleware |
 | `src/adapters/event_watcher.rs` (MODIFY) | Accept MetricsPort, call record_container_event |
 | `src/main.rs` (MODIFY) | Wire PrometheusMetrics into orchestrator, AppState, event_watcher |
-| `Cargo.toml` (MODIFY) | Add `prometheus` dependency |
-
-### nexa-proxy
-| File | Responsibility |
-|---|---|
-| `src/metrics.rs` (CREATE) | ProxyPrometheusMetrics (proxy-only metrics) |
-| `src/lib.rs` (MODIFY) | Add `pub mod metrics` |
-| `src/proxy.rs` (MODIFY) | Accept metrics, instrument handle_request, serve `/metrics` |
-| `src/main.rs` (MODIFY) | Create ProxyPrometheusMetrics, pass to ProxyState |
 | `Cargo.toml` (MODIFY) | Add `prometheus` dependency |
 
 ### Deploy configs (under NexaNet meta-repo)
@@ -1141,472 +1132,7 @@ git commit -m "chore: update nexa-core dependency (MetricsPort)"
 
 ---
 
-### Task 8: Proxy Metrics Adapter (nexa-proxy)
-
-**Files:**
-- Create: `nexa-proxy/src/metrics.rs`
-- Modify: `nexa-proxy/src/lib.rs`
-- Modify: `nexa-proxy/Cargo.toml`
-
-- [ ] **Step 1: Add prometheus dependency**
-
-Add to `[dependencies]` in `nexa-proxy/Cargo.toml`:
-
-```toml
-prometheus = "0.13"
-```
-
-- [ ] **Step 2: Create ProxyPrometheusMetrics**
-
-Create `nexa-proxy/src/metrics.rs`:
-
-```rust
-use prometheus::{Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, Registry, TextEncoder};
-
-pub struct ProxyPrometheusMetrics {
-    registry: Registry,
-    requests_total: IntCounterVec,
-    request_duration: HistogramVec,
-    errors_total: IntCounterVec,
-}
-
-impl ProxyPrometheusMetrics {
-    pub fn new() -> Self {
-        let registry = Registry::new();
-
-        let requests_total = IntCounterVec::new(
-            Opts::new("nexa_proxy_requests_total", "Total proxy requests"),
-            &["domain", "status"],
-        )
-        .unwrap();
-
-        let request_duration = HistogramVec::new(
-            HistogramOpts::new(
-                "nexa_proxy_request_duration_seconds",
-                "Proxy request duration in seconds",
-            ),
-            &["domain"],
-        )
-        .unwrap();
-
-        let errors_total = IntCounterVec::new(
-            Opts::new("nexa_proxy_errors_total", "Total proxy errors"),
-            &["domain", "error_type"],
-        )
-        .unwrap();
-
-        registry.register(Box::new(requests_total.clone())).unwrap();
-        registry.register(Box::new(request_duration.clone())).unwrap();
-        registry.register(Box::new(errors_total.clone())).unwrap();
-
-        Self {
-            registry,
-            requests_total,
-            request_duration,
-            errors_total,
-        }
-    }
-
-    pub fn record_request(&self, domain: &str, status: u16, duration_secs: f64) {
-        self.requests_total
-            .with_label_values(&[domain, &status.to_string()])
-            .inc();
-        self.request_duration
-            .with_label_values(&[domain])
-            .observe(duration_secs);
-    }
-
-    pub fn record_error(&self, domain: &str, error_type: &str) {
-        self.errors_total
-            .with_label_values(&[domain, error_type])
-            .inc();
-    }
-
-    pub fn encode(&self) -> String {
-        let encoder = TextEncoder::new();
-        let metric_families = self.registry.gather();
-        let mut buffer = Vec::new();
-        encoder.encode(&metric_families, &mut buffer).unwrap();
-        String::from_utf8(buffer).unwrap()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn new_creates_empty_metrics() {
-        let m = ProxyPrometheusMetrics::new();
-        let output = m.encode();
-        assert!(output.is_empty());
-    }
-
-    #[test]
-    fn record_request_appears_in_output() {
-        let m = ProxyPrometheusMetrics::new();
-        m.record_request("api.example.com", 200, 0.05);
-        let output = m.encode();
-        assert!(output.contains("nexa_proxy_requests_total"));
-        assert!(output.contains("nexa_proxy_request_duration_seconds"));
-        assert!(output.contains("api.example.com"));
-    }
-
-    #[test]
-    fn record_error_appears_in_output() {
-        let m = ProxyPrometheusMetrics::new();
-        m.record_error("api.example.com", "connection_refused");
-        let output = m.encode();
-        assert!(output.contains("nexa_proxy_errors_total"));
-        assert!(output.contains("connection_refused"));
-    }
-
-    #[test]
-    fn multiple_domains_tracked_independently() {
-        let m = ProxyPrometheusMetrics::new();
-        m.record_request("api.example.com", 200, 0.05);
-        m.record_request("web.example.com", 502, 0.1);
-        let output = m.encode();
-        assert!(output.contains("api.example.com"));
-        assert!(output.contains("web.example.com"));
-    }
-}
-```
-
-- [ ] **Step 3: Add module to lib.rs**
-
-Add to `nexa-proxy/src/lib.rs`:
-
-```rust
-pub mod config;
-pub mod metrics;
-pub mod proxy;
-```
-
-- [ ] **Step 4: Run tests**
-
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-proxy && cargo test metrics`
-Expected: PASS — all 4 tests pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy
-git add src/metrics.rs src/lib.rs Cargo.toml
-git commit -m "feat: add ProxyPrometheusMetrics adapter"
-```
-
----
-
-### Task 9: Instrument nexa-proxy (proxy.rs)
-
-**Files:**
-- Modify: `nexa-proxy/src/proxy.rs`
-- Modify: `nexa-proxy/src/main.rs`
-
-- [ ] **Step 1: Add metrics to ProxyState**
-
-In `nexa-proxy/src/proxy.rs`, add the metrics field to `ProxyState` and update `from_config`:
-
-Add import at top:
-```rust
-use std::time::Instant;
-use crate::metrics::ProxyPrometheusMetrics;
-```
-
-Update `ProxyState`:
-```rust
-pub struct ProxyState {
-    pub routes: HashMap<String, RouteState>,
-    pub metrics: Option<Arc<ProxyPrometheusMetrics>>,
-}
-```
-
-Update `from_config` to accept metrics parameter:
-```rust
-    pub fn from_config(config: &ProxyConfig, metrics: Option<Arc<ProxyPrometheusMetrics>>) -> Self {
-        let mut routes = HashMap::new();
-        for (domain, route_config) in &config.routes {
-            let upstreams: Vec<WeightedUpstream> = route_config
-                .upstreams
-                .iter()
-                .map(|u| WeightedUpstream {
-                    address: u.address.clone(),
-                    weight: u.weight,
-                })
-                .collect();
-            routes.insert(
-                domain.clone(),
-                RouteState {
-                    upstreams,
-                    counter: AtomicUsize::new(0),
-                },
-            );
-        }
-        Self { routes, metrics }
-    }
-```
-
-- [ ] **Step 2: Instrument handle_request**
-
-Update `handle_request` in `nexa-proxy/src/proxy.rs` to record metrics:
-
-```rust
-async fn handle_request(
-    req: Request<Incoming>,
-    state: &ProxyState,
-) -> std::result::Result<Response<Full<Bytes>>, hyper::Error> {
-    let start = Instant::now();
-
-    let host = req
-        .headers()
-        .get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .split(':')
-        .next()
-        .unwrap_or("");
-
-    let domain = host.to_string();
-
-    let upstream = match state.select_upstream(host) {
-        Some(addr) => addr.to_string(),
-        None => {
-            if let Some(ref m) = state.metrics {
-                m.record_error(&domain, "no_upstream");
-            }
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(Full::new(Bytes::from(
-                    "no upstream configured for this domain",
-                )))
-                .unwrap());
-        }
-    };
-
-    let uri = format!(
-        "http://{}{}",
-        upstream,
-        req.uri()
-            .path_and_query()
-            .map(|pq| pq.as_str())
-            .unwrap_or("/")
-    );
-
-    let parts = req.into_parts().0;
-    let method = match parts.method.as_str() {
-        "GET" => reqwest::Method::GET,
-        "POST" => reqwest::Method::POST,
-        "PUT" => reqwest::Method::PUT,
-        "DELETE" => reqwest::Method::DELETE,
-        "PATCH" => reqwest::Method::PATCH,
-        "HEAD" => reqwest::Method::HEAD,
-        "OPTIONS" => reqwest::Method::OPTIONS,
-        _ => reqwest::Method::GET,
-    };
-
-    let client = reqwest::Client::new();
-    let mut builder = client.request(method, &uri);
-
-    for (name, value) in &parts.headers {
-        if name != "host" && name != "connection" {
-            if let Ok(v) = value.to_str() {
-                builder = builder.header(name.as_str(), v);
-            }
-        }
-    }
-
-    match builder.send().await {
-        Ok(upstream_resp) => {
-            let status = StatusCode::from_u16(upstream_resp.status().as_u16())
-                .unwrap_or(StatusCode::BAD_GATEWAY);
-            let body_bytes = upstream_resp.bytes().await.unwrap_or_default();
-            let duration = start.elapsed().as_secs_f64();
-
-            if let Some(ref m) = state.metrics {
-                m.record_request(&domain, status.as_u16(), duration);
-            }
-
-            Ok(Response::builder()
-                .status(status)
-                .body(Full::new(body_bytes))
-                .unwrap())
-        }
-        Err(e) => {
-            error!(%upstream, %e, "upstream request failed");
-            if let Some(ref m) = state.metrics {
-                m.record_error(&domain, "upstream_error");
-            }
-            Ok(Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(Full::new(Bytes::from(format!("upstream error: {e}"))))
-                .unwrap())
-        }
-    }
-}
-```
-
-- [ ] **Step 3: Add /metrics path to run_http**
-
-Update `run_http` to intercept `/metrics` requests before proxying. Change the service closure inside `run_http`:
-
-```rust
-pub async fn run_http(listen_addr: &str, state: Arc<ProxyState>) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(listen_addr).await?;
-    info!(%listen_addr, "nexa-proxy HTTP listening");
-
-    loop {
-        let (stream, peer_addr) = listener.accept().await?;
-        let state = state.clone();
-
-        tokio::spawn(async move {
-            let service = service_fn(move |req: Request<Incoming>| {
-                let state = state.clone();
-                async move {
-                    if req.uri().path() == "/metrics" {
-                        let body = match &state.metrics {
-                            Some(m) => m.encode(),
-                            None => String::from("# metrics not enabled\n"),
-                        };
-                        return Ok(Response::builder()
-                            .status(StatusCode::OK)
-                            .header("content-type", "text/plain; version=0.0.4")
-                            .body(Full::new(Bytes::from(body)))
-                            .unwrap());
-                    }
-                    handle_request(req, &state).await
-                }
-            });
-
-            if let Err(e) = http1::Builder::new()
-                .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
-                .await
-            {
-                error!(%peer_addr, %e, "connection error");
-            }
-        });
-    }
-}
-```
-
-- [ ] **Step 4: Update tests in proxy.rs**
-
-Update `make_state()` in the `#[cfg(test)]` block to pass `None` for metrics:
-
-```rust
-    fn make_state() -> ProxyState {
-        let config = ProxyConfig {
-            http_listen: "0.0.0.0:80".into(),
-            https_listen: None,
-            routes: HashMap::from([
-                (
-                    "api.example.com".into(),
-                    ProxyRouteConfig {
-                        upstreams: vec![
-                            UpstreamEntry {
-                                address: "10.0.0.1:3000".into(),
-                                weight: 1,
-                            },
-                            UpstreamEntry {
-                                address: "10.0.0.2:3000".into(),
-                                weight: 2,
-                            },
-                        ],
-                        tls: None,
-                    },
-                ),
-                (
-                    "web.example.com".into(),
-                    ProxyRouteConfig {
-                        upstreams: vec![UpstreamEntry {
-                            address: "10.0.0.5:80".into(),
-                            weight: 1,
-                        }],
-                        tls: None,
-                    },
-                ),
-            ]),
-        };
-        ProxyState::from_config(&config, None)
-    }
-```
-
-Also update the `from_config_empty_routes` test:
-```rust
-    #[test]
-    fn from_config_empty_routes() {
-        let config = ProxyConfig {
-            http_listen: "0.0.0.0:80".into(),
-            https_listen: None,
-            routes: HashMap::new(),
-        };
-        let state = ProxyState::from_config(&config, None);
-        assert!(state.routes.is_empty());
-    }
-```
-
-- [ ] **Step 5: Update main.rs**
-
-In `nexa-proxy/src/main.rs`, create metrics and pass to `ProxyState::from_config`:
-
-```rust
-use std::sync::Arc;
-
-use clap::Parser;
-use nexa_proxy::{config, metrics, proxy};
-use tracing::info;
-use tracing_subscriber::EnvFilter;
-
-#[derive(Parser)]
-#[command(name = "nexa-proxy", about = "NexaNet built-in reverse proxy", version)]
-struct Cli {
-    #[arg(long, default_value = "/var/lib/nexa/proxy.json")]
-    config: String,
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
-
-    let cli = Cli::parse();
-    info!("starting nexa-proxy");
-
-    let config = config::ProxyConfig::load(std::path::Path::new(&cli.config))?;
-    info!(http = %config.http_listen, "loaded proxy config with {} routes", config.routes.len());
-
-    let prom = Arc::new(metrics::ProxyPrometheusMetrics::new());
-    let state = Arc::new(proxy::ProxyState::from_config(&config, Some(prom)));
-
-    proxy::run_http(&config.http_listen, state).await
-}
-```
-
-- [ ] **Step 6: Update proxy_integration.rs and bench tests**
-
-In `nexa-proxy/tests/proxy_integration.rs`, find any `ProxyState::from_config(` calls and add `None` as the second argument.
-
-In `nexa-proxy/benches/routing.rs`, find any `ProxyState::from_config(` calls and add `None` as the second argument.
-
-- [ ] **Step 7: Run tests**
-
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-proxy && cargo test`
-Expected: PASS
-
-- [ ] **Step 8: Commit**
-
-```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy
-git add src/proxy.rs src/main.rs Cargo.toml tests/ benches/
-git commit -m "feat: instrument nexa-proxy with Prometheus metrics and /metrics endpoint"
-```
-
----
-
-### Task 10: Grafana Dashboard (deploy config)
+### Task 8: Grafana Dashboard (deploy config)
 
 **Files:**
 - Create: `deploy/grafana/nexanet-dashboard.json`
@@ -1799,7 +1325,7 @@ git commit -m "feat: add Grafana dashboard for NexaNet observability"
 
 ---
 
-### Task 11: Prometheus Alerting Rules (deploy config)
+### Task 9: Prometheus Alerting Rules (deploy config)
 
 **Files:**
 - Create: `deploy/prometheus/alerts.yml`
@@ -1890,7 +1416,7 @@ git commit -m "feat: add Prometheus alerting rules for NexaNet"
 
 ---
 
-### Task 12: Prometheus Scrape Config Example (deploy config)
+### Task 10: Prometheus Scrape Config Example (deploy config)
 
 **Files:**
 - Create: `deploy/prometheus/scrape-config.yml`
@@ -1909,12 +1435,6 @@ scrape_configs:
       - targets: ["localhost:6443"]
     metrics_path: /metrics
     scrape_interval: 15s
-
-  - job_name: "nexa-proxy"
-    static_configs:
-      - targets: ["localhost:8080"]
-    metrics_path: /metrics
-    scrape_interval: 15s
 ```
 
 - [ ] **Step 2: Commit**
@@ -1927,7 +1447,7 @@ git commit -m "feat: add example Prometheus scrape config"
 
 ---
 
-### Task 13: Integration Test — /metrics Endpoint (nexad)
+### Task 11: Integration Test — /metrics Endpoint (nexad)
 
 **Files:**
 - Modify: `nexad/tests/api_integration.rs`
@@ -2014,14 +1534,13 @@ git commit -m "test: add /metrics endpoint integration test"
 
 ---
 
-### Task 14: Push All Repos
+### Task 12: Push All Repos
 
 - [ ] **Step 1: Run full test suite across all repos**
 
 ```bash
 cd /Users/nassime/GitHub/NexaNet/nexa-core && cargo test
 cd /Users/nassime/GitHub/NexaNet/nexad && cargo test
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy && cargo test
 ```
 
 Expected: all PASS.
@@ -2031,7 +1550,6 @@ Expected: all PASS.
 ```bash
 cd /Users/nassime/GitHub/NexaNet/nexa-core && cargo fmt --check && cargo clippy -- -D warnings
 cd /Users/nassime/GitHub/NexaNet/nexad && cargo fmt --check && cargo clippy -- -D warnings
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy && cargo fmt --check && cargo clippy -- -D warnings
 ```
 
 Fix any issues and commit.
@@ -2041,10 +1559,9 @@ Fix any issues and commit.
 ```bash
 cd /Users/nassime/GitHub/NexaNet/nexa-core && git push origin main
 cd /Users/nassime/GitHub/NexaNet/nexad && git push origin main
-cd /Users/nassime/GitHub/NexaNet/nexa-proxy && git push origin main
 cd /Users/nassime/GitHub/NexaNet && git push origin main
 ```
 
 - [ ] **Step 4: Verify CI passes on all repos**
 
-Check GitHub Actions for nexa-core, nexad, nexa-proxy — all should be green.
+Check GitHub Actions for nexa-core, nexad — all should be green.

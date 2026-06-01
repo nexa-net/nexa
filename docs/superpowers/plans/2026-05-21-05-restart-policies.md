@@ -8,7 +8,7 @@
 > | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
 > | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
 > | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
-> | `crates/nexa-proxy/` | [`nexa-proxy`](https://github.com/nexa-net/nexa-proxy) | `/Users/nassime/GitHub/nexa-proxy/` |
+
 >
 > `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
 

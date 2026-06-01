@@ -5,14 +5,14 @@
 
 ## Goal
 
-Add Prometheus-native metrics exposition to nexad and nexa-proxy, covering the full stack: API requests, container lifecycle, scheduler decisions, proxy throughput, and cluster state. Ship ready-to-use Grafana dashboards and Prometheus alerting rules.
+Add Prometheus-native metrics exposition to nexad, covering the full stack: API requests, container lifecycle, scheduler decisions, proxy throughput, and cluster state. Ship ready-to-use Grafana dashboards and Prometheus alerting rules.
 
 ## Decisions
 
 - **Metrics consumer:** Prometheus only — expose `/metrics` in Prometheus text format
 - **Scope:** Full stack (API, containers, scheduler, proxy, node/cluster gauges)
-- **Endpoint location:** Same axum server in nexad (port 6443); same HTTP server in nexa-proxy
-- **Architecture:** MetricsPort trait in nexa-core (hexagonal), Prometheus adapter in nexad/nexa-proxy
+- **Endpoint location:** Same axum server in nexad (port 6443)
+- **Architecture:** MetricsPort trait in nexa-core (hexagonal), Prometheus adapter in nexad
 - **Dashboards & alerts:** Ship Grafana JSON dashboard and Prometheus alerting rules as files
 
 ## Architecture
@@ -41,7 +41,7 @@ pub trait MetricsPort: Send + Sync {
     fn set_pod_count(&self, count: usize);
     fn set_deployment_count(&self, count: usize);
 
-    // Proxy (used by nexa-proxy)
+    // Proxy (emitted by nexad when proxying via Traefik/Nginx/Caddy)
     fn record_proxy_request(&self, domain: &str, status: u16, duration_secs: f64);
     fn record_proxy_error(&self, domain: &str, error_type: &str);
 }
@@ -65,17 +65,15 @@ New adapter at `nexad/src/adapters/metrics/prometheus.rs` using the `prometheus`
 | `nexa_nodes_total` | Gauge | — |
 | `nexa_pods_total` | Gauge | — |
 | `nexa_deployments_total` | Gauge | — |
-| `nexa_proxy_requests_total` | Counter | `domain`, `status` |
-| `nexa_proxy_request_duration_seconds` | Histogram | `domain` |
-| `nexa_proxy_errors_total` | Counter | `domain`, `error_type` |
+| `nexa_proxy_requests_total` | Counter | `domain`, `status` | (emitted by nexad) |
+| `nexa_proxy_request_duration_seconds` | Histogram | `domain` | (emitted by nexad) |
+| `nexa_proxy_errors_total` | Counter | `domain`, `error_type` | (emitted by nexad) |
 
 The adapter holds a `prometheus::Registry`, pre-registers all metrics in `new()`, and exposes an `encode()` method that renders the registry to Prometheus text format.
 
 ### Endpoint
 
-`GET /metrics` added to the existing axum router in `nexad/src/api/routes.rs`. The handler calls `metrics.encode()` and returns `Content-Type: text/plain; version=0.0.4`.
-
-nexa-proxy adds a `/metrics` path to its existing HTTP server with its own `PrometheusMetrics` adapter (proxy-related metrics only).
+`GET /metrics` added to the existing axum router in `nexad/src/api/routes.rs`. The handler calls `metrics.encode()` and returns `Content-Type: text/plain; version=0.0.4`. Proxy-related metrics are emitted by nexad itself (not by the external proxy backend).
 
 ## Integration Points
 
@@ -105,15 +103,6 @@ Handlers themselves never touch metrics — the middleware handles it.
 
 `nexad/src/adapters/event_watcher.rs` already listens to Docker events (die, start, oom). Add `record_container_event()` calls alongside the existing `send_container_exited()` dispatch.
 
-### nexa-proxy
-
-In `handle_request()`:
-1. Wrap the upstream call with `Instant::now()` / `elapsed()`
-2. On success: `record_proxy_request(domain, status, duration)`
-3. On failure: `record_proxy_error(domain, error_type)`
-
-`MetricsPort` stored in `ProxyState`.
-
 ### Wiring (nexad main.rs)
 
 ```rust
@@ -134,7 +123,7 @@ Shipped as `deploy/grafana/nexanet-dashboard.json`.
 - **Row 3 — Scheduler:** Decision latency histogram, decisions/min by strategy
 - **Row 4 — Proxy:** Throughput by domain, upstream latency p50/p95, error rate by domain
 
-Template variable `$instance` for filtering by nexad/nexa-proxy instance.
+Template variable `$instance` for filtering by nexad instance.
 
 ## Prometheus Alerting Rules
 
@@ -151,7 +140,7 @@ Shipped as `deploy/prometheus/alerts.yml`.
 
 ## Scrape Config
 
-Shipped as `deploy/prometheus/scrape-config.yml` with sample `scrape_configs` targeting nexad:6443 and nexa-proxy:8080 `/metrics`.
+Shipped as `deploy/prometheus/scrape-config.yml` with sample `scrape_configs` targeting nexad:6443 `/metrics`.
 
 ## File Map
 
@@ -173,14 +162,6 @@ Shipped as `deploy/prometheus/scrape-config.yml` with sample `scrape_configs` ta
 - `src/api/mod.rs` — update AppState with metrics field
 - `src/adapters/event_watcher.rs` — add container event recording
 - `src/main.rs` — wire PrometheusMetrics into orchestrator + AppState
-- `Cargo.toml` — add `prometheus` dependency
-
-### nexa-proxy (new files)
-- `src/metrics.rs` — PrometheusMetrics for proxy
-
-### nexa-proxy (modified)
-- `src/proxy.rs` — instrument handle_request, add /metrics path, store metrics in ProxyState
-- `src/lib.rs` — add `pub mod metrics`
 - `Cargo.toml` — add `prometheus` dependency
 
 ### Deploy configs (new files)
