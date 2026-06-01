@@ -1,0 +1,131 @@
+<h2>nexa top — Layout hybride</h2>
+<p class="subtitle">Status bar en haut, split pods/resources au milieu, events pleine largeur en bas</p>
+
+<div class="mockup">
+  <div class="mockup-header">nexa top — 120x40 terminal</div>
+  <div class="mockup-body" style="padding:0">
+    <div style="background:#0d1117;color:#c9d1d9;font-family:'JetBrains Mono','Fira Code',monospace;font-size:11.5px;padding:14px;line-height:1.5;min-height:420px">
+
+      <!-- Top bar -->
+      <div style="display:flex;justify-content:space-between;padding:4px 8px;background:#161b22;border:1px solid #30363d;border-radius:4px;margin-bottom:10px">
+        <div>
+          <span style="color:#58a6ff;font-weight:bold"> NexaNet</span>
+          <span style="color:#3fb950;margin-left:12px">⏻ running</span>
+        </div>
+        <div style="color:#8b949e">
+          <span style="color:#c9d1d9">󰐻 3</span> nodes
+          <span style="margin:0 6px;color:#30363d">│</span>
+          <span style="color:#c9d1d9">⊞ 12</span> pods
+          <span style="margin:0 6px;color:#30363d">│</span>
+          <span style="color:#c9d1d9">◎ 5</span> deploys
+          <span style="margin:0 6px;color:#30363d">│</span>
+          <span style="color:#8b949e">↻ 2s</span>
+        </div>
+      </div>
+
+      <!-- Middle split: Pods left, Nodes right -->
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+
+        <!-- Pods panel (wider) -->
+        <div style="flex:5;border:1px solid #30363d;border-radius:4px;overflow:hidden">
+          <div style="background:#161b22;padding:4px 8px;border-bottom:1px solid #30363d;display:flex;justify-content:space-between">
+            <span style="color:#58a6ff;font-weight:bold">  Pods</span>
+            <span style="color:#8b949e;font-size:10px">5 total · 3 running · 1 pending · 1 failed</span>
+          </div>
+          <div style="padding:6px 8px">
+            <div style="color:#484f58;font-size:10px;margin-bottom:4px;letter-spacing:0.5px">NAME                     STATUS       CPU    MEM       RESTARTS   AGE</div>
+            <div style="border-bottom:1px solid #21262d;padding:3px 0"><span style="color:#e6edf3">web-api-7f8d9</span>            <span style="color:#3fb950">● running</span>    <span style="color:#3fb950"> 12%</span>   <span style="color:#3fb950"> 128Mi</span>     0          2d</div>
+            <div style="border-bottom:1px solid #21262d;padding:3px 0"><span style="color:#e6edf3">worker-a3b21</span>             <span style="color:#3fb950">● running</span>    <span style="color:#d29922"> 45%</span>   <span style="color:#d29922"> 512Mi</span>     0          1d</div>
+            <div style="border-bottom:1px solid #21262d;padding:3px 0"><span style="color:#e6edf3">redis-cache-e1f4</span>         <span style="color:#3fb950">● running</span>    <span style="color:#3fb950">  3%</span>   <span style="color:#3fb950">  64Mi</span>     0          5d</div>
+            <div style="border-bottom:1px solid #21262d;padding:3px 0"><span style="color:#e6edf3">db-migrate-x9z2</span>          <span style="color:#d29922">● pending</span>    <span style="color:#484f58">  —</span>    <span style="color:#484f58">    —</span>      0          30s</div>
+            <div style="padding:3px 0"><span style="color:#e6edf3">cron-job-p4q7</span>            <span style="color:#f85149">● failed</span>     <span style="color:#484f58">  —</span>    <span style="color:#484f58">    —</span>      <span style="color:#f85149">3</span>          4h</div>
+          </div>
+        </div>
+
+        <!-- Nodes panel (narrower) -->
+        <div style="flex:3;border:1px solid #30363d;border-radius:4px;overflow:hidden">
+          <div style="background:#161b22;padding:4px 8px;border-bottom:1px solid #30363d">
+            <span style="color:#58a6ff;font-weight:bold">󰐻  Nodes</span>
+          </div>
+          <div style="padding:8px">
+            <!-- Node 1 -->
+            <div style="margin-bottom:10px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="color:#e6edf3">node-1</span>
+                <span style="color:#8b949e;font-size:10px">master · 8 cores · 16Gi</span>
+              </div>
+              <div style="margin-bottom:3px">
+                <span style="color:#8b949e;display:inline-block;width:28px">cpu</span>
+                <span style="color:#3fb950">████████████</span><span style="color:#21262d">█████████████████</span>
+                <span style="color:#8b949e"> 38%</span>
+              </div>
+              <div>
+                <span style="color:#8b949e;display:inline-block;width:28px">mem</span>
+                <span style="color:#d29922">████████████████████</span><span style="color:#21262d">████████</span>
+                <span style="color:#8b949e"> 72%</span>
+              </div>
+            </div>
+            <!-- Node 2 -->
+            <div style="margin-bottom:10px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="color:#e6edf3">node-2</span>
+                <span style="color:#8b949e;font-size:10px">worker · 4 cores · 8Gi</span>
+              </div>
+              <div style="margin-bottom:3px">
+                <span style="color:#8b949e;display:inline-block;width:28px">cpu</span>
+                <span style="color:#3fb950">██████</span><span style="color:#21262d">██████████████████████</span>
+                <span style="color:#8b949e"> 21%</span>
+              </div>
+              <div>
+                <span style="color:#8b949e;display:inline-block;width:28px">mem</span>
+                <span style="color:#3fb950">█████████████</span><span style="color:#21262d">███████████████</span>
+                <span style="color:#8b949e"> 45%</span>
+              </div>
+            </div>
+            <!-- Node 3 -->
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="color:#e6edf3">node-3</span>
+                <span style="color:#8b949e;font-size:10px">worker · 4 cores · 8Gi</span>
+              </div>
+              <div style="margin-bottom:3px">
+                <span style="color:#8b949e;display:inline-block;width:28px">cpu</span>
+                <span style="color:#f85149">█████████████████████████</span><span style="color:#21262d">███</span>
+                <span style="color:#8b949e"> 89%</span>
+              </div>
+              <div>
+                <span style="color:#8b949e;display:inline-block;width:28px">mem</span>
+                <span style="color:#d29922">██████████████████</span><span style="color:#21262d">██████████</span>
+                <span style="color:#8b949e"> 63%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom: Events full width -->
+      <div style="border:1px solid #30363d;border-radius:4px;overflow:hidden">
+        <div style="background:#161b22;padding:4px 8px;border-bottom:1px solid #30363d;display:flex;justify-content:space-between">
+          <span style="color:#58a6ff;font-weight:bold">  Events</span>
+          <span style="color:#8b949e;font-size:10px">latest 5</span>
+        </div>
+        <div style="padding:6px 8px">
+          <div style="padding:2px 0"><span style="color:#3fb950">12:03:41</span>  <span style="color:#8b949e">Pod</span>  web-api-7f8d9 <span style="color:#3fb950">started</span> on node-1</div>
+          <div style="padding:2px 0"><span style="color:#d29922">12:01:12</span>  <span style="color:#8b949e">Pod</span>  db-migrate-x9z2 <span style="color:#d29922">pending</span> — pulling image postgres:16</div>
+          <div style="padding:2px 0"><span style="color:#f85149">11:58:03</span>  <span style="color:#8b949e">Pod</span>  cron-job-p4q7 <span style="color:#f85149">OOMKilled</span> — restart #3 (limit: 256Mi)</div>
+          <div style="padding:2px 0"><span style="color:#3fb950">11:45:22</span>  <span style="color:#8b949e">Scale</span>  worker scaled 1 → 3 replicas</div>
+          <div style="padding:2px 0"><span style="color:#3fb950">11:30:00</span>  <span style="color:#8b949e">Deploy</span>  redis-cache deployed v2.1.0</div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="margin-top:8px;color:#484f58;font-size:10px;display:flex;justify-content:space-between">
+        <span><span style="background:#30363d;color:#c9d1d9;padding:1px 4px;border-radius:2px">q</span> quit  <span style="background:#30363d;color:#c9d1d9;padding:1px 4px;border-radius:2px">?</span> help  <span style="background:#30363d;color:#c9d1d9;padding:1px 4px;border-radius:2px">p</span> pods  <span style="background:#30363d;color:#c9d1d9;padding:1px 4px;border-radius:2px">n</span> nodes  <span style="background:#30363d;color:#c9d1d9;padding:1px 4px;border-radius:2px">e</span> events  <span style="background:#30363d;color:#c9d1d9;padding:1px 4px;border-radius:2px">l</span> logs  <span style="background:#30363d;color:#c9d1d9;padding:1px 4px;border-radius:2px">/</span> filter</span>
+        <span>NexaNet v0.1.0</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px">Status bar compacte en haut · Pods + Nodes côte à côte au milieu · Events pleine largeur en bas · Raccourcis clavier en footer</p>
