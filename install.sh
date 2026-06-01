@@ -205,12 +205,14 @@ download_and_install() {
         info "Downloading ${BINARY}..."
     fi
 
-    URL="https://github.com/${GITHUB_ORG}/${REPO}/releases/download/${VERSION_TAG}/${BINARY}-${PLATFORM}-${ARCH}.tar.gz"
+    ARTIFACT="${BINARY}-${PLATFORM}-${ARCH}.tar.gz"
+    URL="https://github.com/${GITHUB_ORG}/${REPO}/releases/download/${VERSION_TAG}/${ARTIFACT}"
+    CHECKSUM_URL="https://github.com/${GITHUB_ORG}/${REPO}/releases/download/${VERSION_TAG}/sha256sums.txt"
 
     TMPDIR=$(mktemp -d)
     trap "rm -rf '$TMPDIR'" EXIT
 
-    HTTP_CODE=$(curl -sSL -w '%{http_code}' -o "$TMPDIR/${BINARY}.tar.gz" "$URL" 2>/dev/null) || true
+    HTTP_CODE=$(curl -sSL -w '%{http_code}' -o "$TMPDIR/${ARTIFACT}" "$URL" 2>/dev/null) || true
 
     if [ "$HTTP_CODE" != "200" ]; then
         warn "Warning: failed to download ${BINARY} ${VERSION_TAG} (HTTP ${HTTP_CODE})"
@@ -218,7 +220,28 @@ download_and_install() {
         return 0
     fi
 
-    tar -xzf "$TMPDIR/${BINARY}.tar.gz" -C "$TMPDIR" 2>/dev/null || {
+    # Verify SHA-256 checksum
+    CHECKSUM_CODE=$(curl -sSL -w '%{http_code}' -o "$TMPDIR/sha256sums.txt" "$CHECKSUM_URL" 2>/dev/null) || true
+    if [ "$CHECKSUM_CODE" = "200" ]; then
+        EXPECTED=$(grep "${ARTIFACT}" "$TMPDIR/sha256sums.txt" | awk '{print $1}')
+        if [ -n "$EXPECTED" ]; then
+            if command -v sha256sum >/dev/null 2>&1; then
+                ACTUAL=$(sha256sum "$TMPDIR/${ARTIFACT}" | awk '{print $1}')
+            else
+                ACTUAL=$(shasum -a 256 "$TMPDIR/${ARTIFACT}" | awk '{print $1}')
+            fi
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+                error "Checksum verification failed for ${ARTIFACT} (expected ${EXPECTED}, got ${ACTUAL})"
+            fi
+            dim "Checksum verified: ${ARTIFACT}"
+        else
+            warn "Warning: artifact not found in sha256sums.txt, skipping verification"
+        fi
+    else
+        warn "Warning: sha256sums.txt not available, skipping checksum verification"
+    fi
+
+    tar -xzf "$TMPDIR/${ARTIFACT}" -C "$TMPDIR" 2>/dev/null || {
         warn "Warning: failed to extract ${BINARY} archive"
         rm -rf "$TMPDIR"
         return 0
