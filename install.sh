@@ -4,12 +4,15 @@ set -e
 # NexaNet Installer
 # Usage: curl -sSfL https://raw.githubusercontent.com/nexa-net/nexa/main/install.sh | sh
 #
+# Uninstall: curl -sSfL https://raw.githubusercontent.com/nexa-net/nexa/main/install.sh | sh -s -- --uninstall
+#
 # Environment variables:
 #   INSTALL_DIR   Override install directory (default: /usr/local/bin)
 #   VERSION       Install a specific version (default: latest)
 #   NO_SERVICE    Set to 1 to skip auto-start service installation
 #   NO_START      Set to 1 to skip launching nexad after install
 #   FORCE         Set to 1 to skip upgrade prompt and always overwrite
+#   UNINSTALL     Set to 1 to uninstall NexaNet
 
 GITHUB_ORG="nexa-net"
 NEXA_HOME="${HOME}/.nexa"
@@ -373,6 +376,19 @@ RestartSec=5
 Environment=HOME=${HOME}
 Environment=PATH=${INSTALL_DIR}:/usr/local/bin:/usr/bin:/bin
 
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=${NEXA_HOME}
+PrivateTmp=true
+ProtectClock=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
 [Install]
 WantedBy=default.target
 UNIT
@@ -446,9 +462,69 @@ start_nexad() {
     fi
 }
 
+# ────────────────────── uninstall ──────────────────────
+
+uninstall() {
+    printf '\n'
+    info "Uninstalling NexaNet..."
+    printf '\n'
+
+    # Stop running services
+    stop_nexad_service
+
+    # Remove launchd service (macOS)
+    PLIST="$HOME/Library/LaunchAgents/net.nexa.nexad.plist"
+    if [ -f "$PLIST" ]; then
+        launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
+        rm -f "$PLIST"
+        success "Removed launchd service"
+    fi
+
+    # Remove systemd service (Linux)
+    UNIT_FILE="${HOME}/.config/systemd/user/nexad.service"
+    if [ -f "$UNIT_FILE" ]; then
+        systemctl --user disable nexad.service 2>/dev/null || true
+        rm -f "$UNIT_FILE"
+        systemctl --user daemon-reload 2>/dev/null || true
+        success "Removed systemd service"
+    fi
+
+    # Determine install directory
+    if [ -z "$INSTALL_DIR" ]; then
+        if [ -f "/usr/local/bin/nexad" ]; then
+            INSTALL_DIR="/usr/local/bin"
+        elif [ -f "${NEXA_HOME}/bin/nexad" ]; then
+            INSTALL_DIR="${NEXA_HOME}/bin"
+        else
+            INSTALL_DIR="/usr/local/bin"
+        fi
+    fi
+
+    # Remove binaries
+    for bin in nexad nexa; do
+        if [ -f "${INSTALL_DIR}/${bin}" ]; then
+            rm -f "${INSTALL_DIR}/${bin}"
+            success "Removed ${INSTALL_DIR}/${bin}"
+        fi
+    done
+
+    printf '\n'
+    info "Binaries and services removed."
+    info "Data directory preserved at: ${NEXA_HOME}"
+    info "To remove all data: rm -rf ${NEXA_HOME}"
+    printf '\n'
+}
+
 # ────────────────────── main ──────────────────────
 
 main() {
+    # Handle --uninstall flag
+    if [ "${1:-}" = "--uninstall" ] || [ "${UNINSTALL:-}" = "1" ]; then
+        detect_platform
+        uninstall
+        exit 0
+    fi
+
     check_command curl
     check_command tar
 
@@ -534,4 +610,4 @@ main() {
     printf '\n'
 }
 
-main
+main "$@"
