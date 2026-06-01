@@ -13,10 +13,10 @@
 |----------|-----------|-------|----------|-------|-----------|-------------|
 | CRITICAL | 1 | 4 | 1 | 2 | **8** | **8 (100%)** |
 | HIGH | 8 | 10 | 7 | 7 | **32** | **32 (100%)** |
-| MEDIUM | 13 | 9 | 10 | 14 | **46** | **25 (54%)** |
+| MEDIUM | 13 | 9 | 10 | 14 | **46** | **29 (63%)** |
 | LOW | 8 | 9 | 12 | 11 | **40** | **25 (63%)** |
 
-**Progression : 90/126 issues corrigees (71%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 25/46 MEDIUM corriges. 25/40 LOW corriges. Les 21 MEDIUM restants et 15 LOW restants sont soit trop invasifs, soit necessitent un effort significatif.
+**Progression : 94/126 issues corrigees (75%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 29/46 MEDIUM corriges. 25/40 LOW corriges. Les 17 MEDIUM restants et 15 LOW restants sont soit trop invasifs (builder pattern, NexaError refactor), soit necessitent un effort significatif (integration tests, architecture docs, config file support).
 
 Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
 
@@ -131,8 +131,8 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - ~~Token verification avec comparaison non constant-time~~ → ✅ `constant_time_eq` (`src/cluster/token.rs`)
 - ~~Silent error swallowing dans heartbeat monitor~~ → ✅ Errors logguees avec `tracing::warn!`
 - ~~Metric registration `.unwrap()`~~ → ✅ Erreurs logguees, pas de panic
-- Migration rollback risquee avec `PRAGMA foreign_keys=OFF`
-- DNS server sans rate limiting
+- ~~Migration rollback risquee avec `PRAGMA foreign_keys=OFF`~~ → ✅ SAVEPOINT + documentation + `foreign_key_check`
+- ~~DNS server sans rate limiting~~ → ✅ Token-bucket rate limiter (1000 qps/IP)
 - ~~DNS upstream cree un socket par query~~ → ✅ Socket UDP partage
 - Pas de tests containerd runtime
 - ~~Health checker interval hardcode a 1s~~ → ✅ Configurable via `with_interval()`
@@ -142,7 +142,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 - ~~`print_json` utilise `unwrap()`~~ → ✅ Erreur geree gracieusement
 - ~~Detection d'erreur connexion par string matching~~ → ✅ Types `reqwest::Error` (.is_connect/.is_timeout)
-- SSE event stream cree son propre client hors `NexaClient`
+- ~~SSE event stream cree son propre client hors `NexaClient`~~ → ✅ Reutilise `NexaClient.http_client()`
 - ~~URL path parameters non percent-encoded~~ → ✅ `urlencoding::encode()` partout
 - ~~Query parameters non encodes~~ → ✅ `urlencoding::encode()` sur les valeurs
 - ~~Pas de support `NO_COLOR`~~ → ✅ `console::set_colors_enabled(false)` si `NO_COLOR` set
@@ -156,7 +156,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - Scrape config Prometheus utilise seulement `static_configs` (pas de service discovery)
 - Alertes manquantes : disk space, cert expiry, split-brain, crash loops, process down
 - ~~Proto sans versioning~~ → ✅ `nexa.cluster.v1`
-- String-typed enumerations dans le proto (status, action)
+- ~~String-typed enumerations dans le proto (status, action)~~ → ✅ Proto enums `NodeStatusProto`, `PodStatusProto`, `PodActionType`
 - `bytes` fields pour des donnees structurees dans le proto
 - Version misalignment entre crates (0.1.0 vs 0.2.0)
 - Shared dependency version drift sans workspace
@@ -334,21 +334,21 @@ Points faibles :
 #### Networking
 
 - ~~WireGuard `create_tunnel()` est un **no-op**~~ → ✅ Marque comme experimental avec doc warnings
-- DNS upstream cree un socket par query
-- DNS server sans rate limiting
+- ~~DNS upstream cree un socket par query~~ → ✅ Socket UDP partage
+- ~~DNS server sans rate limiting~~ → ✅ Token-bucket rate limiter (1000 qps/IP)
 
 #### State
 
 - ~~Routes et certificats en memoire seulement~~ → ✅ `SqliteRouteStore` avec persistence
 - Tables SQLite existent dans les migrations mais l'in-memory store est utilise
-- Migration rollback risquee avec `PRAGMA foreign_keys=OFF`
+- ~~Migration rollback risquee avec `PRAGMA foreign_keys=OFF`~~ → ✅ SAVEPOINT + documentation + `foreign_key_check`
 
 #### Production
 
 - ~~**Aucun graceful shutdown**~~ → ✅ CancellationToken + SIGINT/SIGTERM + axum graceful shutdown
 - ~~Reschedule callback est un **TODO**~~ → ✅ Pods reschedules sur workers sains quand un worker meurt
-- Health checker interval hardcode a 1s
-- `node_stats` bloque 200ms par appel
+- ~~Health checker interval hardcode a 1s~~ → ✅ Configurable via `with_interval()`
+- ~~`node_stats` bloque 200ms par appel~~ → ✅ `spawn_blocking`
 
 ---
 
@@ -375,16 +375,16 @@ Points faibles :
 
 - ~~**Aucun timeout** HTTP~~ → ✅ `connect_timeout(5s)` + `timeout(30s)`
 - **Aucun retry** pour les erreurs transitoires
-- URL path parameters non percent-encoded
-- SSE event stream cree son propre client hors `NexaClient`
+- ~~URL path parameters non percent-encoded~~ → ✅ `urlencoding::encode()` partout
+- ~~SSE event stream cree son propre client hors `NexaClient`~~ → ✅ Reutilise `NexaClient.http_client()`
 
 #### UX
 
 - Pas de fichier de configuration (`~/.nexa/config`)
-- Pas de shell completion
+- ~~Pas de shell completion~~ → ✅ Subcommande `completions` (bash/zsh/fish/powershell)
 - ~~TUI panic laisse le terminal casse~~ → ✅ `std::panic::set_hook` restaure le terminal
 - Pas de signal handling pendant `deploy` polling
-- `nexa logs` sans interruption gracieuse
+- ~~`nexa logs` sans interruption gracieuse~~ → ✅ `tokio::select!` + `signal::ctrl_c()`
 
 #### Testing
 
