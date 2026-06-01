@@ -13,10 +13,10 @@
 |----------|-----------|-------|----------|-------|-----------|-------------|
 | CRITICAL | 1 | 4 | 1 | 2 | **8** | **8 (100%)** |
 | HIGH | 8 | 10 | 7 | 7 | **32** | **32 (100%)** |
-| MEDIUM | 13 | 9 | 10 | 14 | **46** | 0 |
+| MEDIUM | 13 | 9 | 10 | 14 | **46** | **24 (52%)** |
 | LOW | 8 | 9 | 12 | 11 | **40** | 0 |
 
-**Progression : 40/126 issues corrigees (32%).** Les 8 CRITICAL et 32 HIGH sont tous resolus — pret pour une beta publique. Les 46 MEDIUM et 40 LOW restent pour la qualite production.
+**Progression : 64/126 issues corrigees (51%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 24/46 MEDIUM corriges. Les 22 MEDIUM restants et 40 LOW restent pour le polish production.
 
 Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
 
@@ -112,61 +112,61 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 ### nexa-core (13)
 
-- In-memory adapters dans `ports/` au lieu de `adapters/` (leaky architecture) (`src/ports/state_memory.rs`)
-- `Orchestrator::spawn` a 9 parametres `Option` positionnels — builder pattern necessaire (`src/domain/orchestrator.rs:412`)
-- Regex recompilee a chaque appel de validation (`src/config.rs:30,76`)
-- Error variants stringly-typed (`NexaError::Runtime(String)`) (`src/error.rs:17`)
-- Persistence failures logguees en warning, pas d'alerte metrique (`src/domain/orchestrator.rs:1764`)
-- Scale-down trie par UUID (random) au lieu de creation order (`src/domain/orchestrator.rs:903`)
+- ~~In-memory adapters dans `ports/`~~ → ✅ Deplaces dans `adapters/` (`src/adapters/`)
+- `Orchestrator::spawn` a 9 parametres `Option` positionnels — builder pattern necessaire
+- ~~Regex recompilee a chaque appel~~ → ✅ `LazyLock<Regex>` (`src/config.rs`)
+- Error variants stringly-typed (`NexaError::Runtime(String)`)
+- Persistence failures logguees en warning, pas d'alerte metrique
+- ~~Scale-down trie par UUID~~ → ✅ Tri par `created_at` timestamp
 - Pas de property-based testing ni fuzz testing
-- `Command` enum public expose le protocole interne de l'actor (`src/domain/orchestrator.rs:26`)
-- `SchedulerConfig.strategy` est un String, pas un enum (`src/domain/scheduler.rs:157`)
-- O(n) lookup par nom de deployment (`src/domain/orchestrator.rs:1525`)
+- `Command` enum expose le protocole interne (requis par `command_sender()`)
+- ~~`SchedulerConfig.strategy` est un String~~ → ✅ `SchedulerStrategy` enum
+- ~~O(n) lookup par nom de deployment~~ → ✅ `deployment_index` HashMap O(1)
 - O(n) filtrage des pods par deployment_id (multiple sites)
-- `tokio features = ["full"]` dans un library crate (`Cargo.toml:30`)
+- ~~`tokio features = ["full"]`~~ → ✅ Features minimales `sync/rt/time/macros`
 - Pas de validation de configuration au demarrage
 
 ### nexad (9)
 
 - ~~Token verification avec comparaison non constant-time~~ → ✅ `constant_time_eq` (`src/cluster/token.rs`)
-- Silent error swallowing dans heartbeat monitor (`src/cluster/heartbeat.rs:77,97`)
-- Metric registration `.unwrap()` au startup (`src/adapters/metrics/prometheus.rs:37+`)
-- Migration rollback risquee avec `PRAGMA foreign_keys=OFF` (`migrations/...cascade_delete.sql`)
-- DNS server sans rate limiting (`src/adapters/dns/hickory.rs:46`)
-- DNS upstream cree un socket par query — epuise les FD (`src/adapters/dns/hickory.rs:273`)
+- ~~Silent error swallowing dans heartbeat monitor~~ → ✅ Errors logguees avec `tracing::warn!`
+- ~~Metric registration `.unwrap()`~~ → ✅ Erreurs logguees, pas de panic
+- Migration rollback risquee avec `PRAGMA foreign_keys=OFF`
+- DNS server sans rate limiting
+- ~~DNS upstream cree un socket par query~~ → ✅ Socket UDP partage
 - Pas de tests containerd runtime
-- Health checker interval hardcode a 1s (`src/adapters/health/mod.rs:27`)
-- `node_stats` handler bloque 200ms par appel (`src/api/handlers.rs:615`)
+- ~~Health checker interval hardcode a 1s~~ → ✅ Configurable via `with_interval()`
+- ~~`node_stats` handler bloque 200ms~~ → ✅ `spawn_blocking`
 
 ### nexa-cli (10)
 
-- `print_json` utilise `unwrap()` sur la serialisation (`src/output/mod.rs:35`)
-- Detection d'erreur connexion par string matching fragile (`src/main.rs:420`)
-- SSE event stream cree son propre client hors `NexaClient` (`src/tui/event.rs:39`)
-- URL path parameters non percent-encoded (multiple fichiers)
-- Query parameters non encodes (`src/commands/pods.rs:10`)
-- Pas de support `--no-color` / `NO_COLOR` explicite
+- ~~`print_json` utilise `unwrap()`~~ → ✅ Erreur geree gracieusement
+- ~~Detection d'erreur connexion par string matching~~ → ✅ Types `reqwest::Error` (.is_connect/.is_timeout)
+- SSE event stream cree son propre client hors `NexaClient`
+- ~~URL path parameters non percent-encoded~~ → ✅ `urlencoding::encode()` partout
+- ~~Query parameters non encodes~~ → ✅ `urlencoding::encode()` sur les valeurs
+- ~~Pas de support `NO_COLOR`~~ → ✅ `console::set_colors_enabled(false)` si `NO_COLOR` set
 - Pas de fichier de configuration (`~/.nexa/config`)
-- `nexa logs` sans interruption gracieuse (`src/commands/logs.rs:28`)
-- Loose version pinning sur toutes les deps (`Cargo.toml`)
+- ~~`nexa logs` sans interruption gracieuse~~ → ✅ `tokio::select!` + `signal::ctrl_c()`
+- Loose version pinning sur toutes les deps
 - Pas de tests pour `client.rs` error handling
 
 ### Infra (14)
 
 - Scrape config Prometheus utilise seulement `static_configs` (pas de service discovery)
 - Alertes manquantes : disk space, cert expiry, split-brain, crash loops, process down
-- Proto sans versioning (`nexa.cluster` au lieu de `nexa.cluster.v1`)
+- ~~Proto sans versioning~~ → ✅ `nexa.cluster.v1`
 - String-typed enumerations dans le proto (status, action)
 - `bytes` fields pour des donnees structurees dans le proto
 - Version misalignment entre crates (0.1.0 vs 0.2.0)
 - Shared dependency version drift sans workspace
-- Service units user-level seulement (pas de hardening systemd)
-- Pas de mecanisme d'uninstall
-- nexa-core CI ne lance que `cargo test --lib`
-- Pas de CI multi-plateforme (macOS non teste)
+- ~~Service units user-level seulement~~ → ✅ Hardening systemd (NoNewPrivileges, ProtectSystem, etc.)
+- ~~Pas de mecanisme d'uninstall~~ → ✅ `install.sh --uninstall`
+- ~~nexa-core CI ne lance que `cargo test --lib`~~ → ✅ `cargo test` (tous les tests)
+- ~~Pas de CI multi-plateforme~~ → ✅ macOS ajoute aux 3 repos
 - Pas de documentation architecture
-- Pas de CONTRIBUTING.md
-- README reference des features non implementees (WireGuard, CNI)
+- ~~Pas de CONTRIBUTING.md~~ → ✅ CONTRIBUTING.md ajoute
+- ~~README reference des features non implementees~~ → ✅ WireGuard/CNI marques experimental
 
 ---
 
