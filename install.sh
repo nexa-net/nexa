@@ -556,13 +556,15 @@ main() {
     EXISTING_HELYOSD=$(get_installed_version "${INSTALL_DIR}/helyosd")
     EXISTING_HELYOS=$(get_installed_version "${INSTALL_DIR}/helyos")
 
-    printf '\n'
-    printf '  _   _                _   _      _   \n'
-    printf ' | \\ | | _____  ____ | \\ | | ___| |_ \n'
-    printf ' |  \\| |/ _ \\ \\/ / _\\|  \\| |/ _ \\ __|\n'
-    printf ' | |\\  |  __/>  < (_|| |\\  |  __/ |_ \n'
-    printf ' |_| \\_|\\___/_/\\_\\__||_| \\_|\\___|\\__|\n'
-    printf '\n'
+    cat <<'BANNER'
+
+ _   _  _____  _     __   __  ___   ____
+| | | || ____|| |    \ \ / / / _ \ / ___|
+| |_| ||  _|  | |     \ V / | | | |\___ \
+|  _  || |___ | |___   | |  | |_| | ___) |
+|_| |_||_____||_____|  |_|   \___/ |____/
+
+BANNER
 
     if [ -n "$EXISTING_HELYOSD" ] || [ -n "$EXISTING_HELYOS" ]; then
         printf '  Helyos Updater\n'
