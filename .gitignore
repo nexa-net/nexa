@@ -5,6 +5,13 @@
 .env
 *.log
 .superpowers
+
+# Local-only — kept on disk, not published to the repo
+.claude/
+.agents/
+docs/
+skills-lock.json
+
 helyos-cli/
 helyos-core/
 helyos-proxy/
