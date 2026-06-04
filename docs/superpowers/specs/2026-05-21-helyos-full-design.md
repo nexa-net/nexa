@@ -1,4 +1,4 @@
-# NexaNet — Full Design Specification
+# Helyos — Full Design Specification
 
 **Date:** 2026-05-21
 **Status:** Approved
@@ -8,12 +8,12 @@
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| CLI ↔ nexad protocol | HTTP/REST | Simple, curl-friendly, easy to debug |
+| CLI ↔ helyosd protocol | HTTP/REST | Simple, curl-friendly, easy to debug |
 | Node-to-node protocol | gRPC (tonic) | Efficient, typed, streaming for heartbeats |
 | State persistence | SQLite on master (Raft replication deferred to Phase 4+) | Persistence without external DB; HA via openraft is a future concern |
 | Secrets | Encrypted at rest in SQLite (AES-256-GCM) | Self-contained, no external deps |
 | Proxy architecture | Separate sidecar process | Modular; multiple backends supported |
-| Proxy backends | Traefik (default) + Nginx + Caddy | User choice; all managed by nexad |
+| Proxy backends | Traefik (default) + Nginx + Caddy | User choice; all managed by helyosd |
 | Orchestrator model | Actor with command channel | No locks, no block_on, clean async |
 | Volumes | Named volumes + bind mounts | Simple for users, flexible for power users |
 | Overlay networking | Embedded WireGuard via boringtun | Userspace, no kernel module, zero config |
@@ -23,7 +23,7 @@
 
 ## Hexagonal Architecture
 
-NexaNet follows hexagonal architecture (ports & adapters). The domain core contains pure business logic with zero infrastructure dependencies. All external systems are accessed through port traits, with concrete adapters that can be swapped independently.
+Helyos follows hexagonal architecture (ports & adapters). The domain core contains pure business logic with zero infrastructure dependencies. All external systems are accessed through port traits, with concrete adapters that can be swapped independently.
 
 ### Layers
 
@@ -85,14 +85,14 @@ The domain core defines these traits. It never imports a concrete adapter.
 | Port | Interface | Callers |
 |------|-----------|---------|
 | `OrchestratorHandle` | mpsc command channel | HTTP API handlers, gRPC server |
-| HTTP API | axum routes | CLI (`nexa`), external tools |
+| HTTP API | axum routes | CLI (`helyos`), external tools |
 | gRPC API | tonic service | Worker nodes |
 
 ### Crate / Module Mapping
 
 ```
 crates/
-  nexa-core/
+  helyos-core/
     src/
       domain/              ← Pure domain logic (NO infra imports)
         mod.rs
@@ -112,7 +112,7 @@ crates/
       config.rs            ← YAML parsing, validation
       error.rs             ← Error types
 
-  nexad/
+  helyosd/
     src/
       adapters/            ← All infrastructure implementations
         runtime/
@@ -138,7 +138,7 @@ crates/
         routes.rs
       main.rs              ← Wires ports to adapters, starts daemon
 
-  nexa-cli/                ← CLI driving adapter (unchanged)
+  helyos-cli/                ← CLI driving adapter (unchanged)
     src/
       main.rs
       client.rs
@@ -149,13 +149,13 @@ crates/
 
 ### Key Rules
 
-1. **`nexa-core/src/domain/`** has zero `use` of bollard, sqlx, tonic, hickory, boringtun, or any infrastructure crate. It only depends on standard library, serde, chrono, uuid, and its own `ports/` traits.
+1. **`helyos-core/src/domain/`** has zero `use` of bollard, sqlx, tonic, hickory, boringtun, or any infrastructure crate. It only depends on standard library, serde, chrono, uuid, and its own `ports/` traits.
 
-2. **`nexa-core/src/ports/`** defines traits only. No implementations. No infrastructure imports.
+2. **`helyos-core/src/ports/`** defines traits only. No implementations. No infrastructure imports.
 
-3. **`nexad/src/adapters/`** implements the port traits. Each adapter depends on its specific infrastructure crate. Adapters are leaf modules — they don't import each other.
+3. **`helyosd/src/adapters/`** implements the port traits. Each adapter depends on its specific infrastructure crate. Adapters are leaf modules — they don't import each other.
 
-4. **`nexad/src/main.rs`** is the composition root. It wires concrete adapters to port traits and starts the system:
+4. **`helyosd/src/main.rs`** is the composition root. It wires concrete adapters to port traits and starts the system:
 
 ```rust
 // main.rs — composition root
@@ -190,8 +190,8 @@ This architecture is compatible with all 12 specs. The main changes:
 - **Spec #3** (SQLite): Becomes the `SqliteStore` adapter implementing `trait StateStore`. The domain never sees sqlx.
 - **Spec #4** (Health Checking): Health check logic (state machine, threshold) lives in `domain/health.rs`. The HTTP probing is a utility in the domain (uses only `reqwest` or raw TCP — lightweight enough for domain).
 - **Spec #5** (Restart): Business logic in `domain/restart.rs`. The event watcher adapter pushes events into the orchestrator via the command channel.
-- **Spec #6** (Secrets): `trait SecretStore` in ports, `EncryptedSqliteSecretStore` adapter in nexad.
-- **Spec #10** (DNS): `trait DnsProvider` in ports, `HickoryDnsProvider` adapter in nexad.
+- **Spec #6** (Secrets): `trait SecretStore` in ports, `EncryptedSqliteSecretStore` adapter in helyosd.
+- **Spec #10** (DNS): `trait DnsProvider` in ports, `HickoryDnsProvider` adapter in helyosd.
 - **Spec #11** (Proxy): `trait ProxyBackend` already defined in the spec. Each backend is an adapter.
 - **Spec #12** (Runtime): `trait ContainerRuntime` already exists. Docker and containerd are adapters.
 
@@ -257,7 +257,7 @@ struct OrchestratorHandle {
 
 ### Hexagonal Integration
 
-The orchestrator loop lives in `nexa-core/src/domain/orchestrator.rs`. It receives all external dependencies as port trait objects (`Arc<dyn ContainerRuntime>`, `Arc<dyn StateStore>`, etc.) via constructor injection. The loop has zero knowledge of Docker, SQLite, or any concrete adapter.
+The orchestrator loop lives in `helyos-core/src/domain/orchestrator.rs`. It receives all external dependencies as port trait objects (`Arc<dyn ContainerRuntime>`, `Arc<dyn StateStore>`, etc.) via constructor injection. The loop has zero knowledge of Docker, SQLite, or any concrete adapter.
 
 ```rust
 impl Orchestrator {
@@ -279,7 +279,7 @@ impl Orchestrator {
 
 ### Migration Path
 
-Replace `Orchestrator` struct with `OrchestratorHandle` + background loop. Move domain logic to `nexa-core/src/domain/`, move Docker impl to `nexad/src/adapters/runtime/docker.rs`. API layer changes minimally.
+Replace `Orchestrator` struct with `OrchestratorHandle` + background loop. Move domain logic to `helyos-core/src/domain/`, move Docker impl to `helyosd/src/adapters/runtime/docker.rs`. API layer changes minimally.
 
 ---
 
@@ -339,8 +339,8 @@ resources:
 
 ### Design Decisions
 
-- **`secrets`** — list of secret *names*, not values. Values stored encrypted in NexaNet. Set via `nexa secret set`. Injected as env vars at runtime.
-- **`volumes`** — two forms: named volumes (`name: data`) managed by NexaNet, and bind mounts (`path: /host/...`). Optional `readonly` flag.
+- **`secrets`** — list of secret *names*, not values. Values stored encrypted in Helyos. Set via `helyos secret set`. Injected as env vars at runtime.
+- **`volumes`** — two forms: named volumes (`name: data`) managed by Helyos, and bind mounts (`path: /host/...`). Optional `readonly` flag.
 - **`resources`** — optional. Only used for scheduling in Phase 2. Shorthand format (`512m`, `0.5` CPU cores).
 - **`restart`** — simple string: `always`, `on-failure`, `never`.
 - **`ports`** — container ports. Host mapping is automatic (same port for single-replica, random for multi-replica).
@@ -368,13 +368,13 @@ resources:
 
 ### Problem
 
-All state is in-memory. Restarting nexad loses everything. We need durable persistence that the actor loop writes to after each mutation and reads from on startup.
+All state is in-memory. Restarting helyosd loses everything. We need durable persistence that the actor loop writes to after each mutation and reads from on startup.
 
 ### Design
 
-SQLite via sqlx at `{data_dir}/nexa.db`. WAL mode for concurrent reads. The orchestrator loop accesses storage through the `StateStore` port trait — it never imports sqlx.
+SQLite via sqlx at `{data_dir}/helyos.db`. WAL mode for concurrent reads. The orchestrator loop accesses storage through the `StateStore` port trait — it never imports sqlx.
 
-**Port trait** (in `nexa-core/src/ports/state.rs`):
+**Port trait** (in `helyos-core/src/ports/state.rs`):
 
 ```rust
 #[async_trait]
@@ -402,7 +402,7 @@ pub trait StateStore: Send + Sync {
 }
 ```
 
-**Adapter** (in `nexad/src/adapters/state/sqlite.rs`): `SqliteStore` implements `StateStore` using sqlx.
+**Adapter** (in `helyosd/src/adapters/state/sqlite.rs`): `SqliteStore` implements `StateStore` using sqlx.
 
 ### Schema
 
@@ -466,7 +466,7 @@ If SQLite write fails, in-memory mutation is rolled back. Container actions happ
    b. If yes → keep Running
    c. If stopped/gone → mark Failed, trigger restart policy
 4. Recalculate deployment statuses from pod states
-5. Clean up orphaned containers (labeled managed-by=nexanet, no matching pod)
+5. Clean up orphaned containers (labeled managed-by=helyos, no matching pod)
 ```
 
 ### Read Path
@@ -479,7 +479,7 @@ A read-only `SqlitePool` clone can be exposed for direct API reads, avoiding the
 
 ### Problem
 
-Pods can crash or become unresponsive without NexaNet knowing. We need active health monitoring that detects failures and feeds into the restart policy system.
+Pods can crash or become unresponsive without Helyos knowing. We need active health monitoring that detects failures and feeds into the restart policy system.
 
 ### Design
 
@@ -526,7 +526,7 @@ Health state resets to Healthy on any success.
 
 ### Problem
 
-When a pod fails, NexaNet marks it Failed and does nothing. We need automatic restart with backoff to avoid restart storms.
+When a pod fails, Helyos marks it Failed and does nothing. We need automatic restart with backoff to avoid restart storms.
 
 ### Event Sources
 
@@ -535,7 +535,7 @@ When a pod fails, NexaNet marks it Failed and does nothing. We need automatic re
 
 ### Container Event Watcher
 
-New `tokio::spawn`ed task that calls `runtime.events()` from the `ContainerRuntime` trait (Spec #12). Listens for `RuntimeEvent::ContainerDied` events for containers labeled `managed-by=nexanet`. Sends `Command::ContainerExited(pod_id, exit_code)` to orchestrator. This works for both Docker (bollard events stream) and containerd (task wait API).
+New `tokio::spawn`ed task that calls `runtime.events()` from the `ContainerRuntime` trait (Spec #12). Listens for `RuntimeEvent::ContainerDied` events for containers labeled `managed-by=helyos`. Sends `Command::ContainerExited(pod_id, exit_code)` to orchestrator. This works for both Docker (bollard events stream) and containerd (task wait API).
 
 ### Decision Logic
 
@@ -616,17 +616,17 @@ struct Project {
 | Deployments | `project + name` is unique |
 | Pods        | Inherit deployment's project |
 | Secrets     | Per-project, same name in different projects are separate |
-| Networks    | One Docker network per project: `nexa-{project}` |
-| Volumes     | Prefixed: `nexa-{project}-{volume_name}` |
+| Networks    | One Docker network per project: `helyos-{project}` |
+| Volumes     | Prefixed: `helyos-{project}-{volume_name}` |
 | Routes      | Domain bindings are global (domain → one project/deployment) |
 | Logs        | Filtered by project |
 
 ### Secrets Management
 
 ```bash
-nexa secret set DATABASE_URL "postgres://..." -p ecommerce
-nexa secret list -p ecommerce
-nexa secret rm DATABASE_URL -p ecommerce
+helyos secret set DATABASE_URL "postgres://..." -p ecommerce
+helyos secret list -p ecommerce
+helyos secret rm DATABASE_URL -p ecommerce
 ```
 
 **Encryption:** AES-256-GCM. Master key from `{data_dir}/master.key`, generated on first run (random 32 bytes, file permissions 0600). Optional: derive from passphrase via Argon2id.
@@ -647,11 +647,11 @@ impl SecretStore {
 ### Project Lifecycle
 
 ```bash
-nexa project create staging
-nexa project list
-nexa project suspend staging     # stop all pods, block new deploys
-nexa project resume staging      # re-enable, reconcile
-nexa project delete staging      # must be empty first
+helyos project create staging
+helyos project list
+helyos project suspend staging     # stop all pods, block new deploys
+helyos project resume staging      # re-enable, reconcile
+helyos project delete staging      # must be empty first
 ```
 
 ### Cross-Project Access
@@ -660,7 +660,7 @@ None by default. No linking mechanism. Network isolation enforced by Docker brid
 
 ---
 
-## Spec #7: CLI UX & `nexa init`
+## Spec #7: CLI UX & `helyos init`
 
 ### Problem
 
@@ -687,12 +687,12 @@ api           ecommerce   Running   3/3       ghcr.io/company/api:latest     2h
 worker        ecommerce   Degraded  2/3       ghcr.io/company/worker:v2      45m
 ```
 
-### `nexa init`
+### `helyos init`
 
 ```bash
-nexa init                    # interactive
-nexa init myapp              # creates myapp/app.yaml
-nexa init myapp --image nginx:alpine
+helyos init                    # interactive
+helyos init myapp              # creates myapp/app.yaml
+helyos init myapp --image nginx:alpine
 ```
 
 Generated template includes commented-out optional sections (secrets, healthcheck, network). Post-init prints next-steps guidance.
@@ -709,7 +709,7 @@ Deploying api to project 'ecommerce'...
 ✓ Deployment 'api' is running (3/3 replicas)
 ```
 
-### `nexa status` (New Command)
+### `helyos status` (New Command)
 
 ```
 Cluster: single-node
@@ -725,7 +725,7 @@ Every error tells what went wrong AND what to do:
 
 ```
 ✗ Secret 'DB_URL' referenced in app.yaml but not set
-  Set it with: nexa secret set DB_URL "value" -p ecommerce
+  Set it with: helyos secret set DB_URL "value" -p ecommerce
 ```
 
 ### `--json` Flag
@@ -733,7 +733,7 @@ Every error tells what went wrong AND what to do:
 Global flag on all commands for scripting:
 
 ```bash
-nexa pods --json | jq '.[] | .status'
+helyos pods --json | jq '.[] | .status'
 ```
 
 ---
@@ -742,14 +742,14 @@ nexa pods --json | jq '.[] | .status'
 
 ### Problem
 
-NexaNet runs single-node. We need master/worker architecture for distributed orchestration.
+Helyos runs single-node. We need master/worker architecture for distributed orchestration.
 
 ### Topology
 
 ```
 ┌──────────────────────────────────┐
 │           Master Node            │
-│  nexad (master + local worker)   │
+│  helyosd (master + local worker)   │
 │  - HTTP API (6443)               │
 │  - gRPC Server (6444)            │
 │  - Scheduler                     │
@@ -766,9 +766,9 @@ NexaNet runs single-node. We need master/worker architecture for distributed orc
 ### Modes
 
 ```bash
-nexad                          # single-node (default)
-nexad --mode master            # master + local worker
-nexad --mode worker --join <ip>:6444 --token <token>
+helyosd                          # single-node (default)
+helyosd --mode master            # master + local worker
+helyosd --mode worker --join <ip>:6444 --token <token>
 ```
 
 ### Join Tokens
@@ -776,9 +776,9 @@ nexad --mode worker --join <ip>:6444 --token <token>
 Random 32-byte hex, prefixed `nxa_`. Stored hashed (SHA-256) in SQLite.
 
 ```bash
-nexa cluster init              # generates token
-nexa cluster token rotate
-nexa cluster token show
+helyos cluster init              # generates token
+helyos cluster token rotate
+helyos cluster token show
 ```
 
 ### gRPC Service
@@ -856,9 +856,9 @@ CREATE TABLE cluster_config (
 ### Node Management CLI
 
 ```bash
-nexa nodes
-nexa node drain worker-1
-nexa node rm worker-1
+helyos nodes
+helyos node drain worker-1
+helyos node rm worker-1
 ```
 
 ---
@@ -917,9 +917,9 @@ Binpack inverts resource weights to prefer busy nodes.
 ### Configuration
 
 ```bash
-nexa cluster config set scheduler spread
-nexa cluster config set scheduler binpack
-nexa cluster config set scheduler.weights.cpu 0.4
+helyos cluster config set scheduler spread
+helyos cluster config set scheduler binpack
+helyos cluster config set scheduler.weights.cpu 0.4
 ```
 
 ### Scheduler Trait
@@ -956,7 +956,7 @@ Containers need to find each other by name. We need `api.ecommerce.internal` to 
 
 ### Design: Embedded DNS Server
 
-Lightweight DNS server inside nexad master using `hickory-dns`. Listens on port 53 (UDP + TCP).
+Lightweight DNS server inside helyosd master using `hickory-dns`. Listens on port 53 (UDP + TCP).
 
 ### Naming Convention
 
@@ -1065,9 +1065,9 @@ enum TlsConfig {
 | `nginx` | Generate conf.d/*.conf, `nginx -s reload` | Paired with certbot |
 
 ```bash
-nexa cluster config set proxy.backend traefik  # default
-nexa cluster config set proxy.backend caddy
-nexa cluster config set proxy.backend nginx
+helyos cluster config set proxy.backend traefik  # default
+helyos cluster config set proxy.backend caddy
+helyos cluster config set proxy.backend nginx
 ```
 
 ### Layer 3: TLS Automation
@@ -1093,8 +1093,8 @@ CREATE TABLE certificates (
 ```
 
 ```bash
-nexa cluster config set proxy.acme.email admin@example.com
-nexa cert import api.example.com --cert cert.pem --key key.pem
+helyos cluster config set proxy.acme.email admin@example.com
+helyos cert import api.example.com --cert cert.pem --key key.pem
 ```
 
 ### Route Model
@@ -1112,9 +1112,9 @@ CREATE TABLE routes (
 One domain → one deployment. Conflict on duplicate.
 
 ```bash
-nexa routes
-nexa route add api.example.com -p ecommerce --deployment api --https
-nexa route rm api.example.com
+helyos routes
+helyos route add api.example.com -p ecommerce --deployment api --https
+helyos route rm api.example.com
 ```
 
 ### Port Allocation
@@ -1138,7 +1138,7 @@ Only Docker is implemented. containerd support needed for lightweight/edge deplo
 4. Neither → fail with clear error
 ```
 
-Override: `nexad --runtime docker` or `nexad --runtime containerd`.
+Override: `helyosd --runtime docker` or `helyosd --runtime containerd`.
 
 ### Key Differences
 
@@ -1151,21 +1151,21 @@ Override: `nexad --runtime docker` or `nexad --runtime containerd`.
 
 ### CNI Integration
 
-containerd has no built-in networking. nexad manages CNI configs per project:
+containerd has no built-in networking. helyosd manages CNI configs per project:
 
 ```json
 {
   "cniVersion": "1.0.0",
-  "name": "nexa-ecommerce",
+  "name": "helyos-ecommerce",
   "plugins": [
-    { "type": "bridge", "bridge": "nexa-ecommerce", "isGateway": true,
+    { "type": "bridge", "bridge": "helyos-ecommerce", "isGateway": true,
       "ipam": { "type": "host-local", "subnet": "172.20.0.0/24" } },
     { "type": "loopback" }
   ]
 }
 ```
 
-CNI plugins at `{data_dir}/cni/bin/`. Missing → `nexa setup cni` downloads standard CNI plugins.
+CNI plugins at `{data_dir}/cni/bin/`. Missing → `helyos setup cni` downloads standard CNI plugins.
 
 ### Trait Additions
 
@@ -1189,7 +1189,7 @@ pub enum RuntimeEvent {
 
 - `container_ip` — needed by DNS server and health checker
 - `events` — needed by restart policy system
-- `runtime_name` — for `nexa status` display
+- `runtime_name` — for `helyos status` display
 
 ### ContainerdRuntime
 
@@ -1197,11 +1197,11 @@ pub enum RuntimeEvent {
 pub struct ContainerdRuntime {
     client: containerd_client::Client,
     cni: CniManager,
-    namespace: String,  // "nexa"
+    namespace: String,  // "helyos"
 }
 ```
 
-All NexaNet containers in the `nexa` containerd namespace.
+All Helyos containers in the `helyos` containerd namespace.
 
 ### Image Handling
 
@@ -1209,7 +1209,7 @@ containerd resolves Docker Hub images natively. Private registry auth via `{data
 
 ### Logs
 
-containerd: nexad configures log output to `{data_dir}/logs/{container_id}/stdout.log`. The `logs()` method tails these files.
+containerd: helyosd configures log output to `{data_dir}/logs/{container_id}/stdout.log`. The `logs()` method tails these files.
 
 ### Testing
 
@@ -1245,7 +1245,7 @@ Spec #12 (Runtime Abstraction) ←── can proceed in parallel after #1
 4. Spec #4 — Health Checking
 5. Spec #5 — Restart Policies
 6. Spec #6 — Project System
-7. Spec #7 — CLI UX & `nexa init`
+7. Spec #7 — CLI UX & `helyos init`
 8. Spec #8 — Multi-Node Cluster
 9. Spec #9 — Scheduler (Weighted Scoring)
 10. Spec #10 — Service Discovery

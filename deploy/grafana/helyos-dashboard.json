@@ -7,8 +7,8 @@
       "pluginId": "prometheus"
     }
   ],
-  "title": "NexaNet Overview",
-  "uid": "nexanet-overview",
+  "title": "Helyos Overview",
+  "uid": "helyos-overview",
   "version": 1,
   "schemaVersion": 39,
   "templating": {
@@ -16,7 +16,7 @@
       {
         "name": "instance",
         "type": "query",
-        "query": "label_values(nexa_http_requests_total, instance)",
+        "query": "label_values(helyos_http_requests_total, instance)",
         "datasource": "${DS_PROMETHEUS}",
         "multi": true,
         "includeAll": true
@@ -30,7 +30,7 @@
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_http_requests_total{instance=~\"$instance\"}[5m])) by (method)",
+          "expr": "sum(rate(helyos_http_requests_total{instance=~\"$instance\"}[5m])) by (method)",
           "legendFormat": "{{method}}"
         }
       ]
@@ -41,15 +41,15 @@
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(helyos_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
           "legendFormat": "p50"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(helyos_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
           "legendFormat": "p95"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(helyos_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
           "legendFormat": "p99"
         }
       ]
@@ -60,7 +60,7 @@
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_http_requests_total{instance=~\"$instance\",status=~\"5..\"}[5m])) / sum(rate(nexa_http_requests_total{instance=~\"$instance\"}[5m])) * 100",
+          "expr": "sum(rate(helyos_http_requests_total{instance=~\"$instance\",status=~\"5..\"}[5m])) / sum(rate(helyos_http_requests_total{instance=~\"$instance\"}[5m])) * 100",
           "legendFormat": "5xx %"
         }
       ]
@@ -71,7 +71,7 @@
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_container_events_total{instance=~\"$instance\"}[5m])) by (event)",
+          "expr": "sum(rate(helyos_container_events_total{instance=~\"$instance\"}[5m])) by (event)",
           "legendFormat": "{{event}}"
         }
       ]
@@ -81,9 +81,9 @@
       "type": "stat",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
       "targets": [
-        { "expr": "nexa_nodes_total{instance=~\"$instance\"}", "legendFormat": "Nodes" },
-        { "expr": "nexa_pods_total{instance=~\"$instance\"}", "legendFormat": "Pods" },
-        { "expr": "nexa_deployments_total{instance=~\"$instance\"}", "legendFormat": "Deployments" }
+        { "expr": "helyos_nodes_total{instance=~\"$instance\"}", "legendFormat": "Nodes" },
+        { "expr": "helyos_pods_total{instance=~\"$instance\"}", "legendFormat": "Pods" },
+        { "expr": "helyos_deployments_total{instance=~\"$instance\"}", "legendFormat": "Deployments" }
       ]
     },
     {
@@ -92,7 +92,7 @@
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_deployment_ops_total{instance=~\"$instance\"}[5m])) by (op)",
+          "expr": "sum(rate(helyos_deployment_ops_total{instance=~\"$instance\"}[5m])) by (op)",
           "legendFormat": "{{op}}"
         }
       ]
@@ -103,11 +103,11 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum(rate(nexa_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
+          "expr": "histogram_quantile(0.99, sum(rate(helyos_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
           "legendFormat": "p99 {{strategy}}"
         },
         {
-          "expr": "histogram_quantile(0.50, sum(rate(nexa_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
+          "expr": "histogram_quantile(0.50, sum(rate(helyos_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
           "legendFormat": "p50 {{strategy}}"
         }
       ]
@@ -118,7 +118,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_schedule_duration_seconds_count{instance=~\"$instance\"}[5m])) by (strategy) * 60",
+          "expr": "sum(rate(helyos_schedule_duration_seconds_count{instance=~\"$instance\"}[5m])) by (strategy) * 60",
           "legendFormat": "{{strategy}}"
         }
       ]
@@ -129,7 +129,7 @@
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_proxy_requests_total{instance=~\"$instance\"}[5m])) by (domain)",
+          "expr": "sum(rate(helyos_proxy_requests_total{instance=~\"$instance\"}[5m])) by (domain)",
           "legendFormat": "{{domain}}"
         }
       ]
@@ -140,11 +140,11 @@
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(nexa_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
+          "expr": "histogram_quantile(0.50, sum(rate(helyos_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
           "legendFormat": "p50 {{domain}}"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(nexa_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
+          "expr": "histogram_quantile(0.95, sum(rate(helyos_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
           "legendFormat": "p95 {{domain}}"
         }
       ]
@@ -155,7 +155,7 @@
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_proxy_errors_total{instance=~\"$instance\"}[5m])) by (domain, error_type)",
+          "expr": "sum(rate(helyos_proxy_errors_total{instance=~\"$instance\"}[5m])) by (domain, error_type)",
           "legendFormat": "{{domain}} - {{error_type}}"
         }
       ]

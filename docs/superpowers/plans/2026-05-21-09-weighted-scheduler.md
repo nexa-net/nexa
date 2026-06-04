@@ -5,36 +5,36 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
 **Goal:** Implement a weighted scoring scheduler that assigns pods to cluster nodes based on configurable CPU, memory, load, and failure weights, supporting both spread and binpack strategies.
 
-**Architecture:** The scheduler lives in `nexa-core/src/domain/scheduler.rs` as a pure domain component with zero infrastructure dependencies. `WeightedScheduler` scores each candidate `NodeSnapshot` using a normalized weighted formula, returning the highest-scoring node. Failure penalty uses exponential decay over recent failure timestamps. The orchestrator calls `scheduler.select_node()` during pod creation, and a new `cluster config` CLI subcommand persists scheduler weights to a `cluster_config` table. In single-node mode the same code path runs -- the scheduler trivially returns the only candidate.
+**Architecture:** The scheduler lives in `helyos-core/src/domain/scheduler.rs` as a pure domain component with zero infrastructure dependencies. `WeightedScheduler` scores each candidate `NodeSnapshot` using a normalized weighted formula, returning the highest-scoring node. Failure penalty uses exponential decay over recent failure timestamps. The orchestrator calls `scheduler.select_node()` during pod creation, and a new `cluster config` CLI subcommand persists scheduler weights to a `cluster_config` table. In single-node mode the same code path runs -- the scheduler trivially returns the only candidate.
 
-**Tech Stack:** chrono (DateTime, Utc), uuid (Uuid), serde (Serialize, Deserialize for weights/config persistence), nexa-core error types
+**Tech Stack:** chrono (DateTime, Utc), uuid (Uuid), serde (Serialize, Deserialize for weights/config persistence), helyos-core error types
 
 ---
 
 ### Task 1: Create domain/scheduler.rs with core types
 
 **Files:**
-- Create: `crates/nexa-core/src/domain/scheduler.rs`
-- Modify: `crates/nexa-core/src/domain/mod.rs`
+- Create: `crates/helyos-core/src/domain/scheduler.rs`
+- Modify: `crates/helyos-core/src/domain/mod.rs`
 
 - [ ] **Step 1: Write failing test for SchedulerWeights default (spread)**
 
-Add `crates/nexa-core/src/domain/scheduler.rs` with test-first structure:
+Add `crates/helyos-core/src/domain/scheduler.rs` with test-first structure:
 
 ```rust
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::error::{NexaError, Result};
+use crate::error::{HelyosError, Result};
 
 /// Configurable weights for the scoring function.
 /// All weights should be positive; binpack inverts resource weights internally.
@@ -141,7 +141,7 @@ mod tests {
 
 - [ ] **Step 2: Register the module in domain/mod.rs**
 
-In `crates/nexa-core/src/domain/mod.rs`, add:
+In `crates/helyos-core/src/domain/mod.rs`, add:
 ```rust
 pub mod scheduler;
 ```
@@ -151,7 +151,7 @@ pub mod scheduler;
 - [ ] **Step 3: Run tests to verify they pass**
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: 4 tests pass.
@@ -159,7 +159,7 @@ Expected: 4 tests pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/scheduler.rs crates/nexa-core/src/domain/mod.rs
+git add crates/helyos-core/src/domain/scheduler.rs crates/helyos-core/src/domain/mod.rs
 git commit -m "feat(scheduler): add SchedulerWeights, NodeSnapshot, PodRequest domain types"
 ```
 
@@ -168,11 +168,11 @@ git commit -m "feat(scheduler): add SchedulerWeights, NodeSnapshot, PodRequest d
 ### Task 2: Implement failure_penalty() function with tests
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/scheduler.rs`
+- Modify: `crates/helyos-core/src/domain/scheduler.rs`
 
 - [ ] **Step 1: Write failing tests for failure_penalty**
 
-Add these tests to the `tests` module in `crates/nexa-core/src/domain/scheduler.rs`:
+Add these tests to the `tests` module in `crates/helyos-core/src/domain/scheduler.rs`:
 
 ```rust
     #[test]
@@ -235,14 +235,14 @@ Add these tests to the `tests` module in `crates/nexa-core/src/domain/scheduler.
 - [ ] **Step 2: Run tests -- they should fail (function does not exist)**
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: compilation error -- `failure_penalty` not found.
 
 - [ ] **Step 3: Implement failure_penalty**
 
-Add this function above the `#[cfg(test)]` block in `crates/nexa-core/src/domain/scheduler.rs`:
+Add this function above the `#[cfg(test)]` block in `crates/helyos-core/src/domain/scheduler.rs`:
 
 ```rust
 /// Compute a failure penalty using exponential decay.
@@ -266,7 +266,7 @@ pub fn failure_penalty(failures: &[DateTime<Utc>], now: DateTime<Utc>) -> f64 {
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: all 10 tests pass.
@@ -274,7 +274,7 @@ Expected: all 10 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/scheduler.rs
+git add crates/helyos-core/src/domain/scheduler.rs
 git commit -m "feat(scheduler): implement failure_penalty with exponential decay"
 ```
 
@@ -283,7 +283,7 @@ git commit -m "feat(scheduler): implement failure_penalty with exponential decay
 ### Task 3: Implement score_node() with tests (spread mode)
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/scheduler.rs`
+- Modify: `crates/helyos-core/src/domain/scheduler.rs`
 
 - [ ] **Step 1: Write failing tests for score_node**
 
@@ -396,7 +396,7 @@ Add these tests to the `tests` module:
 - [ ] **Step 2: Run tests -- they should fail (WeightedScheduler does not exist)**
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: compilation error.
@@ -478,7 +478,7 @@ impl WeightedScheduler {
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: all 17 tests pass.
@@ -486,7 +486,7 @@ Expected: all 17 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/scheduler.rs
+git add crates/helyos-core/src/domain/scheduler.rs
 git commit -m "feat(scheduler): implement WeightedScheduler.score_node with hard constraints and weighted scoring"
 ```
 
@@ -495,7 +495,7 @@ git commit -m "feat(scheduler): implement WeightedScheduler.score_node with hard
 ### Task 4: Implement select_node() with tests (multiple nodes, edge cases)
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/scheduler.rs`
+- Modify: `crates/helyos-core/src/domain/scheduler.rs`
 
 - [ ] **Step 1: Write failing tests for select_node**
 
@@ -599,7 +599,7 @@ Add these tests to the `tests` module:
 - [ ] **Step 2: Run tests -- they should fail (select_node does not exist)**
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: compilation error.
@@ -612,11 +612,11 @@ Add this method inside the `impl WeightedScheduler` block:
     /// Select the best node for the given pod request.
     ///
     /// Scores all candidate nodes and returns the `node_id` of the highest-scoring
-    /// node. Returns `Err(NexaError::SchedulingFailed)` if no node can fit the pod
+    /// node. Returns `Err(HelyosError::SchedulingFailed)` if no node can fit the pod
     /// (all scores are `NEG_INFINITY`) or the node list is empty.
     pub fn select_node(&self, request: &PodRequest, nodes: &[NodeSnapshot]) -> Result<Uuid> {
         if nodes.is_empty() {
-            return Err(NexaError::SchedulingFailed(
+            return Err(HelyosError::SchedulingFailed(
                 "no candidate nodes available".into(),
             ));
         }
@@ -634,16 +634,16 @@ Add this method inside the `impl WeightedScheduler` block:
 
         match best_id {
             Some(id) if best_score > f64::NEG_INFINITY => Ok(id),
-            _ => Err(NexaError::SchedulingFailed(
+            _ => Err(HelyosError::SchedulingFailed(
                 "no node has sufficient resources".into(),
             )),
         }
     }
 ```
 
-- [ ] **Step 4: Add SchedulingFailed variant to NexaError**
+- [ ] **Step 4: Add SchedulingFailed variant to HelyosError**
 
-In `crates/nexa-core/src/error.rs`, add a new variant to the `NexaError` enum:
+In `crates/helyos-core/src/error.rs`, add a new variant to the `HelyosError` enum:
 
 ```rust
     #[error("scheduling failed: {0}")]
@@ -653,7 +653,7 @@ In `crates/nexa-core/src/error.rs`, add a new variant to the `NexaError` enum:
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: all 24 tests pass.
@@ -661,7 +661,7 @@ Expected: all 24 tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/scheduler.rs crates/nexa-core/src/error.rs
+git add crates/helyos-core/src/domain/scheduler.rs crates/helyos-core/src/error.rs
 git commit -m "feat(scheduler): implement select_node with best-score selection and SchedulingFailed error"
 ```
 
@@ -670,7 +670,7 @@ git commit -m "feat(scheduler): implement select_node with best-score selection 
 ### Task 5: Add binpack mode support with tests
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/scheduler.rs`
+- Modify: `crates/helyos-core/src/domain/scheduler.rs`
 
 - [ ] **Step 1: Write failing tests for binpack behavior**
 
@@ -768,7 +768,7 @@ Add these tests to the `tests` module:
 The binpack logic is already handled by the negative weights in `SchedulerWeights::binpack()` combined with the existing `score_node` implementation. The negative CPU/memory weights invert the preference so that *less* available capacity = *higher* score.
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: all 29 tests pass. No new production code needed -- the scoring formula inherently supports binpack via negative weights.
@@ -776,7 +776,7 @@ Expected: all 29 tests pass. No new production code needed -- the scoring formul
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/scheduler.rs
+git add crates/helyos-core/src/domain/scheduler.rs
 git commit -m "test(scheduler): add binpack mode tests proving negative weight inversion"
 ```
 
@@ -785,12 +785,12 @@ git commit -m "test(scheduler): add binpack mode tests proving negative weight i
 ### Task 6: Integrate scheduler into orchestrator deploy flow
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
-- Modify: `crates/nexa-core/src/domain/models/pod.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/models/pod.rs`
 
 - [ ] **Step 1: Write failing tests for scheduler integration**
 
-Add to the `tests` module in `crates/nexa-core/src/domain/orchestrator.rs`:
+Add to the `tests` module in `crates/helyos-core/src/domain/orchestrator.rs`:
 
 ```rust
     use crate::domain::scheduler::{SchedulerWeights, WeightedScheduler, NodeSnapshot};
@@ -825,14 +825,14 @@ Add to the `tests` module in `crates/nexa-core/src/domain/orchestrator.rs`:
 - [ ] **Step 2: Run tests -- they should fail**
 
 ```bash
-cargo test -p nexa-core -- domain::orchestrator::tests::deploy_assigns_node_id 2>&1
+cargo test -p helyos-core -- domain::orchestrator::tests::deploy_assigns_node_id 2>&1
 ```
 
 Expected: compilation error -- `node_id` does not exist on `Pod`.
 
 - [ ] **Step 3: Add node_id field to Pod**
 
-In `crates/nexa-core/src/domain/models/pod.rs` (or `crates/nexa-core/src/models/pod.rs` depending on Plan #1 state), add a `node_id` field to the `Pod` struct:
+In `crates/helyos-core/src/domain/models/pod.rs` (or `crates/helyos-core/src/models/pod.rs` depending on Plan #1 state), add a `node_id` field to the `Pod` struct:
 
 ```rust
 use uuid::Uuid;
@@ -848,7 +848,7 @@ And in `Pod::new()`, initialize it:
 
 - [ ] **Step 4: Add scheduler to Orchestrator**
 
-In `crates/nexa-core/src/domain/orchestrator.rs`, modify the `Orchestrator` struct to include the scheduler and local node ID:
+In `crates/helyos-core/src/domain/orchestrator.rs`, modify the `Orchestrator` struct to include the scheduler and local node ID:
 
 ```rust
 use crate::domain::scheduler::{
@@ -952,7 +952,7 @@ In `create_pod`, after creating the `Pod` object, assign the node_id:
 - [ ] **Step 6: Run tests to verify they pass**
 
 ```bash
-cargo test -p nexa-core -- domain::orchestrator 2>&1
+cargo test -p helyos-core -- domain::orchestrator 2>&1
 ```
 
 Expected: all orchestrator tests pass (including the new one).
@@ -960,7 +960,7 @@ Expected: all orchestrator tests pass (including the new one).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs crates/nexa-core/src/domain/models/pod.rs
+git add crates/helyos-core/src/domain/orchestrator.rs crates/helyos-core/src/domain/models/pod.rs
 git commit -m "feat(scheduler): integrate WeightedScheduler into orchestrator pod creation"
 ```
 
@@ -969,16 +969,16 @@ git commit -m "feat(scheduler): integrate WeightedScheduler into orchestrator po
 ### Task 7: Add scheduler config commands (CLI + API)
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/scheduler.rs` (add SchedulerConfig, strategy parsing)
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs` (add GetSchedulerConfig/SetSchedulerConfig commands)
-- Modify: `crates/nexad/src/api/handlers.rs` (add scheduler config endpoints)
-- Modify: `crates/nexad/src/api/routes.rs` (add scheduler config routes)
-- Modify: `crates/nexa-cli/src/main.rs` (add `cluster config` subcommands)
-- Modify: `crates/nexa-cli/src/commands.rs` (implement config functions)
+- Modify: `crates/helyos-core/src/domain/scheduler.rs` (add SchedulerConfig, strategy parsing)
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs` (add GetSchedulerConfig/SetSchedulerConfig commands)
+- Modify: `crates/helyosd/src/api/handlers.rs` (add scheduler config endpoints)
+- Modify: `crates/helyosd/src/api/routes.rs` (add scheduler config routes)
+- Modify: `crates/helyos-cli/src/main.rs` (add `cluster config` subcommands)
+- Modify: `crates/helyos-cli/src/commands.rs` (implement config functions)
 
 - [ ] **Step 1: Write tests for SchedulerConfig parsing**
 
-Add to the `tests` module in `crates/nexa-core/src/domain/scheduler.rs`:
+Add to the `tests` module in `crates/helyos-core/src/domain/scheduler.rs`:
 
 ```rust
     #[test]
@@ -1019,7 +1019,7 @@ Add to the `tests` module in `crates/nexa-core/src/domain/scheduler.rs`:
 
 - [ ] **Step 2: Implement SchedulerConfig**
 
-Add to `crates/nexa-core/src/domain/scheduler.rs`:
+Add to `crates/helyos-core/src/domain/scheduler.rs`:
 
 ```rust
 /// Persisted scheduler configuration. Stored in cluster_config table.
@@ -1035,7 +1035,7 @@ impl SchedulerConfig {
             "spread" => SchedulerWeights::spread(),
             "binpack" => SchedulerWeights::binpack(),
             _ => {
-                return Err(NexaError::InvalidSpec(format!(
+                return Err(HelyosError::InvalidSpec(format!(
                     "unknown scheduler strategy: '{strategy}'. Valid: spread, binpack"
                 )));
             }
@@ -1054,7 +1054,7 @@ impl SchedulerConfig {
             "load" => self.weights.load = value,
             "failure" => self.weights.failure = value,
             _ => {
-                return Err(NexaError::InvalidSpec(format!(
+                return Err(HelyosError::InvalidSpec(format!(
                     "unknown weight: '{name}'. Valid: cpu, memory, load, failure"
                 )));
             }
@@ -1077,14 +1077,14 @@ impl Default for SchedulerConfig {
 - [ ] **Step 3: Run tests to verify SchedulerConfig works**
 
 ```bash
-cargo test -p nexa-core -- domain::scheduler 2>&1
+cargo test -p helyos-core -- domain::scheduler 2>&1
 ```
 
 Expected: all 34 tests pass.
 
 - [ ] **Step 4: Add orchestrator commands for scheduler config**
 
-In `crates/nexa-core/src/domain/orchestrator.rs`, add two new `Command` variants:
+In `crates/helyos-core/src/domain/orchestrator.rs`, add two new `Command` variants:
 
 ```rust
     GetSchedulerConfig {
@@ -1137,25 +1137,25 @@ Add handle methods:
         self.tx
             .send(Command::SetSchedulerConfig { config, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 ```
 
 - [ ] **Step 5: Add API routes for scheduler config**
 
-In `crates/nexad/src/api/routes.rs`, add two routes:
+In `crates/helyosd/src/api/routes.rs`, add two routes:
 
 ```rust
         .route("/api/v1/cluster/scheduler", get(handlers::get_scheduler_config))
         .route("/api/v1/cluster/scheduler", post(handlers::set_scheduler_config))
 ```
 
-In `crates/nexad/src/api/handlers.rs`, add the handler functions:
+In `crates/helyosd/src/api/handlers.rs`, add the handler functions:
 
 ```rust
-use nexa_core::domain::scheduler::SchedulerConfig;
+use helyos_core::domain::scheduler::SchedulerConfig;
 
 pub async fn get_scheduler_config(State(handle): AppState) -> impl IntoResponse {
     Json(handle.get_scheduler_config().await)
@@ -1225,7 +1225,7 @@ pub async fn set_scheduler_config(
 
 - [ ] **Step 6: Add CLI `cluster config` subcommands**
 
-In `crates/nexa-cli/src/main.rs`, add a new `Cluster` subcommand with nested `Config` sub-subcommand:
+In `crates/helyos-cli/src/main.rs`, add a new `Cluster` subcommand with nested `Config` sub-subcommand:
 
 ```rust
     /// Manage cluster settings
@@ -1277,10 +1277,10 @@ Wire it in the main match:
 
 - [ ] **Step 7: Implement CLI config functions**
 
-In `crates/nexa-cli/src/commands.rs`, add:
+In `crates/helyos-cli/src/commands.rs`, add:
 
 ```rust
-pub async fn get_scheduler_config(client: &NexaClient) -> Result<()> {
+pub async fn get_scheduler_config(client: &HelyosClient) -> Result<()> {
     let config: serde_json::Value = client.get("/api/v1/cluster/scheduler").await?;
     println!("Scheduler configuration:");
     println!("  Strategy: {}", config["strategy"]);
@@ -1294,7 +1294,7 @@ pub async fn get_scheduler_config(client: &NexaClient) -> Result<()> {
     Ok(())
 }
 
-pub async fn set_cluster_config(client: &NexaClient, key: &str, value: &str) -> Result<()> {
+pub async fn set_cluster_config(client: &HelyosClient, key: &str, value: &str) -> Result<()> {
     let body = if key == "scheduler" {
         serde_json::json!({ "strategy": value }).to_string()
     } else if let Some(weight_name) = key.strip_prefix("scheduler.weights.") {
@@ -1340,13 +1340,13 @@ git commit -m "feat(scheduler): add cluster config CLI/API for scheduler strateg
 ### Task 8: Single-node mode -- scheduler returns local node
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs` (tests)
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs` (tests)
 
 This task verifies that the existing implementation already handles single-node mode correctly. No new production code is needed -- the orchestrator already builds a single `NodeSnapshot` for the local node and the scheduler picks it.
 
 - [ ] **Step 1: Write explicit single-node integration tests**
 
-Add to the `tests` module in `crates/nexa-core/src/domain/orchestrator.rs`:
+Add to the `tests` module in `crates/helyos-core/src/domain/orchestrator.rs`:
 
 ```rust
     #[tokio::test]
@@ -1439,7 +1439,7 @@ Add to the `tests` module in `crates/nexa-core/src/domain/orchestrator.rs`:
 - [ ] **Step 2: Run tests to verify they pass**
 
 ```bash
-cargo test -p nexa-core -- domain::orchestrator 2>&1
+cargo test -p helyos-core -- domain::orchestrator 2>&1
 ```
 
 Expected: all orchestrator tests pass, including the 3 new single-node tests.
@@ -1455,7 +1455,7 @@ Expected: all tests pass across the workspace.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "test(scheduler): add single-node mode and runtime config change integration tests"
 ```
 

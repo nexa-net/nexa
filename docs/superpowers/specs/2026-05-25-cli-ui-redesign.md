@@ -1,16 +1,16 @@
-# NexaNet CLI UI/UX Redesign — Design Spec
+# Helyos CLI UI/UX Redesign — Design Spec
 
 ## Goal
 
-Modernize the nexa CLI with a btop-style live TUI dashboard (`nexa top`) and polished box-panel output for all existing commands. Nerd/hacker aesthetic — GitHub Dark colors, Unicode box-drawing, Nerd Font icons with fallback.
+Modernize the helyos CLI with a btop-style live TUI dashboard (`helyos top`) and polished box-panel output for all existing commands. Nerd/hacker aesthetic — GitHub Dark colors, Unicode box-drawing, Nerd Font icons with fallback.
 
 ## Architecture
 
 Two rendering paths in one CLI, sharing a color/icon palette:
 
-1. **One-shot panel renderer** (`src/output/`) — commands like `nexa status`, `nexa pods`, `nexa deploy` print box-bordered panels to stdout using `console` crate. No ratatui. Output remains pipeable, `--json` mode unchanged.
+1. **One-shot panel renderer** (`src/output/`) — commands like `helyos status`, `helyos pods`, `helyos deploy` print box-bordered panels to stdout using `console` crate. No ratatui. Output remains pipeable, `--json` mode unchanged.
 
-2. **TUI app** (`src/tui/`) — `nexa top` launches a ratatui alternate-screen app with live refresh, keyboard navigation, and basic pod actions.
+2. **TUI app** (`src/tui/`) — `helyos top` launches a ratatui alternate-screen app with live refresh, keyboard navigation, and basic pod actions.
 
 ```
 src/
@@ -22,7 +22,7 @@ src/
 │   ├── spinner.rs       # Unchanged (indicatif)
 │   ├── deploy.rs        # NEW — Deploy progress panel (steps + timing footer)
 │   └── age.rs           # Unchanged
-├── tui/                 # NEW — nexa top
+├── tui/                 # NEW — helyos top
 │   ├── mod.rs           # Entry point: setup terminal, run event loop, restore
 │   ├── app.rs           # App state (active panel, pod/node/event data, cursor position)
 │   ├── event.rs         # Event loop: crossterm key events + 2s API refresh ticker + SSE events
@@ -57,7 +57,7 @@ src/
 
 ### Icons
 
-Two modes controlled by `NEXA_ICONS` env var (default: `unicode`):
+Two modes controlled by `HELYOS_ICONS` env var (default: `unicode`):
 
 | Semantic | Nerd Font | Unicode fallback |
 |----------|-----------|------------------|
@@ -123,27 +123,27 @@ Terminal width detection via `console::Term::stdout().size()` for responsive col
 
 | Command | Panel title | Content type | Footer |
 |---------|------------|--------------|--------|
-| `nexa status` | ` Cluster Status` | key-value rows | — |
-| `nexa pods` | `  Pods` | table (name, project, deployment, status, image, age) | total count |
-| `nexa deployments` | ` Deployments` | table (name, project, status, replicas, image, age) | total count |
-| `nexa nodes` | `󰐻 Nodes` | table + inline CPU/MEM gauge bars | total count |
-| `nexa deploy FILE` | `  Deploying` | progressive steps | status + timing |
-| `nexa project list` | ` Projects` | table (name, age) | total count |
-| `nexa secret list` | ` Secrets` | table (name, project) | total count |
-| `nexa routes` | ` Routes` | table (domain, project, deployment, tls, created) | total count |
+| `helyos status` | ` Cluster Status` | key-value rows | — |
+| `helyos pods` | `  Pods` | table (name, project, deployment, status, image, age) | total count |
+| `helyos deployments` | ` Deployments` | table (name, project, status, replicas, image, age) | total count |
+| `helyos nodes` | `󰐻 Nodes` | table + inline CPU/MEM gauge bars | total count |
+| `helyos deploy FILE` | `  Deploying` | progressive steps | status + timing |
+| `helyos project list` | ` Projects` | table (name, age) | total count |
+| `helyos secret list` | ` Secrets` | table (name, project) | total count |
+| `helyos routes` | ` Routes` | table (domain, project, deployment, tls, created) | total count |
 
 ### Commands that stay simple (action confirmations):
 
 These print a single-line message with icon — no panel:
 
-- `nexa stop NAME` → `✓ Deployment 'NAME' stopped`
-- `nexa rm NAME` → `✓ Deployment 'NAME' removed`
-- `nexa scale NAME N` → `✓ web-api: 2 → 5 replicas`
-- `nexa secret set/rm` → `✓ Secret 'NAME' set in project 'PROJECT'`
-- `nexa route add/rm` → `✓ Route 'DOMAIN' → project/deployment`
-- `nexa project create/suspend/resume/delete` → `✓ Project 'NAME' created`
+- `helyos stop NAME` → `✓ Deployment 'NAME' stopped`
+- `helyos rm NAME` → `✓ Deployment 'NAME' removed`
+- `helyos scale NAME N` → `✓ web-api: 2 → 5 replicas`
+- `helyos secret set/rm` → `✓ Secret 'NAME' set in project 'PROJECT'`
+- `helyos route add/rm` → `✓ Route 'DOMAIN' → project/deployment`
+- `helyos project create/suspend/resume/delete` → `✓ Project 'NAME' created`
 
-### `nexa logs` enhancement:
+### `helyos logs` enhancement:
 
 Replace raw `data: ...` lines with formatted output:
 
@@ -154,7 +154,7 @@ Replace raw `data: ...` lines with formatted output:
 
 Timestamp in `text-secondary`, pod name in `accent`, separator `│` in `border`, log content in `text`.
 
-### Gauge bars in `nexa nodes`:
+### Gauge bars in `helyos nodes`:
 
 Inline in the table for CPU and MEM columns:
 
@@ -164,17 +164,17 @@ Inline in the table for CPU and MEM columns:
 
 Bar characters: `█` (filled) and `░` (empty). Color follows the threshold rules (green/yellow/red).
 
-## Section 4: `nexa top` — TUI Dashboard
+## Section 4: `helyos top` — TUI Dashboard
 
 ### Entry and exit
 
-`nexa top` enters crossterm raw mode + alternate screen. On `q` or `Esc`, restores the terminal. Panic hook restores terminal on crash.
+`helyos top` enters crossterm raw mode + alternate screen. On `q` or `Esc`, restores the terminal. Panic hook restores terminal on crash.
 
 ### Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  NexaNet          ⏻ running  │ 󰐻 3 nodes │  12 pods │ ◎ 5 deploys│  Row 0: status bar (3 lines)
+│  Helyos          ⏻ running  │ 󰐻 3 nodes │  12 pods │ ◎ 5 deploys│  Row 0: status bar (3 lines)
 ├──────────────────────────────────┬──────────────────────────────────┤
 │   Pods                          │ 󰐻  Nodes                        │
 │  NAME         STATUS   CPU  MEM │  node-1  cpu ████░░░░ 38%       │  Row 1: split (flex)
@@ -199,7 +199,7 @@ ratatui `Layout::default().constraints([Length(3), Min(10), Percentage(25), Leng
 - **Events**: SSE stream on `GET /api/v1/events` (persistent connection, parsed as they arrive)
 - **Render**: re-draw on every tick or incoming event
 
-If nexad is unreachable, the status bar shows `● disconnected` in red and retries every 5 seconds.
+If helyosd is unreachable, the status bar shows `● disconnected` in red and retries every 5 seconds.
 
 ### Keyboard navigation
 
@@ -233,9 +233,9 @@ Pressing `l` on a pod enters full-screen log streaming:
 
 Auto-scrolls to bottom. `G` jumps to bottom, `g` to top. `/` filters log lines.
 
-## Section 5: nexad API additions
+## Section 5: helyosd API additions
 
-Two new endpoints needed for `nexa top`:
+Two new endpoints needed for `helyos top`:
 
 ### `GET /api/v1/nodes`
 
@@ -276,7 +276,7 @@ Kinds: `pod`, `deployment`, `scale`, `node`. The existing event watcher records 
 
 ## Section 6: Dependencies
 
-### New in nexa-cli:
+### New in helyos-cli:
 
 ```toml
 ratatui = "0.29"
@@ -287,17 +287,17 @@ crossterm = "0.28"
 
 - `console` (0.15) — still used for one-shot panel rendering
 - `indicatif` (0.17) — still used for spinners
-- `dialoguer` (0.11) — still used for `nexa init`
+- `dialoguer` (0.11) — still used for `helyos init`
 - `clap` (4) — adds `top` subcommand
 
-### nexad:
+### helyosd:
 
 No new dependencies. `sysinfo` (0.32) is already present. New handler code in `src/api/handlers.rs` for `/api/v1/nodes` and `/api/v1/events`.
 
 ## Out of Scope
 
 - Theme/config file — colors are hardcoded (GitHub Dark)
-- Mouse support in `nexa top`
+- Mouse support in `helyos top`
 - Sparklines / historical charts
 - Plugin system
 - Customizable keybindings

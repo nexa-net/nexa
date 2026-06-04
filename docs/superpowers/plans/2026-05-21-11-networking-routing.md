@@ -5,15 +5,15 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
 **Goal:** Add overlay networking (WireGuard via boringtun), a pluggable reverse proxy abstraction with three backends (traefik, caddy, nginx), and automated TLS certificate management to enable multi-node container routing with HTTPS.
 
-**Architecture:** Three layers compose into the hexagonal architecture. Layer 1 is a WireGuard overlay network: when a worker joins the cluster, the master assigns it a `/24` subnet from the cluster CIDR (`172.20.0.0/16`), generates a WireGuard keypair, and distributes peer configs via gRPC; each node runs a userspace WireGuard interface via `boringtun` so containers on different nodes can reach each other by IP. Layer 2 is a `ProxyBackend` port trait in `nexa-core` with three adapter implementations in `nexad` (traefik, caddy, and nginx config generators); the orchestrator calls `apply_routes` on deploy and `remove_route` on teardown. Layer 3 is TLS automation: certificates are stored encrypted in SQLite, and a daily renewal task uses `instant-acme` to issue/renew certificates 30 days before expiry.
+**Architecture:** Three layers compose into the hexagonal architecture. Layer 1 is a WireGuard overlay network: when a worker joins the cluster, the master assigns it a `/24` subnet from the cluster CIDR (`172.20.0.0/16`), generates a WireGuard keypair, and distributes peer configs via gRPC; each node runs a userspace WireGuard interface via `boringtun` so containers on different nodes can reach each other by IP. Layer 2 is a `ProxyBackend` port trait in `helyos-core` with three adapter implementations in `helyosd` (traefik, caddy, and nginx config generators); the orchestrator calls `apply_routes` on deploy and `remove_route` on teardown. Layer 3 is TLS automation: certificates are stored encrypted in SQLite, and a daily renewal task uses `instant-acme` to issue/renew certificates 30 days before expiry.
 
 **Tech Stack:** boringtun 0.6, x25519-dalek 2, base64 0.22, instant-acme 0.7, tokio, async-trait, chrono, serde, sqlx (existing)
 
@@ -22,13 +22,13 @@
 ### Task 1: Define ProxyBackend port trait with RouteConfig, Upstream, TlsConfig types
 
 **Files:**
-- Create: `crates/nexa-core/src/ports/proxy.rs`
-- Modify: `crates/nexa-core/src/ports/mod.rs`
-- Modify: `crates/nexa-core/src/lib.rs` (if `ports` module not yet exposed)
+- Create: `crates/helyos-core/src/ports/proxy.rs`
+- Modify: `crates/helyos-core/src/ports/mod.rs`
+- Modify: `crates/helyos-core/src/lib.rs` (if `ports` module not yet exposed)
 
 - [ ] **Step 1: Create the proxy port trait file**
 
-Create `crates/nexa-core/src/ports/proxy.rs`:
+Create `crates/helyos-core/src/ports/proxy.rs`:
 
 ```rust
 use std::path::PathBuf;
@@ -148,18 +148,18 @@ mod tests {
 
 - [ ] **Step 2: Wire the module into the ports directory**
 
-If `crates/nexa-core/src/ports/mod.rs` exists (created by Plan #10), add:
+If `crates/helyos-core/src/ports/mod.rs` exists (created by Plan #10), add:
 ```rust
 pub mod proxy;
 ```
 
-If the `ports` directory does not yet exist, create `crates/nexa-core/src/ports/mod.rs`:
+If the `ports` directory does not yet exist, create `crates/helyos-core/src/ports/mod.rs`:
 ```rust
 pub mod dns;
 pub mod proxy;
 ```
 
-And update `crates/nexa-core/src/lib.rs` to expose it:
+And update `crates/helyos-core/src/lib.rs` to expose it:
 ```rust
 pub mod config;
 pub mod error;
@@ -170,18 +170,18 @@ pub mod runtime;
 
 - [ ] **Step 3: Verify compilation**
 
-Run: `cargo check -p nexa-core 2>&1`
+Run: `cargo check -p helyos-core 2>&1`
 Expected: compiles with no errors
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cargo test -p nexa-core -- ports::proxy 2>&1`
+Run: `cargo test -p helyos-core -- ports::proxy 2>&1`
 Expected: 6 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/proxy.rs crates/nexa-core/src/ports/mod.rs crates/nexa-core/src/lib.rs
+git add crates/helyos-core/src/ports/proxy.rs crates/helyos-core/src/ports/mod.rs crates/helyos-core/src/lib.rs
 git commit -m "feat(proxy): define ProxyBackend port trait with RouteConfig, Upstream, TlsConfig"
 ```
 
@@ -190,14 +190,14 @@ git commit -m "feat(proxy): define ProxyBackend port trait with RouteConfig, Ups
 ### Task 2: Route domain model + SQLite migrations (routes, certificates, subnet_allocations tables)
 
 **Files:**
-- Create: `crates/nexa-core/src/models/route.rs`
-- Modify: `crates/nexa-core/src/models/mod.rs`
-- Modify: `crates/nexa-core/src/error.rs`
-- Create: `crates/nexad/migrations/003_networking.sql`
+- Create: `crates/helyos-core/src/models/route.rs`
+- Modify: `crates/helyos-core/src/models/mod.rs`
+- Modify: `crates/helyos-core/src/error.rs`
+- Create: `crates/helyosd/migrations/003_networking.sql`
 
-- [ ] **Step 1: Add NexaError variants for routing and proxy errors**
+- [ ] **Step 1: Add HelyosError variants for routing and proxy errors**
 
-In `crates/nexa-core/src/error.rs`, add these variants to the `NexaError` enum:
+In `crates/helyos-core/src/error.rs`, add these variants to the `HelyosError` enum:
 
 ```rust
 #[error("route not found: {0}")]
@@ -218,7 +218,7 @@ Network(String),
 
 - [ ] **Step 2: Create the Route domain model**
 
-Create `crates/nexa-core/src/models/route.rs`:
+Create `crates/helyos-core/src/models/route.rs`:
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -379,7 +379,7 @@ mod tests {
 
 - [ ] **Step 3: Wire route module into models**
 
-Update `crates/nexa-core/src/models/mod.rs`:
+Update `crates/helyos-core/src/models/mod.rs`:
 
 ```rust
 mod deployment;
@@ -395,7 +395,7 @@ pub use route::*;
 
 - [ ] **Step 4: Create SQL migration file for the three new tables**
 
-Create `crates/nexad/migrations/003_networking.sql`:
+Create `crates/helyosd/migrations/003_networking.sql`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS routes (
@@ -430,18 +430,18 @@ CREATE INDEX IF NOT EXISTS idx_subnet_allocations_subnet ON subnet_allocations(s
 
 - [ ] **Step 5: Verify compilation**
 
-Run: `cargo check -p nexa-core 2>&1`
+Run: `cargo check -p helyos-core 2>&1`
 Expected: compiles with no errors
 
 - [ ] **Step 6: Run the tests**
 
-Run: `cargo test -p nexa-core -- models::route 2>&1`
+Run: `cargo test -p helyos-core -- models::route 2>&1`
 Expected: 8 tests pass
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/nexa-core/src/models/route.rs crates/nexa-core/src/models/mod.rs crates/nexa-core/src/error.rs crates/nexad/migrations/003_networking.sql
+git add crates/helyos-core/src/models/route.rs crates/helyos-core/src/models/mod.rs crates/helyos-core/src/error.rs crates/helyosd/migrations/003_networking.sql
 git commit -m "feat(routing): add Route, Certificate, SubnetAllocation models and SQL migration"
 ```
 
@@ -450,14 +450,14 @@ git commit -m "feat(routing): add Route, Certificate, SubnetAllocation models an
 ### Task 3: Add route CRUD to StateStore trait + SqliteStore + InMemoryStore
 
 **Files:**
-- Create: `crates/nexa-core/src/ports/route_store.rs`
-- Modify: `crates/nexa-core/src/ports/mod.rs`
-- Create: `crates/nexad/src/adapters/state/memory_route_store.rs`
-- Modify: `crates/nexad/src/adapters/state/mod.rs` (or equivalent)
+- Create: `crates/helyos-core/src/ports/route_store.rs`
+- Modify: `crates/helyos-core/src/ports/mod.rs`
+- Create: `crates/helyosd/src/adapters/state/memory_route_store.rs`
+- Modify: `crates/helyosd/src/adapters/state/mod.rs` (or equivalent)
 
 - [ ] **Step 1: Define the route storage port trait**
 
-Create `crates/nexa-core/src/ports/route_store.rs`:
+Create `crates/helyos-core/src/ports/route_store.rs`:
 
 ```rust
 use async_trait::async_trait;
@@ -498,14 +498,14 @@ mod tests {
 }
 ```
 
-Wire it in `crates/nexa-core/src/ports/mod.rs`:
+Wire it in `crates/helyos-core/src/ports/mod.rs`:
 ```rust
 pub mod route_store;
 ```
 
 - [ ] **Step 2: Implement InMemoryRouteStore**
 
-Create `crates/nexad/src/adapters/state/memory_route_store.rs`:
+Create `crates/helyosd/src/adapters/state/memory_route_store.rs`:
 
 ```rust
 use std::collections::HashMap;
@@ -514,9 +514,9 @@ use std::sync::RwLock;
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::models::{Certificate, Route, SubnetAllocation};
-use nexa_core::ports::route_store::RouteStore;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::models::{Certificate, Route, SubnetAllocation};
+use helyos_core::ports::route_store::RouteStore;
 
 /// In-memory implementation of RouteStore for testing.
 pub struct InMemoryRouteStore {
@@ -540,7 +540,7 @@ impl RouteStore for InMemoryRouteStore {
     async fn insert_route(&self, route: &Route) -> Result<()> {
         let mut routes = self.routes.write().unwrap();
         if routes.contains_key(&route.domain) {
-            return Err(NexaError::RouteAlreadyExists(route.domain.clone()));
+            return Err(HelyosError::RouteAlreadyExists(route.domain.clone()));
         }
         routes.insert(route.domain.clone(), route.clone());
         Ok(())
@@ -602,14 +602,14 @@ impl RouteStore for InMemoryRouteStore {
             .iter()
             .any(|s| s.node_id == alloc.node_id && s.project == alloc.project);
         if exists {
-            return Err(NexaError::Network(format!(
+            return Err(HelyosError::Network(format!(
                 "subnet already allocated for node {} project {}",
                 alloc.node_id, alloc.project
             )));
         }
         let subnet_taken = subnets.iter().any(|s| s.subnet == alloc.subnet);
         if subnet_taken {
-            return Err(NexaError::Network(format!(
+            return Err(HelyosError::Network(format!(
                 "subnet {} already in use",
                 alloc.subnet
             )));
@@ -646,7 +646,7 @@ impl RouteStore for InMemoryRouteStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nexa_core::models::TlsMode;
+    use helyos_core::models::TlsMode;
 
     #[tokio::test]
     async fn insert_and_get_route() {
@@ -840,13 +840,13 @@ git commit -m "feat(routing): add RouteStore trait, InMemoryRouteStore, and SQL 
 ### Task 4: Implement NginxBackend adapter (generate nginx conf, reload via signal)
 
 **Files:**
-- Create: `crates/nexad/src/adapters/proxy/mod.rs`
-- Create: `crates/nexad/src/adapters/proxy/nginx.rs`
-- Modify: `crates/nexad/src/adapters/mod.rs`
+- Create: `crates/helyosd/src/adapters/proxy/mod.rs`
+- Create: `crates/helyosd/src/adapters/proxy/nginx.rs`
+- Modify: `crates/helyosd/src/adapters/mod.rs`
 
 - [ ] **Step 1: Create the proxy adapter module and wire into adapters**
 
-Create `crates/nexad/src/adapters/proxy/mod.rs`:
+Create `crates/helyosd/src/adapters/proxy/mod.rs`:
 
 ```rust
 mod nginx;
@@ -854,14 +854,14 @@ mod nginx;
 pub use nginx::NginxBackend;
 ```
 
-Wire into `crates/nexad/src/adapters/mod.rs`:
+Wire into `crates/helyosd/src/adapters/mod.rs`:
 ```rust
 pub mod proxy;
 ```
 
 - [ ] **Step 2: Implement NginxBackend**
 
-Create `crates/nexad/src/adapters/proxy/nginx.rs`:
+Create `crates/helyosd/src/adapters/proxy/nginx.rs`:
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -870,8 +870,8 @@ use std::process::Command as StdCommand;
 use async_trait::async_trait;
 use tracing::{info, warn};
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::proxy::{ProxyBackend, RouteConfig, TlsConfig};
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::proxy::{ProxyBackend, RouteConfig, TlsConfig};
 
 /// Nginx reverse proxy backend.
 ///
@@ -892,7 +892,7 @@ impl NginxBackend {
 
     /// Generate the nginx config file path for a domain.
     fn conf_path(&self, domain: &str) -> PathBuf {
-        self.conf_dir.join(format!("nexa-{domain}.conf"))
+        self.conf_dir.join(format!("helyos-{domain}.conf"))
     }
 
     /// Render an nginx server block for a route.
@@ -998,7 +998,7 @@ impl ProxyBackend for NginxBackend {
             let path = self.conf_path(&route.domain);
             tokio::fs::write(&path, &conf)
                 .await
-                .map_err(|e| NexaError::Proxy(format!("failed to write nginx config {}: {e}", path.display())))?;
+                .map_err(|e| HelyosError::Proxy(format!("failed to write nginx config {}: {e}", path.display())))?;
             info!(domain = route.domain, path = %path.display(), "nginx config written");
         }
         Ok(())
@@ -1009,7 +1009,7 @@ impl ProxyBackend for NginxBackend {
         if path.exists() {
             tokio::fs::remove_file(&path)
                 .await
-                .map_err(|e| NexaError::Proxy(format!("failed to remove nginx config {}: {e}", path.display())))?;
+                .map_err(|e| HelyosError::Proxy(format!("failed to remove nginx config {}: {e}", path.display())))?;
             info!(domain, "nginx config removed");
         } else {
             warn!(domain, "nginx config not found, nothing to remove");
@@ -1022,11 +1022,11 @@ impl ProxyBackend for NginxBackend {
             .arg("-s")
             .arg("reload")
             .output()
-            .map_err(|e| NexaError::Proxy(format!("failed to run nginx reload: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("failed to run nginx reload: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(NexaError::Proxy(format!("nginx reload failed: {stderr}")));
+            return Err(HelyosError::Proxy(format!("nginx reload failed: {stderr}")));
         }
 
         info!("nginx reloaded");
@@ -1037,7 +1037,7 @@ impl ProxyBackend for NginxBackend {
         let output = StdCommand::new(&self.nginx_bin)
             .arg("-t")
             .output()
-            .map_err(|e| NexaError::Proxy(format!("failed to run nginx -t: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("failed to run nginx -t: {e}")))?;
 
         Ok(output.status.success())
     }
@@ -1052,8 +1052,8 @@ mod tests {
         RouteConfig {
             domain: "api.example.com".into(),
             upstream: vec![
-                nexa_core::ports::proxy::Upstream { address: "10.0.0.1:3000".into(), weight: 1 },
-                nexa_core::ports::proxy::Upstream { address: "10.0.0.2:3000".into(), weight: 2 },
+                helyos_core::ports::proxy::Upstream { address: "10.0.0.1:3000".into(), weight: 1 },
+                helyos_core::ports::proxy::Upstream { address: "10.0.0.2:3000".into(), weight: 2 },
             ],
             tls: TlsConfig::None,
         }
@@ -1063,7 +1063,7 @@ mod tests {
         RouteConfig {
             domain: "secure.example.com".into(),
             upstream: vec![
-                nexa_core::ports::proxy::Upstream { address: "10.0.0.1:8080".into(), weight: 1 },
+                helyos_core::ports::proxy::Upstream { address: "10.0.0.1:8080".into(), weight: 1 },
             ],
             tls: TlsConfig::Auto { email: "admin@example.com".into() },
         }
@@ -1073,7 +1073,7 @@ mod tests {
         RouteConfig {
             domain: "manual.example.com".into(),
             upstream: vec![
-                nexa_core::ports::proxy::Upstream { address: "10.0.0.5:443".into(), weight: 1 },
+                helyos_core::ports::proxy::Upstream { address: "10.0.0.5:443".into(), weight: 1 },
             ],
             tls: TlsConfig::Manual {
                 cert: PathBuf::from("/etc/certs/cert.pem"),
@@ -1119,7 +1119,7 @@ mod tests {
     fn conf_path_uses_domain() {
         let backend = NginxBackend::new("/etc/nginx/conf.d", "nginx");
         let path = backend.conf_path("api.example.com");
-        assert_eq!(path, PathBuf::from("/etc/nginx/conf.d/nexa-api.example.com.conf"));
+        assert_eq!(path, PathBuf::from("/etc/nginx/conf.d/helyos-api.example.com.conf"));
     }
 
     #[tokio::test]
@@ -1129,7 +1129,7 @@ mod tests {
 
         backend.apply_routes(&[make_http_route()]).await.unwrap();
 
-        let path = tmp.path().join("nexa-api.example.com.conf");
+        let path = tmp.path().join("helyos-api.example.com.conf");
         assert!(path.exists());
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("proxy_pass http://api_example_com;"));
@@ -1143,7 +1143,7 @@ mod tests {
         backend.apply_routes(&[make_http_route()]).await.unwrap();
         backend.remove_route("api.example.com").await.unwrap();
 
-        let path = tmp.path().join("nexa-api.example.com.conf");
+        let path = tmp.path().join("helyos-api.example.com.conf");
         assert!(!path.exists());
     }
 
@@ -1158,7 +1158,7 @@ mod tests {
 
 - [ ] **Step 3: Add tempfile dev-dependency**
 
-In `crates/nexad/Cargo.toml`, add:
+In `crates/helyosd/Cargo.toml`, add:
 ```toml
 [dev-dependencies]
 tempfile = "3"
@@ -1166,13 +1166,13 @@ tempfile = "3"
 
 - [ ] **Step 4: Verify compilation and tests**
 
-Run: `cargo test -p nexad -- adapters::proxy::nginx 2>&1`
+Run: `cargo test -p helyosd -- adapters::proxy::nginx 2>&1`
 Expected: 7 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/proxy/ crates/nexad/src/adapters/mod.rs crates/nexad/Cargo.toml
+git add crates/helyosd/src/adapters/proxy/ crates/helyosd/src/adapters/mod.rs crates/helyosd/Cargo.toml
 git commit -m "feat(proxy): implement NginxBackend adapter with config generation and reload"
 ```
 
@@ -1181,12 +1181,12 @@ git commit -m "feat(proxy): implement NginxBackend adapter with config generatio
 ### Task 5: Implement CaddyBackend adapter (generate Caddyfile, reload via API/signal)
 
 **Files:**
-- Create: `crates/nexad/src/adapters/proxy/caddy.rs`
-- Modify: `crates/nexad/src/adapters/proxy/mod.rs`
+- Create: `crates/helyosd/src/adapters/proxy/caddy.rs`
+- Modify: `crates/helyosd/src/adapters/proxy/mod.rs`
 
 - [ ] **Step 1: Implement CaddyBackend**
 
-Create `crates/nexad/src/adapters/proxy/caddy.rs`:
+Create `crates/helyosd/src/adapters/proxy/caddy.rs`:
 
 ```rust
 use std::path::PathBuf;
@@ -1194,8 +1194,8 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use tracing::{info, warn};
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::proxy::{ProxyBackend, RouteConfig, TlsConfig};
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::proxy::{ProxyBackend, RouteConfig, TlsConfig};
 
 /// Caddy reverse proxy backend.
 ///
@@ -1273,7 +1273,7 @@ impl ProxyBackend for CaddyBackend {
         tokio::fs::write(&self.caddyfile_path, &caddyfile)
             .await
             .map_err(|e| {
-                NexaError::Proxy(format!(
+                HelyosError::Proxy(format!(
                     "failed to write Caddyfile {}: {e}",
                     self.caddyfile_path.display()
                 ))
@@ -1326,7 +1326,7 @@ impl ProxyBackend for CaddyBackend {
 
         tokio::fs::write(&self.caddyfile_path, result.trim_end())
             .await
-            .map_err(|e| NexaError::Proxy(format!("failed to rewrite Caddyfile: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("failed to rewrite Caddyfile: {e}")))?;
 
         info!(domain, "route removed from Caddyfile");
         Ok(())
@@ -1335,7 +1335,7 @@ impl ProxyBackend for CaddyBackend {
     async fn reload(&self) -> Result<()> {
         let content = tokio::fs::read_to_string(&self.caddyfile_path)
             .await
-            .map_err(|e| NexaError::Proxy(format!("failed to read Caddyfile: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("failed to read Caddyfile: {e}")))?;
 
         let url = format!("{}/load", self.admin_api);
         let client = reqwest::Client::new();
@@ -1345,11 +1345,11 @@ impl ProxyBackend for CaddyBackend {
             .body(content)
             .send()
             .await
-            .map_err(|e| NexaError::Proxy(format!("caddy reload request failed: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("caddy reload request failed: {e}")))?;
 
         if !resp.status().is_success() {
             let body = resp.text().await.unwrap_or_default();
-            return Err(NexaError::Proxy(format!("caddy reload failed: {body}")));
+            return Err(HelyosError::Proxy(format!("caddy reload failed: {body}")));
         }
 
         info!("caddy reloaded via admin API");
@@ -1369,7 +1369,7 @@ impl ProxyBackend for CaddyBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nexa_core::ports::proxy::Upstream;
+    use helyos_core::ports::proxy::Upstream;
 
     fn make_routes() -> Vec<RouteConfig> {
         vec![
@@ -1476,7 +1476,7 @@ mod tests {
 
 - [ ] **Step 2: Update proxy module exports**
 
-Update `crates/nexad/src/adapters/proxy/mod.rs`:
+Update `crates/helyosd/src/adapters/proxy/mod.rs`:
 
 ```rust
 mod caddy;
@@ -1486,22 +1486,22 @@ pub use caddy::CaddyBackend;
 pub use nginx::NginxBackend;
 ```
 
-- [ ] **Step 3: Add reqwest dependency to nexad if not present**
+- [ ] **Step 3: Add reqwest dependency to helyosd if not present**
 
-Check `crates/nexad/Cargo.toml` for `reqwest`. If absent, add:
+Check `crates/helyosd/Cargo.toml` for `reqwest`. If absent, add:
 ```toml
 reqwest = { workspace = true }
 ```
 
 - [ ] **Step 4: Verify and test**
 
-Run: `cargo test -p nexad -- adapters::proxy::caddy 2>&1`
+Run: `cargo test -p helyosd -- adapters::proxy::caddy 2>&1`
 Expected: 6 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/proxy/caddy.rs crates/nexad/src/adapters/proxy/mod.rs crates/nexad/Cargo.toml
+git add crates/helyosd/src/adapters/proxy/caddy.rs crates/helyosd/src/adapters/proxy/mod.rs crates/helyosd/Cargo.toml
 git commit -m "feat(proxy): implement CaddyBackend adapter with Caddyfile generation and admin API reload"
 ```
 
@@ -1510,12 +1510,12 @@ git commit -m "feat(proxy): implement CaddyBackend adapter with Caddyfile genera
 ### Task 6: Implement TraefikBackend adapter (generate YAML config, hot-reload via file watch)
 
 **Files:**
-- Create: `crates/nexad/src/adapters/proxy/traefik.rs`
-- Modify: `crates/nexad/src/adapters/proxy/mod.rs`
+- Create: `crates/helyosd/src/adapters/proxy/traefik.rs`
+- Modify: `crates/helyosd/src/adapters/proxy/mod.rs`
 
 - [ ] **Step 1: Implement TraefikBackend**
 
-Create `crates/nexad/src/adapters/proxy/traefik.rs`:
+Create `crates/helyosd/src/adapters/proxy/traefik.rs`:
 
 ```rust
 use std::collections::HashMap;
@@ -1525,8 +1525,8 @@ use async_trait::async_trait;
 use serde::Serialize;
 use tracing::{info, warn};
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::proxy::{ProxyBackend, RouteConfig, TlsConfig};
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::proxy::{ProxyBackend, RouteConfig, TlsConfig};
 
 /// Traefik reverse proxy backend.
 ///
@@ -1550,8 +1550,8 @@ impl TraefikBackend {
 
         for route in routes {
             let safe_name = route.domain.replace('.', "-");
-            let router_name = format!("nexa-{safe_name}");
-            let service_name = format!("nexa-svc-{safe_name}");
+            let router_name = format!("helyos-{safe_name}");
+            let service_name = format!("helyos-svc-{safe_name}");
 
             let mut router = TraefikRouter {
                 rule: format!("Host(`{}`)", route.domain),
@@ -1665,11 +1665,11 @@ impl ProxyBackend for TraefikBackend {
     async fn apply_routes(&self, routes: &[RouteConfig]) -> Result<()> {
         let config = Self::render_config(routes);
         let yaml = serde_yaml::to_string(&config)
-            .map_err(|e| NexaError::Proxy(format!("failed to serialize traefik config: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("failed to serialize traefik config: {e}")))?;
         tokio::fs::write(&self.config_path, &yaml)
             .await
             .map_err(|e| {
-                NexaError::Proxy(format!(
+                HelyosError::Proxy(format!(
                     "failed to write traefik config {}: {e}",
                     self.config_path.display()
                 ))
@@ -1688,11 +1688,11 @@ impl ProxyBackend for TraefikBackend {
         };
 
         let safe_name = domain.replace('.', "-");
-        let router_key = format!("nexa-{safe_name}");
-        let service_key = format!("nexa-svc-{safe_name}");
+        let router_key = format!("helyos-{safe_name}");
+        let service_key = format!("helyos-svc-{safe_name}");
 
         let mut value: serde_yaml::Value = serde_yaml::from_str(&content)
-            .map_err(|e| NexaError::Proxy(format!("failed to parse traefik config: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("failed to parse traefik config: {e}")))?;
 
         if let Some(http) = value.get_mut("http") {
             if let Some(routers) = http.get_mut("routers") {
@@ -1708,11 +1708,11 @@ impl ProxyBackend for TraefikBackend {
         }
 
         let yaml = serde_yaml::to_string(&value)
-            .map_err(|e| NexaError::Proxy(format!("failed to reserialize traefik config: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("failed to reserialize traefik config: {e}")))?;
 
         tokio::fs::write(&self.config_path, &yaml)
             .await
-            .map_err(|e| NexaError::Proxy(format!("failed to rewrite traefik config: {e}")))?;
+            .map_err(|e| HelyosError::Proxy(format!("failed to rewrite traefik config: {e}")))?;
 
         info!(domain, "route removed from traefik dynamic config");
         Ok(())
@@ -1735,7 +1735,7 @@ impl ProxyBackend for TraefikBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nexa_core::ports::proxy::Upstream;
+    use helyos_core::ports::proxy::Upstream;
 
     fn make_route() -> RouteConfig {
         RouteConfig {
@@ -1753,7 +1753,7 @@ mod tests {
         let config = TraefikBackend::render_config(&[make_route()]);
         let yaml = serde_yaml::to_string(&config).unwrap();
         assert!(yaml.contains("Host(`api.example.com`)"));
-        assert!(yaml.contains("nexa-api-example-com"));
+        assert!(yaml.contains("helyos-api-example-com"));
         assert!(yaml.contains("http://10.0.0.1:3000"));
         assert!(yaml.contains("http://10.0.0.2:3000"));
         assert!(yaml.contains("letsencrypt"));
@@ -1784,7 +1784,7 @@ mod tests {
     #[tokio::test]
     async fn apply_routes_writes_yaml_file() {
         let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join("nexa-dynamic.yml");
+        let config_path = tmp.path().join("helyos-dynamic.yml");
         let backend = TraefikBackend::new(&config_path);
 
         backend.apply_routes(&[make_route()]).await.unwrap();
@@ -1796,7 +1796,7 @@ mod tests {
     #[tokio::test]
     async fn remove_route_from_traefik_config() {
         let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join("nexa-dynamic.yml");
+        let config_path = tmp.path().join("helyos-dynamic.yml");
         let backend = TraefikBackend::new(&config_path);
 
         let routes = vec![
@@ -1812,14 +1812,14 @@ mod tests {
         backend.remove_route("api.example.com").await.unwrap();
 
         let content = std::fs::read_to_string(&config_path).unwrap();
-        assert!(!content.contains("nexa-api-example-com"));
-        assert!(content.contains("nexa-other-example-com"));
+        assert!(!content.contains("helyos-api-example-com"));
+        assert!(content.contains("helyos-other-example-com"));
     }
 
     #[tokio::test]
     async fn health_returns_true_for_valid_config() {
         let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join("nexa-dynamic.yml");
+        let config_path = tmp.path().join("helyos-dynamic.yml");
         let backend = TraefikBackend::new(&config_path);
 
         backend.apply_routes(&[make_route()]).await.unwrap();
@@ -1828,14 +1828,14 @@ mod tests {
 
     #[tokio::test]
     async fn health_returns_false_when_no_file() {
-        let backend = TraefikBackend::new("/tmp/nonexistent-traefik-nexa.yml");
+        let backend = TraefikBackend::new("/tmp/nonexistent-traefik-helyos.yml");
         assert!(!backend.health().await.unwrap());
     }
 
     #[tokio::test]
     async fn reload_is_noop() {
         let tmp = tempfile::tempdir().unwrap();
-        let config_path = tmp.path().join("nexa-dynamic.yml");
+        let config_path = tmp.path().join("helyos-dynamic.yml");
         let backend = TraefikBackend::new(&config_path);
         backend.apply_routes(&[make_route()]).await.unwrap();
         backend.reload().await.unwrap();
@@ -1845,7 +1845,7 @@ mod tests {
 
 - [ ] **Step 2: Update proxy module exports**
 
-Update `crates/nexad/src/adapters/proxy/mod.rs`:
+Update `crates/helyosd/src/adapters/proxy/mod.rs`:
 
 ```rust
 mod caddy;
@@ -1859,13 +1859,13 @@ pub use traefik::TraefikBackend;
 
 - [ ] **Step 3: Verify and test**
 
-Run: `cargo test -p nexad -- adapters::proxy::traefik 2>&1`
+Run: `cargo test -p helyosd -- adapters::proxy::traefik 2>&1`
 Expected: 7 tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/proxy/traefik.rs crates/nexad/src/adapters/proxy/mod.rs
+git add crates/helyosd/src/adapters/proxy/traefik.rs crates/helyosd/src/adapters/proxy/mod.rs
 git commit -m "feat(proxy): implement TraefikBackend adapter with YAML config and file-watch hot-reload"
 ```
 
@@ -1874,21 +1874,21 @@ git commit -m "feat(proxy): implement TraefikBackend adapter with YAML config an
 ### Task 7: WireGuard overlay: subnet allocator, keypair generation, boringtun interface setup
 
 **Files:**
-- Create: `crates/nexad/src/adapters/network/mod.rs`
-- Create: `crates/nexad/src/adapters/network/subnet.rs`
-- Create: `crates/nexad/src/adapters/network/wireguard.rs`
-- Modify: `crates/nexad/src/adapters/mod.rs`
-- Modify: `crates/nexad/Cargo.toml`
+- Create: `crates/helyosd/src/adapters/network/mod.rs`
+- Create: `crates/helyosd/src/adapters/network/subnet.rs`
+- Create: `crates/helyosd/src/adapters/network/wireguard.rs`
+- Modify: `crates/helyosd/src/adapters/mod.rs`
+- Modify: `crates/helyosd/Cargo.toml`
 - Modify: `Cargo.toml` (workspace deps)
 
-- [ ] **Step 1: Add dependencies to workspace and nexad**
+- [ ] **Step 1: Add dependencies to workspace and helyosd**
 
 In `Cargo.toml` (workspace root), add to `[workspace.dependencies]`:
 ```toml
 rand = "0.8"
 ```
 
-In `crates/nexad/Cargo.toml`, add to `[dependencies]`:
+In `crates/helyosd/Cargo.toml`, add to `[dependencies]`:
 ```toml
 boringtun = { workspace = true }
 x25519-dalek = { workspace = true }
@@ -1898,7 +1898,7 @@ rand = { workspace = true }
 
 - [ ] **Step 2: Implement SubnetAllocator**
 
-Create `crates/nexad/src/adapters/network/subnet.rs`:
+Create `crates/helyosd/src/adapters/network/subnet.rs`:
 
 ```rust
 use std::net::Ipv4Addr;
@@ -2017,7 +2017,7 @@ mod tests {
 
 - [ ] **Step 3: Implement WireGuard manager with boringtun keypair generation**
 
-Create `crates/nexad/src/adapters/network/wireguard.rs`:
+Create `crates/helyosd/src/adapters/network/wireguard.rs`:
 
 ```rust
 use std::net::{Ipv4Addr, SocketAddr};
@@ -2027,7 +2027,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use tracing::info;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use nexa_core::error::Result;
+use helyos_core::error::Result;
 
 /// WireGuard keypair (private + public).
 #[derive(Debug, Clone)]
@@ -2238,7 +2238,7 @@ mod tests {
 
 - [ ] **Step 4: Create network adapter module**
 
-Create `crates/nexad/src/adapters/network/mod.rs`:
+Create `crates/helyosd/src/adapters/network/mod.rs`:
 
 ```rust
 mod subnet;
@@ -2248,25 +2248,25 @@ pub use subnet::SubnetAllocator;
 pub use wireguard::{WgKeypair, WgPeerConfig, WireguardManager};
 ```
 
-Wire into `crates/nexad/src/adapters/mod.rs`:
+Wire into `crates/helyosd/src/adapters/mod.rs`:
 ```rust
 pub mod network;
 ```
 
 - [ ] **Step 5: Verify compilation**
 
-Run: `cargo check -p nexad 2>&1`
+Run: `cargo check -p helyosd 2>&1`
 Expected: compiles with no errors
 
 - [ ] **Step 6: Run the tests**
 
-Run: `cargo test -p nexad -- adapters::network 2>&1`
+Run: `cargo test -p helyosd -- adapters::network 2>&1`
 Expected: 14 tests pass (7 subnet + 7 wireguard)
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/network/ crates/nexad/src/adapters/mod.rs crates/nexad/Cargo.toml Cargo.toml
+git add crates/helyosd/src/adapters/network/ crates/helyosd/src/adapters/mod.rs crates/helyosd/Cargo.toml Cargo.toml
 git commit -m "feat(network): implement WireGuard overlay with subnet allocator and boringtun keypair management"
 ```
 
@@ -2275,14 +2275,14 @@ git commit -m "feat(network): implement WireGuard overlay with subnet allocator 
 ### Task 8: Route commands in orchestrator (AddRoute/RemoveRoute/ListRoutes)
 
 **Files:**
-- Modify: `crates/nexad/src/engine/orchestrator.rs`
+- Modify: `crates/helyosd/src/engine/orchestrator.rs`
 
 - [ ] **Step 1: Add Command enum variants for routing**
 
 Add these variants to the `Command` enum (or create one if not present from Plan #1):
 
 ```rust
-use nexa_core::models::{Route, TlsMode};
+use helyos_core::models::{Route, TlsMode};
 
 AddRoute {
     domain: String,
@@ -2324,18 +2324,18 @@ async fn handle_add_route(
 ) -> Result<()> {
     let tls_mode: TlsMode = tls_mode_str
         .parse()
-        .map_err(|e| NexaError::InvalidSpec(format!("invalid TLS mode: {e}")))?;
+        .map_err(|e| HelyosError::InvalidSpec(format!("invalid TLS mode: {e}")))?;
 
     let route = Route::new(domain, project, deployment, tls_mode.clone());
     self.route_store.insert_route(&route).await?;
 
     // Build RouteConfig for the proxy from current pod IPs
-    let upstreams: Vec<nexa_core::ports::proxy::Upstream> = self
+    let upstreams: Vec<helyos_core::ports::proxy::Upstream> = self
         .pods
         .values()
         .filter(|p| p.project == project && p.deployment_name == deployment)
         .filter_map(|p| {
-            p.container_ip.map(|ip| nexa_core::ports::proxy::Upstream {
+            p.container_ip.map(|ip| helyos_core::ports::proxy::Upstream {
                 address: format!("{ip}:80"),
                 weight: 1,
             })
@@ -2343,14 +2343,14 @@ async fn handle_add_route(
         .collect();
 
     let tls_config = match tls_mode {
-        TlsMode::None => nexa_core::ports::proxy::TlsConfig::None,
-        TlsMode::Auto => nexa_core::ports::proxy::TlsConfig::Auto {
+        TlsMode::None => helyos_core::ports::proxy::TlsConfig::None,
+        TlsMode::Auto => helyos_core::ports::proxy::TlsConfig::Auto {
             email: String::new(),
         },
-        TlsMode::Manual => nexa_core::ports::proxy::TlsConfig::None,
+        TlsMode::Manual => helyos_core::ports::proxy::TlsConfig::None,
     };
 
-    let route_config = nexa_core::ports::proxy::RouteConfig {
+    let route_config = helyos_core::ports::proxy::RouteConfig {
         domain: domain.to_string(),
         upstream: upstreams,
         tls: tls_config,
@@ -2370,7 +2370,7 @@ async fn handle_add_route(
 async fn handle_remove_route(&mut self, domain: &str) -> Result<()> {
     let deleted = self.route_store.delete_route(domain).await?;
     if !deleted {
-        return Err(NexaError::RouteNotFound(domain.to_string()));
+        return Err(HelyosError::RouteNotFound(domain.to_string()));
     }
 
     self.proxy.remove_route(domain).await?;
@@ -2405,9 +2405,9 @@ impl OrchestratorHandle {
         self.tx
             .send(Command::AddRoute { domain, project, deployment, tls_mode, reply: tx })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator channel closed".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator channel closed".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator reply dropped".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator reply dropped".into()))?
     }
 
     pub async fn remove_route(&self, domain: String) -> Result<()> {
@@ -2415,9 +2415,9 @@ impl OrchestratorHandle {
         self.tx
             .send(Command::RemoveRoute { domain, reply: tx })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator channel closed".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator channel closed".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator reply dropped".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator reply dropped".into()))?
     }
 
     pub async fn list_routes(&self, project: Option<String>) -> Vec<Route> {
@@ -2518,31 +2518,31 @@ git commit -m "feat(routing): add AddRoute/RemoveRoute/ListRoutes commands to or
 ### Task 9: TLS certificate storage + ACME integration + auto-renewal task
 
 **Files:**
-- Create: `crates/nexad/src/adapters/tls/mod.rs`
-- Create: `crates/nexad/src/adapters/tls/acme.rs`
-- Create: `crates/nexad/src/adapters/tls/renewal.rs`
-- Modify: `crates/nexad/src/adapters/mod.rs`
-- Modify: `crates/nexad/Cargo.toml`
+- Create: `crates/helyosd/src/adapters/tls/mod.rs`
+- Create: `crates/helyosd/src/adapters/tls/acme.rs`
+- Create: `crates/helyosd/src/adapters/tls/renewal.rs`
+- Modify: `crates/helyosd/src/adapters/mod.rs`
+- Modify: `crates/helyosd/Cargo.toml`
 
 - [ ] **Step 1: Add instant-acme dependency**
 
-In `crates/nexad/Cargo.toml`, add:
+In `crates/helyosd/Cargo.toml`, add:
 ```toml
 instant-acme = { workspace = true }
 ```
 
 - [ ] **Step 2: Implement ACME client wrapper**
 
-Create `crates/nexad/src/adapters/tls/acme.rs`:
+Create `crates/helyosd/src/adapters/tls/acme.rs`:
 
 ```rust
 use std::sync::Arc;
 
 use tracing::info;
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::models::Certificate;
-use nexa_core::ports::route_store::RouteStore;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::models::Certificate;
+use helyos_core::ports::route_store::RouteStore;
 
 /// ACME certificate manager.
 ///
@@ -2584,25 +2584,25 @@ impl AcmeManager {
         //     &NewAccount { contact: &[&format!("mailto:{}", self.email)], terms_of_service_agreed: true },
         //     if self.staging { LETS_ENCRYPT_STAGING_DIRECTORY } else { LETS_ENCRYPT_PRODUCTION_DIRECTORY },
         //     None,
-        // ).await.map_err(|e| NexaError::Certificate(e.to_string()))?;
+        // ).await.map_err(|e| HelyosError::Certificate(e.to_string()))?;
         //
         // let mut order = account.new_order(&NewOrder {
         //     identifiers: &[Identifier::Dns(domain.into())]
-        // }).await.map_err(|e| NexaError::Certificate(e.to_string()))?;
+        // }).await.map_err(|e| HelyosError::Certificate(e.to_string()))?;
         //
         // let authorizations = order.authorizations().await
-        //     .map_err(|e| NexaError::Certificate(e.to_string()))?;
+        //     .map_err(|e| HelyosError::Certificate(e.to_string()))?;
         // for auth in &authorizations {
         //     let challenge = auth.challenges.iter()
         //         .find(|c| c.r#type == ChallengeType::Http01)
-        //         .ok_or_else(|| NexaError::Certificate("no HTTP-01 challenge".into()))?;
+        //         .ok_or_else(|| HelyosError::Certificate("no HTTP-01 challenge".into()))?;
         //     // Serve challenge token at /.well-known/acme-challenge/{token}
         //     order.set_challenge_ready(&challenge.url).await
-        //         .map_err(|e| NexaError::Certificate(e.to_string()))?;
+        //         .map_err(|e| HelyosError::Certificate(e.to_string()))?;
         // }
         // // ... finalize and download cert_chain_pem ...
 
-        Err(NexaError::Certificate(format!(
+        Err(HelyosError::Certificate(format!(
             "ACME issuance for '{domain}' requires network access and HTTP challenge validation"
         )))
     }
@@ -2681,7 +2681,7 @@ mod tests {
 
 - [ ] **Step 3: Implement auto-renewal task**
 
-Create `crates/nexad/src/adapters/tls/renewal.rs`:
+Create `crates/helyosd/src/adapters/tls/renewal.rs`:
 
 ```rust
 use std::sync::Arc;
@@ -2689,7 +2689,7 @@ use std::time::Duration;
 
 use tracing::{info, warn, error};
 
-use nexa_core::ports::route_store::RouteStore;
+use helyos_core::ports::route_store::RouteStore;
 
 use super::acme::AcmeManager;
 
@@ -2748,7 +2748,7 @@ pub fn spawn_renewal_task(
 mod tests {
     use super::*;
     use crate::adapters::state::memory_route_store::InMemoryRouteStore;
-    use nexa_core::models::Certificate;
+    use helyos_core::models::Certificate;
 
     #[tokio::test]
     async fn renewal_task_starts_and_can_be_cancelled() {
@@ -2803,7 +2803,7 @@ mod tests {
 
 - [ ] **Step 4: Create TLS adapter module**
 
-Create `crates/nexad/src/adapters/tls/mod.rs`:
+Create `crates/helyosd/src/adapters/tls/mod.rs`:
 
 ```rust
 pub mod acme;
@@ -2813,20 +2813,20 @@ pub use acme::AcmeManager;
 pub use renewal::spawn_renewal_task;
 ```
 
-Wire into `crates/nexad/src/adapters/mod.rs`:
+Wire into `crates/helyosd/src/adapters/mod.rs`:
 ```rust
 pub mod tls;
 ```
 
 - [ ] **Step 5: Verify and test**
 
-Run: `cargo test -p nexad -- adapters::tls 2>&1`
+Run: `cargo test -p helyosd -- adapters::tls 2>&1`
 Expected: 5 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/tls/ crates/nexad/src/adapters/mod.rs crates/nexad/Cargo.toml
+git add crates/helyosd/src/adapters/tls/ crates/helyosd/src/adapters/mod.rs crates/helyosd/Cargo.toml
 git commit -m "feat(tls): add ACME certificate manager and auto-renewal background task"
 ```
 
@@ -2835,12 +2835,12 @@ git commit -m "feat(tls): add ACME certificate manager and auto-renewal backgrou
 ### Task 10: API endpoints for routes and proxy config
 
 **Files:**
-- Modify: `crates/nexad/src/api/handlers.rs`
-- Modify: `crates/nexad/src/api/routes.rs`
+- Modify: `crates/helyosd/src/api/handlers.rs`
+- Modify: `crates/helyosd/src/api/routes.rs`
 
 - [ ] **Step 1: Add route handler functions**
 
-In `crates/nexad/src/api/handlers.rs`, add:
+In `crates/helyosd/src/api/handlers.rs`, add:
 
 ```rust
 // --- Routes ---
@@ -2956,7 +2956,7 @@ pub async fn set_proxy_config(
 
 - [ ] **Step 2: Register the new API routes**
 
-In `crates/nexad/src/api/routes.rs`, add these routes to the `build` function:
+In `crates/helyosd/src/api/routes.rs`, add these routes to the `build` function:
 
 ```rust
 // Routes
@@ -2972,13 +2972,13 @@ In `crates/nexad/src/api/routes.rs`, add these routes to the `build` function:
 
 - [ ] **Step 3: Verify compilation**
 
-Run: `cargo check -p nexad 2>&1`
+Run: `cargo check -p helyosd 2>&1`
 Expected: compiles with no errors
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/api/handlers.rs crates/nexad/src/api/routes.rs
+git add crates/helyosd/src/api/handlers.rs crates/helyosd/src/api/routes.rs
 git commit -m "feat(api): add REST endpoints for routes, cert import, and proxy config"
 ```
 
@@ -2987,12 +2987,12 @@ git commit -m "feat(api): add REST endpoints for routes, cert import, and proxy 
 ### Task 11: CLI commands: routes, route add/rm, cert import, proxy config
 
 **Files:**
-- Modify: `crates/nexa-cli/src/main.rs`
-- Modify: `crates/nexa-cli/src/commands.rs`
+- Modify: `crates/helyos-cli/src/main.rs`
+- Modify: `crates/helyos-cli/src/commands.rs`
 
 - [ ] **Step 1: Add CLI subcommands**
 
-In `crates/nexa-cli/src/main.rs`, add to the `Commands` enum:
+In `crates/helyos-cli/src/main.rs`, add to the `Commands` enum:
 
 ```rust
 /// List all routes
@@ -3102,12 +3102,12 @@ Commands::Cluster { command } => match command {
 
 - [ ] **Step 3: Implement command functions**
 
-In `crates/nexa-cli/src/commands.rs`, add:
+In `crates/helyos-cli/src/commands.rs`, add:
 
 ```rust
-use nexa_core::models::Route;
+use helyos_core::models::Route;
 
-pub async fn list_routes_cmd(client: &NexaClient, project: Option<&str>) -> Result<()> {
+pub async fn list_routes_cmd(client: &HelyosClient, project: Option<&str>) -> Result<()> {
     let path = match project {
         Some(p) => format!("/api/v1/routes?project={p}"),
         None => "/api/v1/routes".into(),
@@ -3133,7 +3133,7 @@ pub async fn list_routes_cmd(client: &NexaClient, project: Option<&str>) -> Resu
 }
 
 pub async fn add_route(
-    client: &NexaClient,
+    client: &HelyosClient,
     domain: &str,
     project: &str,
     deployment: &str,
@@ -3153,14 +3153,14 @@ pub async fn add_route(
     Ok(())
 }
 
-pub async fn remove_route_cmd(client: &NexaClient, domain: &str) -> Result<()> {
+pub async fn remove_route_cmd(client: &HelyosClient, domain: &str) -> Result<()> {
     client.delete(&format!("/api/v1/routes/{domain}")).await?;
     output::print_success(&format!("Route '{domain}' removed"));
     Ok(())
 }
 
 pub async fn import_cert(
-    client: &NexaClient,
+    client: &HelyosClient,
     domain: &str,
     cert_path: &str,
     key_path: &str,
@@ -3180,7 +3180,7 @@ pub async fn import_cert(
     Ok(())
 }
 
-pub async fn cluster_config_set(client: &NexaClient, key: &str, value: &str) -> Result<()> {
+pub async fn cluster_config_set(client: &HelyosClient, key: &str, value: &str) -> Result<()> {
     let (field, val) = match key {
         "proxy.backend" => ("backend", serde_json::json!(value)),
         "proxy.acme.email" => ("acme_email", serde_json::json!(value)),
@@ -3195,7 +3195,7 @@ pub async fn cluster_config_set(client: &NexaClient, key: &str, value: &str) -> 
     Ok(())
 }
 
-pub async fn cluster_config_get(client: &NexaClient, key: &str) -> Result<()> {
+pub async fn cluster_config_get(client: &HelyosClient, key: &str) -> Result<()> {
     match key {
         "proxy" => {
             let config: serde_json::Value = client.get("/api/v1/cluster/config/proxy").await?;
@@ -3209,34 +3209,34 @@ pub async fn cluster_config_get(client: &NexaClient, key: &str) -> Result<()> {
 
 - [ ] **Step 4: Verify compilation**
 
-Run: `cargo check -p nexa-cli 2>&1`
+Run: `cargo check -p helyos-cli 2>&1`
 Expected: compiles with no errors
 
 - [ ] **Step 5: Verify help output**
 
-Run: `cargo run -p nexa-cli -- --help 2>&1`
+Run: `cargo run -p helyos-cli -- --help 2>&1`
 Expected: shows Routes, Route, Cert, Cluster subcommands
 
-Run: `cargo run -p nexa-cli -- route add --help 2>&1`
+Run: `cargo run -p helyos-cli -- route add --help 2>&1`
 Expected: shows domain, --project, --deployment, --https flags
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexa-cli/src/main.rs crates/nexa-cli/src/commands.rs
+git add crates/helyos-cli/src/main.rs crates/helyos-cli/src/commands.rs
 git commit -m "feat(cli): add route, cert import, and cluster config CLI commands"
 ```
 
 ---
 
-### Task 12: Wire ProxyBackend into nexad main.rs composition root
+### Task 12: Wire ProxyBackend into helyosd main.rs composition root
 
 **Files:**
-- Modify: `crates/nexad/src/main.rs`
+- Modify: `crates/helyosd/src/main.rs`
 
 - [ ] **Step 1: Add proxy/overlay/TLS CLI flags**
 
-In `crates/nexad/src/main.rs`, add to the `Cli` struct:
+In `crates/helyosd/src/main.rs`, add to the `Cli` struct:
 
 ```rust
 /// Proxy backend: "nginx", "caddy", "traefik"
@@ -3244,7 +3244,7 @@ In `crates/nexad/src/main.rs`, add to the `Cli` struct:
 proxy_backend: String,
 
 /// Proxy config directory
-#[arg(long, default_value = "/var/lib/nexa/proxy")]
+#[arg(long, default_value = "/var/lib/helyos/proxy")]
 proxy_config_dir: String,
 
 /// ACME email for automatic TLS
@@ -3273,8 +3273,8 @@ use adapters::proxy::{CaddyBackend, NginxBackend, TraefikBackend};
 use adapters::network::{SubnetAllocator, WireguardManager};
 use adapters::state::memory_route_store::InMemoryRouteStore;
 use adapters::tls::{AcmeManager, spawn_renewal_task};
-use nexa_core::ports::proxy::ProxyBackend;
-use nexa_core::ports::route_store::RouteStore;
+use helyos_core::ports::proxy::ProxyBackend;
+use helyos_core::ports::route_store::RouteStore;
 
 // In main():
 
@@ -3290,7 +3290,7 @@ let proxy: Arc<dyn ProxyBackend> = match cli.proxy_backend.as_str() {
         Arc::new(CaddyBackend::new(caddyfile, "http://localhost:2019"))
     }
     _ => {
-        let config_path = PathBuf::from(&cli.proxy_config_dir).join("nexa-dynamic.yml");
+        let config_path = PathBuf::from(&cli.proxy_config_dir).join("helyos-dynamic.yml");
         Arc::new(TraefikBackend::new(config_path))
     }
 };
@@ -3342,7 +3342,7 @@ api::serve(handle, &addr).await
 
 - [ ] **Step 3: Verify compilation**
 
-Run: `cargo check -p nexad 2>&1`
+Run: `cargo check -p helyosd 2>&1`
 Expected: compiles. Fix any missing imports.
 
 - [ ] **Step 4: Verify full workspace**
@@ -3352,7 +3352,7 @@ Expected: entire workspace compiles
 
 - [ ] **Step 5: Verify with --help**
 
-Run: `cargo run -p nexad -- --help 2>&1`
+Run: `cargo run -p helyosd -- --help 2>&1`
 Expected: shows `--proxy-backend`, `--proxy-config-dir`, `--acme-email`, `--cluster-cidr`, `--wg-port`, `--overlay`
 
 - [ ] **Step 6: Run full test suite**
@@ -3363,8 +3363,8 @@ Expected: all tests pass
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/nexad/src/main.rs
-git commit -m "feat(nexad): wire proxy backend, WireGuard overlay, and TLS renewal into composition root"
+git add crates/helyosd/src/main.rs
+git commit -m "feat(helyosd): wire proxy backend, WireGuard overlay, and TLS renewal into composition root"
 ```
 
 ---
@@ -3375,14 +3375,14 @@ After all 12 tasks are complete:
 
 - [ ] `cargo check 2>&1` -- workspace compiles
 - [ ] `cargo test 2>&1` -- all tests pass
-- [ ] `cargo test -p nexa-core -- ports::proxy 2>&1` -- proxy port tests pass
-- [ ] `cargo test -p nexa-core -- models::route 2>&1` -- route model tests pass
-- [ ] `cargo test -p nexad -- adapters::proxy 2>&1` -- all 3 proxy adapter tests pass
-- [ ] `cargo test -p nexad -- adapters::network 2>&1` -- subnet + wireguard tests pass
-- [ ] `cargo test -p nexad -- adapters::tls 2>&1` -- ACME + renewal tests pass
+- [ ] `cargo test -p helyos-core -- ports::proxy 2>&1` -- proxy port tests pass
+- [ ] `cargo test -p helyos-core -- models::route 2>&1` -- route model tests pass
+- [ ] `cargo test -p helyosd -- adapters::proxy 2>&1` -- all 3 proxy adapter tests pass
+- [ ] `cargo test -p helyosd -- adapters::network 2>&1` -- subnet + wireguard tests pass
+- [ ] `cargo test -p helyosd -- adapters::tls 2>&1` -- ACME + renewal tests pass
 - [ ] `cargo clippy 2>&1` -- no warnings (fix any that appear)
-- [ ] `cargo run -p nexad -- --help 2>&1` -- shows proxy/overlay/tls flags
-- [ ] `cargo run -p nexa-cli -- route add --help 2>&1` -- shows route CLI
+- [ ] `cargo run -p helyosd -- --help 2>&1` -- shows proxy/overlay/tls flags
+- [ ] `cargo run -p helyos-cli -- route add --help 2>&1` -- shows route CLI
 
 ```bash
 git push origin main

@@ -5,15 +5,15 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
-**Goal:** Add embedded DNS-based service discovery so containers can resolve each other by name (`<deployment>.<project>.internal`) using a lightweight hickory-dns server running inside nexad master on port 53.
+**Goal:** Add embedded DNS-based service discovery so containers can resolve each other by name (`<deployment>.<project>.internal`) using a lightweight hickory-dns server running inside helyosd master on port 53.
 
-**Architecture:** A `DnsProvider` port trait in nexa-core defines register/deregister/lookup operations. Two adapters implement it: `NoopDnsProvider` (single-node, relies on Docker DNS) and `HickoryDnsProvider` (multi-node, runs an embedded hickory-dns server with an in-memory `DnsRecordStore`). The orchestrator calls `dns.register()` after a pod starts and `dns.deregister()` when a pod stops. Containers receive `dns` and `dns_search` config pointing them at the nexad master IP, enabling short-name resolution within a project. Non-`.internal` queries are forwarded to the system's upstream DNS.
+**Architecture:** A `DnsProvider` port trait in helyos-core defines register/deregister/lookup operations. Two adapters implement it: `NoopDnsProvider` (single-node, relies on Docker DNS) and `HickoryDnsProvider` (multi-node, runs an embedded hickory-dns server with an in-memory `DnsRecordStore`). The orchestrator calls `dns.register()` after a pod starts and `dns.deregister()` when a pod stops. Containers receive `dns` and `dns_search` config pointing them at the helyosd master IP, enabling short-name resolution within a project. Non-`.internal` queries are forwarded to the system's upstream DNS.
 
 **Tech Stack:** hickory-dns 0.25, hickory-server 0.25, tokio (UDP/TCP listeners), async-trait, std::net::IpAddr
 
@@ -22,12 +22,12 @@
 ### Task 1: Define DnsProvider port trait
 
 **Files:**
-- Create: `crates/nexa-core/src/ports/dns.rs`
-- Modify: `crates/nexa-core/src/ports/mod.rs` (if it exists) or `crates/nexa-core/src/lib.rs`
+- Create: `crates/helyos-core/src/ports/dns.rs`
+- Modify: `crates/helyos-core/src/ports/mod.rs` (if it exists) or `crates/helyos-core/src/lib.rs`
 
 - [ ] **Step 1: Write the failing test for the DnsProvider trait**
 
-Create `crates/nexa-core/src/ports/dns.rs`:
+Create `crates/helyos-core/src/ports/dns.rs`:
 
 ```rust
 use std::net::IpAddr;
@@ -77,35 +77,35 @@ mod tests {
 
 - [ ] **Step 2: Wire the module into the ports directory**
 
-If `crates/nexa-core/src/ports/mod.rs` exists, add:
+If `crates/helyos-core/src/ports/mod.rs` exists, add:
 ```rust
 pub mod dns;
 ```
 
-If ports is not yet a module (the codebase still uses `crates/nexa-core/src/runtime/`), create `crates/nexa-core/src/ports/mod.rs`:
+If ports is not yet a module (the codebase still uses `crates/helyos-core/src/runtime/`), create `crates/helyos-core/src/ports/mod.rs`:
 ```rust
 pub mod dns;
 pub mod runtime;
 ```
 
-Move `crates/nexa-core/src/runtime/traits.rs` content into `crates/nexa-core/src/ports/runtime.rs` if it hasn't already been moved by a prior plan. Update `crates/nexa-core/src/lib.rs` to expose `pub mod ports;`.
+Move `crates/helyos-core/src/runtime/traits.rs` content into `crates/helyos-core/src/ports/runtime.rs` if it hasn't already been moved by a prior plan. Update `crates/helyos-core/src/lib.rs` to expose `pub mod ports;`.
 
-**NOTE:** If plans #1-9 already restructured into hexagonal layout with `ports/runtime.rs`, just add `pub mod dns;` to `crates/nexa-core/src/ports/mod.rs`.
+**NOTE:** If plans #1-9 already restructured into hexagonal layout with `ports/runtime.rs`, just add `pub mod dns;` to `crates/helyos-core/src/ports/mod.rs`.
 
 - [ ] **Step 3: Verify compilation**
 
-Run: `cargo check -p nexa-core 2>&1`
+Run: `cargo check -p helyos-core 2>&1`
 Expected: compiles with no errors
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cargo test -p nexa-core -- ports::dns 2>&1`
+Run: `cargo test -p helyos-core -- ports::dns 2>&1`
 Expected: 2 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/dns.rs crates/nexa-core/src/ports/mod.rs crates/nexa-core/src/lib.rs
+git add crates/helyos-core/src/ports/dns.rs crates/helyos-core/src/ports/mod.rs crates/helyos-core/src/lib.rs
 git commit -m "feat(dns): define DnsProvider port trait for service discovery"
 ```
 
@@ -114,21 +114,21 @@ git commit -m "feat(dns): define DnsProvider port trait for service discovery"
 ### Task 2: Implement NoopDnsProvider adapter
 
 **Files:**
-- Create: `crates/nexad/src/adapters/dns/mod.rs`
-- Create: `crates/nexad/src/adapters/dns/noop.rs`
-- Modify: `crates/nexad/src/adapters/mod.rs`
+- Create: `crates/helyosd/src/adapters/dns/mod.rs`
+- Create: `crates/helyosd/src/adapters/dns/noop.rs`
+- Modify: `crates/helyosd/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write failing test for NoopDnsProvider**
 
-Create `crates/nexad/src/adapters/dns/noop.rs`:
+Create `crates/helyosd/src/adapters/dns/noop.rs`:
 
 ```rust
 use std::net::IpAddr;
 
 use async_trait::async_trait;
 
-use nexa_core::error::Result;
-use nexa_core::ports::dns::DnsProvider;
+use helyos_core::error::Result;
+use helyos_core::ports::dns::DnsProvider;
 
 /// No-op DNS provider for single-node mode.
 /// Containers use Docker's built-in DNS within the bridge network.
@@ -185,7 +185,7 @@ mod tests {
 
 - [ ] **Step 2: Create the dns adapter module**
 
-Create `crates/nexad/src/adapters/dns/mod.rs`:
+Create `crates/helyosd/src/adapters/dns/mod.rs`:
 
 ```rust
 mod noop;
@@ -195,7 +195,7 @@ pub use noop::NoopDnsProvider;
 
 - [ ] **Step 3: Wire into adapters/mod.rs**
 
-In `crates/nexad/src/adapters/mod.rs`, add:
+In `crates/helyosd/src/adapters/mod.rs`, add:
 ```rust
 pub mod dns;
 ```
@@ -208,13 +208,13 @@ pub mod runtime;
 
 - [ ] **Step 4: Verify and test**
 
-Run: `cargo test -p nexad -- adapters::dns 2>&1`
+Run: `cargo test -p helyosd -- adapters::dns 2>&1`
 Expected: 3 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/dns/
+git add crates/helyosd/src/adapters/dns/
 git commit -m "feat(dns): implement NoopDnsProvider for single-node mode"
 ```
 
@@ -223,8 +223,8 @@ git commit -m "feat(dns): implement NoopDnsProvider for single-node mode"
 ### Task 3: Add dns/dns_search fields to ContainerConfig
 
 **Files:**
-- Modify: `crates/nexa-core/src/runtime/traits.rs` (or `crates/nexa-core/src/ports/runtime.rs` if hexagonal layout is active)
-- Modify: `crates/nexa-core/src/runtime/docker.rs` (or `crates/nexad/src/adapters/runtime/docker.rs`)
+- Modify: `crates/helyos-core/src/runtime/traits.rs` (or `crates/helyos-core/src/ports/runtime.rs` if hexagonal layout is active)
+- Modify: `crates/helyos-core/src/runtime/docker.rs` (or `crates/helyosd/src/adapters/runtime/docker.rs`)
 
 - [ ] **Step 1: Write failing test for new ContainerConfig fields**
 
@@ -273,7 +273,7 @@ mod tests {
 
 - [ ] **Step 2: Add the fields to ContainerConfig**
 
-In the file containing `ContainerConfig` (either `crates/nexa-core/src/runtime/traits.rs` or `crates/nexa-core/src/ports/runtime.rs`), add two fields:
+In the file containing `ContainerConfig` (either `crates/helyos-core/src/runtime/traits.rs` or `crates/helyos-core/src/ports/runtime.rs`), add two fields:
 
 ```rust
 #[derive(Debug, Clone)]
@@ -305,12 +305,12 @@ dns_search: vec![],
 ```
 
 This includes:
-- The orchestrator's `create_pod` method (in `crates/nexad/src/engine/orchestrator.rs` or `crates/nexa-core/src/domain/orchestrator.rs`)
+- The orchestrator's `create_pod` method (in `crates/helyosd/src/engine/orchestrator.rs` or `crates/helyos-core/src/domain/orchestrator.rs`)
 - Any test mock code that constructs `ContainerConfig`
 
 - [ ] **Step 4: Update Docker adapter to pass dns/dns_search to bollard**
 
-In the Docker adapter's `create_container` method (either `crates/nexa-core/src/runtime/docker.rs` or `crates/nexad/src/adapters/runtime/docker.rs`), update the `HostConfig` construction:
+In the Docker adapter's `create_container` method (either `crates/helyos-core/src/runtime/docker.rs` or `crates/helyosd/src/adapters/runtime/docker.rs`), update the `HostConfig` construction:
 
 ```rust
 let host_config = HostConfig {
@@ -348,12 +348,12 @@ git commit -m "feat(dns): add dns/dns_search fields to ContainerConfig and Docke
 ### Task 4: Create DnsRecordStore with register/deregister/lookup logic
 
 **Files:**
-- Create: `crates/nexad/src/adapters/dns/record_store.rs`
-- Modify: `crates/nexad/src/adapters/dns/mod.rs`
+- Create: `crates/helyosd/src/adapters/dns/record_store.rs`
+- Modify: `crates/helyosd/src/adapters/dns/mod.rs`
 
 - [ ] **Step 1: Write failing tests for DnsRecordStore**
 
-Create `crates/nexad/src/adapters/dns/record_store.rs`:
+Create `crates/helyosd/src/adapters/dns/record_store.rs`:
 
 ```rust
 use std::collections::HashMap;
@@ -608,7 +608,7 @@ mod tests {
 
 - [ ] **Step 2: Wire into dns adapter module**
 
-Update `crates/nexad/src/adapters/dns/mod.rs`:
+Update `crates/helyosd/src/adapters/dns/mod.rs`:
 
 ```rust
 mod noop;
@@ -620,13 +620,13 @@ pub use record_store::DnsRecordStore;
 
 - [ ] **Step 3: Verify and test**
 
-Run: `cargo test -p nexad -- adapters::dns::record_store 2>&1`
+Run: `cargo test -p helyosd -- adapters::dns::record_store 2>&1`
 Expected: all 13 tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/dns/record_store.rs crates/nexad/src/adapters/dns/mod.rs
+git add crates/helyosd/src/adapters/dns/record_store.rs crates/helyosd/src/adapters/dns/mod.rs
 git commit -m "feat(dns): implement DnsRecordStore with register/deregister/resolve logic"
 ```
 
@@ -635,10 +635,10 @@ git commit -m "feat(dns): implement DnsRecordStore with register/deregister/reso
 ### Task 5: Implement HickoryDnsProvider adapter with embedded DNS server
 
 **Files:**
-- Create: `crates/nexad/src/adapters/dns/hickory.rs`
-- Modify: `crates/nexad/src/adapters/dns/mod.rs`
+- Create: `crates/helyosd/src/adapters/dns/hickory.rs`
+- Modify: `crates/helyosd/src/adapters/dns/mod.rs`
 - Modify: `Cargo.toml` (workspace deps)
-- Modify: `crates/nexad/Cargo.toml`
+- Modify: `crates/helyosd/Cargo.toml`
 
 - [ ] **Step 1: Add hickory-dns dependencies to workspace**
 
@@ -649,7 +649,7 @@ hickory-dns = "0.25"
 hickory-server = "0.25"
 ```
 
-In `crates/nexad/Cargo.toml`, add to `[dependencies]`:
+In `crates/helyosd/Cargo.toml`, add to `[dependencies]`:
 
 ```toml
 hickory-dns = { workspace = true }
@@ -658,7 +658,7 @@ hickory-server = { workspace = true }
 
 - [ ] **Step 2: Verify deps resolve**
 
-Run: `cargo check -p nexad 2>&1 | head -20`
+Run: `cargo check -p helyosd 2>&1 | head -20`
 Expected: downloads and compiles (or gives a clear error about API usage, not about missing crate)
 
 **NOTE:** If hickory-dns 0.25 is not yet published, use the latest available version (e.g., 0.24). Adjust imports accordingly. The key crates are:
@@ -675,7 +675,7 @@ If the API has changed, adapt accordingly. The core pattern is:
 
 - [ ] **Step 3: Implement HickoryDnsProvider**
 
-Create `crates/nexad/src/adapters/dns/hickory.rs`:
+Create `crates/helyosd/src/adapters/dns/hickory.rs`:
 
 ```rust
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -686,8 +686,8 @@ use async_trait::async_trait;
 use tokio::net::{TcpListener, UdpSocket};
 use tracing::{error, info};
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::dns::DnsProvider;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::dns::DnsProvider;
 
 use super::record_store::DnsRecordStore;
 
@@ -725,12 +725,12 @@ impl HickoryDnsProvider {
         // Bind UDP socket
         let udp_socket = UdpSocket::bind(listen_addr)
             .await
-            .map_err(|e| NexaError::Runtime(format!("failed to bind DNS UDP on {listen_addr}: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("failed to bind DNS UDP on {listen_addr}: {e}")))?;
 
         // Bind TCP listener
         let tcp_listener = TcpListener::bind(listen_addr)
             .await
-            .map_err(|e| NexaError::Runtime(format!("failed to bind DNS TCP on {listen_addr}: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("failed to bind DNS TCP on {listen_addr}: {e}")))?;
 
         info!(%listen_addr, %upstream_dns, "starting embedded DNS server");
 
@@ -1109,7 +1109,7 @@ mod tests {
 
 - [ ] **Step 4: Wire into dns adapter module**
 
-Update `crates/nexad/src/adapters/dns/mod.rs`:
+Update `crates/helyosd/src/adapters/dns/mod.rs`:
 
 ```rust
 mod hickory;
@@ -1123,7 +1123,7 @@ pub use record_store::DnsRecordStore;
 
 - [ ] **Step 5: Verify and test**
 
-Run: `cargo test -p nexad -- adapters::dns 2>&1`
+Run: `cargo test -p helyosd -- adapters::dns 2>&1`
 Expected: all tests pass (NoopDnsProvider tests + DnsRecordStore tests + HickoryDnsProvider tests)
 
 - [ ] **Step 6: Commit**
@@ -1138,7 +1138,7 @@ git commit -m "feat(dns): implement HickoryDnsProvider with embedded UDP/TCP DNS
 ### Task 6: Integrate DNS registration into orchestrator pod lifecycle
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs` (if hexagonal layout done) or `crates/nexad/src/engine/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs` (if hexagonal layout done) or `crates/helyosd/src/engine/orchestrator.rs`
 
 - [ ] **Step 1: Write failing test for DNS integration**
 
@@ -1147,7 +1147,7 @@ Add to the orchestrator test module. Requires a mock/spy DnsProvider:
 ```rust
 use std::net::IpAddr;
 use std::sync::Mutex;
-use nexa_core::ports::dns::DnsProvider;
+use helyos_core::ports::dns::DnsProvider;
 
 struct SpyDnsProvider {
     registered: Mutex<Vec<(String, String, IpAddr)>>,
@@ -1165,7 +1165,7 @@ impl SpyDnsProvider {
 
 #[async_trait::async_trait]
 impl DnsProvider for SpyDnsProvider {
-    async fn register(&self, project: &str, deployment: &str, ip: IpAddr) -> nexa_core::error::Result<()> {
+    async fn register(&self, project: &str, deployment: &str, ip: IpAddr) -> helyos_core::error::Result<()> {
         self.registered.lock().unwrap().push((
             project.to_string(),
             deployment.to_string(),
@@ -1174,7 +1174,7 @@ impl DnsProvider for SpyDnsProvider {
         Ok(())
     }
 
-    async fn deregister(&self, project: &str, deployment: &str, ip: IpAddr) -> nexa_core::error::Result<()> {
+    async fn deregister(&self, project: &str, deployment: &str, ip: IpAddr) -> helyos_core::error::Result<()> {
         self.deregistered.lock().unwrap().push((
             project.to_string(),
             deployment.to_string(),
@@ -1183,7 +1183,7 @@ impl DnsProvider for SpyDnsProvider {
         Ok(())
     }
 
-    async fn lookup(&self, _project: &str, _deployment: &str) -> nexa_core::error::Result<Vec<IpAddr>> {
+    async fn lookup(&self, _project: &str, _deployment: &str) -> helyos_core::error::Result<Vec<IpAddr>> {
         Ok(vec![])
     }
 }
@@ -1247,7 +1247,7 @@ async fn stop_deregisters_dns_for_pods() {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1` (or `cargo test -p nexad -- engine::orchestrator 2>&1`)
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1` (or `cargo test -p helyosd -- engine::orchestrator 2>&1`)
 Expected: FAIL -- `Orchestrator::spawn` does not accept a `dns` parameter yet
 
 - [ ] **Step 3: Add DnsProvider to the Orchestrator**
@@ -1292,7 +1292,7 @@ In the `create_pod` method, after the container starts successfully and has an I
 
 The container IP comes from inspecting the container after start. Add a `get_container_ip` method to `ContainerRuntime` trait, or use the container network settings. The simplest approach: after `start_container`, inspect the container to get its IP address.
 
-Add to the `ContainerRuntime` trait in `crates/nexa-core/src/runtime/traits.rs` (or `ports/runtime.rs`):
+Add to the `ContainerRuntime` trait in `crates/helyos-core/src/runtime/traits.rs` (or `ports/runtime.rs`):
 
 ```rust
 async fn container_ip(&self, id: &str, network: &str) -> Result<Option<IpAddr>>;
@@ -1304,7 +1304,7 @@ Implement in the Docker adapter:
 async fn container_ip(&self, id: &str, network: &str) -> Result<Option<IpAddr>> {
     let info = self.client.inspect_container(id, None)
         .await
-        .map_err(|e| NexaError::Runtime(e.to_string()))?;
+        .map_err(|e| HelyosError::Runtime(e.to_string()))?;
 
     let ip = info
         .network_settings
@@ -1351,7 +1351,7 @@ match self.runtime.create_container(&config).await {
 
 - [ ] **Step 5: Add container_ip field to Pod model**
 
-In `crates/nexa-core/src/models/pod.rs` (or `domain/models/pod.rs`), add:
+In `crates/helyos-core/src/models/pod.rs` (or `domain/models/pod.rs`), add:
 
 ```rust
 use std::net::IpAddr;
@@ -1444,7 +1444,7 @@ git commit -m "feat(dns): integrate DNS register/deregister into orchestrator po
 ### Task 7: Set container DNS config when creating containers
 
 **Files:**
-- Modify: `crates/nexad/src/engine/orchestrator.rs` (or `crates/nexa-core/src/domain/orchestrator.rs`)
+- Modify: `crates/helyosd/src/engine/orchestrator.rs` (or `crates/helyos-core/src/domain/orchestrator.rs`)
 
 - [ ] **Step 1: Write failing test for DNS container config**
 
@@ -1587,7 +1587,7 @@ fn spawn_test_orchestrator() -> OrchestratorHandle {
 }
 ```
 
-Update `nexad/src/main.rs` (in Task 8).
+Update `helyosd/src/main.rs` (in Task 8).
 
 - [ ] **Step 5: Run all tests**
 
@@ -1603,19 +1603,19 @@ git commit -m "feat(dns): set container dns/dns_search config pointing to master
 
 ---
 
-### Task 8: Wire DnsProvider into nexad main.rs startup
+### Task 8: Wire DnsProvider into helyosd main.rs startup
 
 **Files:**
-- Modify: `crates/nexad/src/main.rs`
+- Modify: `crates/helyosd/src/main.rs`
 - Modify: CLI args (add `--dns-mode` and `--master-ip` flags)
 
 - [ ] **Step 1: Add CLI flags**
 
-In `crates/nexad/src/main.rs`, update the `Cli` struct:
+In `crates/helyosd/src/main.rs`, update the `Cli` struct:
 
 ```rust
 #[derive(Parser)]
-#[command(name = "nexad", about = "NexaNet daemon", version)]
+#[command(name = "helyosd", about = "Helyos daemon", version)]
 struct Cli {
     #[arg(long, default_value = "0.0.0.0")]
     host: String,
@@ -1623,7 +1623,7 @@ struct Cli {
     #[arg(long, default_value = "6443")]
     port: u16,
 
-    #[arg(long, default_value = "/var/lib/nexa")]
+    #[arg(long, default_value = "/var/lib/helyos")]
     data_dir: String,
 
     /// DNS mode: "noop" for single-node (Docker DNS), "embedded" for multi-node
@@ -1651,7 +1651,7 @@ struct Cli {
 use std::sync::Arc;
 
 use adapters::dns::{HickoryDnsProvider, NoopDnsProvider};
-use nexa_core::ports::dns::DnsProvider;
+use helyos_core::ports::dns::DnsProvider;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -1662,7 +1662,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    info!("starting nexad on {}:{}", cli.host, cli.port);
+    info!("starting helyosd on {}:{}", cli.host, cli.port);
 
     let runtime = adapters::runtime::DockerRuntime::new()?;
     runtime.ping().await?;
@@ -1696,19 +1696,19 @@ async fn main() -> anyhow::Result<()> {
 
 - [ ] **Step 3: Verify compilation**
 
-Run: `cargo check -p nexad 2>&1`
+Run: `cargo check -p helyosd 2>&1`
 Expected: compiles
 
 - [ ] **Step 4: Verify with --help**
 
-Run: `cargo run -p nexad -- --help 2>&1`
+Run: `cargo run -p helyosd -- --help 2>&1`
 Expected: shows `--dns-mode`, `--master-ip`, `--dns-listen`, `--dns-upstream` flags
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/main.rs
-git commit -m "feat(dns): wire DnsProvider into nexad startup with CLI flags for mode selection"
+git add crates/helyosd/src/main.rs
+git commit -m "feat(dns): wire DnsProvider into helyosd startup with CLI flags for mode selection"
 ```
 
 ---
@@ -1716,13 +1716,13 @@ git commit -m "feat(dns): wire DnsProvider into nexad startup with CLI flags for
 ### Task 9: External DNS forwarding for non-.internal queries
 
 **Files:**
-- Modify: `crates/nexad/src/adapters/dns/hickory.rs` (already implemented in Task 5, this task adds dedicated tests)
+- Modify: `crates/helyosd/src/adapters/dns/hickory.rs` (already implemented in Task 5, this task adds dedicated tests)
 
 - [ ] **Step 1: Write integration test for external forwarding**
 
 The forwarding logic was implemented in Task 5's `handle_dns_query` and `forward_to_upstream` functions. This task validates the end-to-end behavior.
 
-Add to `crates/nexad/src/adapters/dns/hickory.rs` tests:
+Add to `crates/helyosd/src/adapters/dns/hickory.rs` tests:
 
 ```rust
 #[test]
@@ -1800,17 +1800,17 @@ async fn forward_to_upstream_resolves_external_domain() {
 
 - [ ] **Step 3: Run tests**
 
-Run: `cargo test -p nexad -- adapters::dns 2>&1`
+Run: `cargo test -p helyosd -- adapters::dns 2>&1`
 Expected: all non-ignored tests pass
 
 Run ignored test manually if you have network:
 ```bash
-cargo test -p nexad -- adapters::dns::hickory::tests::forward_to_upstream_resolves_external_domain --ignored 2>&1
+cargo test -p helyosd -- adapters::dns::hickory::tests::forward_to_upstream_resolves_external_domain --ignored 2>&1
 ```
 
-- [ ] **Step 4: Add a DnsError variant to NexaError**
+- [ ] **Step 4: Add a DnsError variant to HelyosError**
 
-In `crates/nexa-core/src/error.rs`, add:
+In `crates/helyos-core/src/error.rs`, add:
 
 ```rust
 #[error("dns error: {0}")]
@@ -1839,7 +1839,7 @@ After all 9 tasks are complete:
 
 - [ ] `cargo check 2>&1` -- workspace compiles
 - [ ] `cargo test 2>&1` -- all tests pass
-- [ ] `cargo test -p nexad -- adapters::dns 2>&1` -- DNS adapter tests pass
+- [ ] `cargo test -p helyosd -- adapters::dns 2>&1` -- DNS adapter tests pass
 - [ ] `cargo clippy 2>&1` -- no warnings (fix any that appear)
 
 ```bash

@@ -5,49 +5,49 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
 **Goal:** Replace the DashMap+RwLock orchestrator with an actor-model design using mpsc/oneshot channels, and restructure the codebase into hexagonal architecture (ports & adapters).
 
-**Architecture:** The orchestrator becomes a single tokio task owning all state. External callers (API handlers) communicate via a `Command` enum sent over `mpsc::Sender`, receiving responses via `oneshot`. Domain logic moves to `nexa-core/src/domain/`, port traits to `nexa-core/src/ports/`, and infrastructure adapters to `nexad/src/adapters/`.
+**Architecture:** The orchestrator becomes a single tokio task owning all state. External callers (API handlers) communicate via a `Command` enum sent over `mpsc::Sender`, receiving responses via `oneshot`. Domain logic moves to `helyos-core/src/domain/`, port traits to `helyos-core/src/ports/`, and infrastructure adapters to `helyosd/src/adapters/`.
 
 **Tech Stack:** tokio (mpsc, oneshot, spawn), async-trait, serde, uuid, chrono, bollard (Docker adapter only)
 
 ---
 
-### Task 1: Restructure nexa-core into hexagonal layout
+### Task 1: Restructure helyos-core into hexagonal layout
 
 **Files:**
-- Create: `crates/nexa-core/src/domain/mod.rs`
-- Create: `crates/nexa-core/src/domain/models/mod.rs`
-- Create: `crates/nexa-core/src/domain/models/deployment.rs`
-- Create: `crates/nexa-core/src/domain/models/pod.rs`
-- Create: `crates/nexa-core/src/domain/models/project.rs`
-- Create: `crates/nexa-core/src/ports/mod.rs`
-- Create: `crates/nexa-core/src/ports/runtime.rs`
-- Modify: `crates/nexa-core/src/lib.rs`
-- Delete: `crates/nexa-core/src/models/mod.rs`
-- Delete: `crates/nexa-core/src/models/deployment.rs`
-- Delete: `crates/nexa-core/src/models/pod.rs`
-- Delete: `crates/nexa-core/src/models/project.rs`
-- Delete: `crates/nexa-core/src/runtime/mod.rs`
-- Delete: `crates/nexa-core/src/runtime/traits.rs`
-- Delete: `crates/nexa-core/src/runtime/docker.rs`
+- Create: `crates/helyos-core/src/domain/mod.rs`
+- Create: `crates/helyos-core/src/domain/models/mod.rs`
+- Create: `crates/helyos-core/src/domain/models/deployment.rs`
+- Create: `crates/helyos-core/src/domain/models/pod.rs`
+- Create: `crates/helyos-core/src/domain/models/project.rs`
+- Create: `crates/helyos-core/src/ports/mod.rs`
+- Create: `crates/helyos-core/src/ports/runtime.rs`
+- Modify: `crates/helyos-core/src/lib.rs`
+- Delete: `crates/helyos-core/src/models/mod.rs`
+- Delete: `crates/helyos-core/src/models/deployment.rs`
+- Delete: `crates/helyos-core/src/models/pod.rs`
+- Delete: `crates/helyos-core/src/models/project.rs`
+- Delete: `crates/helyos-core/src/runtime/mod.rs`
+- Delete: `crates/helyos-core/src/runtime/traits.rs`
+- Delete: `crates/helyos-core/src/runtime/docker.rs`
 
 - [ ] **Step 1: Create domain/models/ directory and move model files**
 
 ```bash
-mkdir -p crates/nexa-core/src/domain/models
-cp crates/nexa-core/src/models/deployment.rs crates/nexa-core/src/domain/models/deployment.rs
-cp crates/nexa-core/src/models/pod.rs crates/nexa-core/src/domain/models/pod.rs
-cp crates/nexa-core/src/models/project.rs crates/nexa-core/src/domain/models/project.rs
+mkdir -p crates/helyos-core/src/domain/models
+cp crates/helyos-core/src/models/deployment.rs crates/helyos-core/src/domain/models/deployment.rs
+cp crates/helyos-core/src/models/pod.rs crates/helyos-core/src/domain/models/pod.rs
+cp crates/helyos-core/src/models/project.rs crates/helyos-core/src/domain/models/project.rs
 ```
 
-Create `crates/nexa-core/src/domain/models/mod.rs`:
+Create `crates/helyos-core/src/domain/models/mod.rs`:
 ```rust
 mod deployment;
 mod pod;
@@ -58,14 +58,14 @@ pub use pod::*;
 pub use project::*;
 ```
 
-Create `crates/nexa-core/src/domain/mod.rs`:
+Create `crates/helyos-core/src/domain/mod.rs`:
 ```rust
 pub mod models;
 ```
 
 - [ ] **Step 2: Create ports/ directory and move runtime trait**
 
-Create `crates/nexa-core/src/ports/runtime.rs` — copy the trait definitions from `crates/nexa-core/src/runtime/traits.rs` but update the import path for `Result`:
+Create `crates/helyos-core/src/ports/runtime.rs` — copy the trait definitions from `crates/helyos-core/src/runtime/traits.rs` but update the import path for `Result`:
 
 ```rust
 use std::collections::HashMap;
@@ -140,14 +140,14 @@ pub trait ContainerRuntime: Send + Sync {
 }
 ```
 
-Create `crates/nexa-core/src/ports/mod.rs`:
+Create `crates/helyos-core/src/ports/mod.rs`:
 ```rust
 pub mod runtime;
 ```
 
 - [ ] **Step 3: Update lib.rs to new structure and delete old directories**
 
-Replace `crates/nexa-core/src/lib.rs`:
+Replace `crates/helyos-core/src/lib.rs`:
 ```rust
 pub mod config;
 pub mod domain;
@@ -157,13 +157,13 @@ pub mod ports;
 
 Delete old files:
 ```bash
-rm -rf crates/nexa-core/src/models
-rm -rf crates/nexa-core/src/runtime
+rm -rf crates/helyos-core/src/models
+rm -rf crates/helyos-core/src/runtime
 ```
 
 - [ ] **Step 4: Update config.rs imports**
 
-In `crates/nexa-core/src/config.rs`, change:
+In `crates/helyos-core/src/config.rs`, change:
 ```rust
 use crate::models::DeploymentSpec;
 ```
@@ -172,36 +172,36 @@ to:
 use crate::domain::models::DeploymentSpec;
 ```
 
-- [ ] **Step 5: Verify nexa-core compiles**
+- [ ] **Step 5: Verify helyos-core compiles**
 
-Run: `cargo check -p nexa-core 2>&1`
+Run: `cargo check -p helyos-core 2>&1`
 Expected: compiles with no errors (warnings OK)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -A crates/nexa-core/
-git commit -m "refactor: restructure nexa-core into hexagonal layout (domain + ports)"
+git add -A crates/helyos-core/
+git commit -m "refactor: restructure helyos-core into hexagonal layout (domain + ports)"
 ```
 
 ---
 
-### Task 2: Move Docker adapter to nexad
+### Task 2: Move Docker adapter to helyosd
 
 **Files:**
-- Create: `crates/nexad/src/adapters/mod.rs`
-- Create: `crates/nexad/src/adapters/runtime/mod.rs`
-- Create: `crates/nexad/src/adapters/runtime/docker.rs`
+- Create: `crates/helyosd/src/adapters/mod.rs`
+- Create: `crates/helyosd/src/adapters/runtime/mod.rs`
+- Create: `crates/helyosd/src/adapters/runtime/docker.rs`
 
 - [ ] **Step 1: Create adapters directory structure**
 
 ```bash
-mkdir -p crates/nexad/src/adapters/runtime
+mkdir -p crates/helyosd/src/adapters/runtime
 ```
 
-- [ ] **Step 2: Move docker.rs to nexad adapters**
+- [ ] **Step 2: Move docker.rs to helyosd adapters**
 
-Copy `crates/nexa-core/src/runtime/docker.rs` (which was deleted in Task 1 — use git to recover content) to `crates/nexad/src/adapters/runtime/docker.rs`. Update all imports to use the new paths:
+Copy `crates/helyos-core/src/runtime/docker.rs` (which was deleted in Task 1 — use git to recover content) to `crates/helyosd/src/adapters/runtime/docker.rs`. Update all imports to use the new paths:
 
 ```rust
 use std::collections::HashMap;
@@ -218,8 +218,8 @@ use bollard::models::{EndpointSettings, HostConfig, PortBinding as BollardPortBi
 use futures::StreamExt;
 use tracing::{debug, info};
 
-use nexa_core::ports::runtime::*;
-use nexa_core::error::{NexaError, Result};
+use helyos_core::ports::runtime::*;
+use helyos_core::error::{HelyosError, Result};
 
 pub struct DockerRuntime {
     client: Docker,
@@ -228,7 +228,7 @@ pub struct DockerRuntime {
 impl DockerRuntime {
     pub fn new() -> Result<Self> {
         let client =
-            Docker::connect_with_local_defaults().map_err(|e| NexaError::Runtime(e.to_string()))?;
+            Docker::connect_with_local_defaults().map_err(|e| HelyosError::Runtime(e.to_string()))?;
         Ok(Self { client })
     }
 
@@ -236,41 +236,41 @@ impl DockerRuntime {
         self.client
             .ping()
             .await
-            .map_err(|e| NexaError::Runtime(format!("Docker daemon unreachable: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("Docker daemon unreachable: {e}")))?;
         Ok(())
     }
 }
 
 // ... rest of the impl ContainerRuntime for DockerRuntime unchanged,
-// but every `use super::traits::*` becomes `use nexa_core::ports::runtime::*`
+// but every `use super::traits::*` becomes `use helyos_core::ports::runtime::*`
 ```
 
-Create `crates/nexad/src/adapters/runtime/mod.rs`:
+Create `crates/helyosd/src/adapters/runtime/mod.rs`:
 ```rust
 mod docker;
 
 pub use docker::DockerRuntime;
 ```
 
-Create `crates/nexad/src/adapters/mod.rs`:
+Create `crates/helyosd/src/adapters/mod.rs`:
 ```rust
 pub mod runtime;
 ```
 
-- [ ] **Step 3: Update nexad main.rs to reference adapters**
+- [ ] **Step 3: Update helyosd main.rs to reference adapters**
 
-Add `mod adapters;` to `crates/nexad/src/main.rs` (after existing mods).
+Add `mod adapters;` to `crates/helyosd/src/main.rs` (after existing mods).
 
-- [ ] **Step 4: Verify nexad compiles**
+- [ ] **Step 4: Verify helyosd compiles**
 
-Run: `cargo check -p nexad 2>&1`
+Run: `cargo check -p helyosd 2>&1`
 Expected: compiles (warnings OK). The engine/orchestrator.rs will still use old imports — we'll replace that entirely in Task 3.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/
-git commit -m "refactor: move Docker runtime adapter to nexad/adapters/"
+git add crates/helyosd/src/adapters/
+git commit -m "refactor: move Docker runtime adapter to helyosd/adapters/"
 ```
 
 ---
@@ -278,12 +278,12 @@ git commit -m "refactor: move Docker runtime adapter to nexad/adapters/"
 ### Task 3: Build the Command enum and OrchestratorHandle
 
 **Files:**
-- Create: `crates/nexa-core/src/domain/orchestrator.rs`
-- Test: `crates/nexa-core/src/domain/orchestrator.rs` (inline tests)
+- Create: `crates/helyos-core/src/domain/orchestrator.rs`
+- Test: `crates/helyos-core/src/domain/orchestrator.rs` (inline tests)
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `crates/nexa-core/src/domain/orchestrator.rs`:
+Add to `crates/helyos-core/src/domain/orchestrator.rs`:
 
 ```rust
 use std::sync::Arc;
@@ -292,7 +292,7 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use crate::domain::models::*;
-use crate::error::{NexaError, Result};
+use crate::error::{HelyosError, Result};
 use crate::ports::runtime::{ContainerRuntime, LogStream};
 
 pub enum Command {
@@ -350,9 +350,9 @@ impl OrchestratorHandle {
         self.tx
             .send(Command::Deploy { spec, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn list_deployments(&self, project: Option<String>) -> Vec<Deployment> {
@@ -372,9 +372,9 @@ impl OrchestratorHandle {
         self.tx
             .send(Command::CreateProject { name, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn list_projects(&self) -> Vec<Project> {
@@ -388,9 +388,9 @@ impl OrchestratorHandle {
         self.tx
             .send(Command::Stop { project, name, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn remove_deployment(&self, project: String, name: String) -> Result<()> {
@@ -398,9 +398,9 @@ impl OrchestratorHandle {
         self.tx
             .send(Command::RemoveDeployment { project, name, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn scale(&self, project: String, name: String, replicas: u32) -> Result<Deployment> {
@@ -408,9 +408,9 @@ impl OrchestratorHandle {
         self.tx
             .send(Command::Scale { project, name, replicas, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn pod_logs(&self, project: String, name: String, tail: Option<u64>) -> Result<LogStream> {
@@ -418,9 +418,9 @@ impl OrchestratorHandle {
         self.tx
             .send(Command::PodLogs { project, name, tail, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 }
 
@@ -457,7 +457,7 @@ mod tests {
 }
 ```
 
-Update `crates/nexa-core/src/domain/mod.rs`:
+Update `crates/helyos-core/src/domain/mod.rs`:
 ```rust
 pub mod models;
 pub mod orchestrator;
@@ -465,13 +465,13 @@ pub mod orchestrator;
 
 - [ ] **Step 2: Run test to verify it passes**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1`
 Expected: 2 tests pass
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/
+git add crates/helyos-core/src/domain/
 git commit -m "feat: add Command enum and OrchestratorHandle with channel-based communication"
 ```
 
@@ -480,7 +480,7 @@ git commit -m "feat: add Command enum and OrchestratorHandle with channel-based 
 ### Task 4: Build the Orchestrator actor loop
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
 
 - [ ] **Step 1: Write tests for the actor loop**
 
@@ -627,12 +627,12 @@ async fn stop_removes_pods() {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1`
 Expected: FAIL — `Orchestrator::spawn` does not exist yet
 
 - [ ] **Step 3: Implement the Orchestrator actor loop**
 
-Add to `crates/nexa-core/src/domain/orchestrator.rs` (above the `tests` module):
+Add to `crates/helyos-core/src/domain/orchestrator.rs` (above the `tests` module):
 
 ```rust
 use std::collections::HashMap as StdHashMap;
@@ -706,7 +706,7 @@ impl Orchestrator {
 
     fn handle_create_project(&mut self, name: &str) -> Result<Project> {
         if self.projects.contains_key(name) {
-            return Err(NexaError::InvalidSpec(format!("project '{name}' already exists")));
+            return Err(HelyosError::InvalidSpec(format!("project '{name}' already exists")));
         }
         let project = Project::new(name);
         self.projects.insert(name.to_string(), project.clone());
@@ -763,7 +763,7 @@ impl Orchestrator {
     async fn handle_stop(&mut self, project: &str, name: &str) -> Result<()> {
         let deployment_id = self
             .find_deployment_id(project, name)
-            .ok_or_else(|| NexaError::DeploymentNotFound(format!("{project}/{name}")))?;
+            .ok_or_else(|| HelyosError::DeploymentNotFound(format!("{project}/{name}")))?;
 
         let pod_ids: Vec<Uuid> = self
             .pods
@@ -793,7 +793,7 @@ impl Orchestrator {
         self.handle_stop(project, name).await?;
         let id = self
             .find_deployment_id(project, name)
-            .ok_or_else(|| NexaError::DeploymentNotFound(format!("{project}/{name}")))?;
+            .ok_or_else(|| HelyosError::DeploymentNotFound(format!("{project}/{name}")))?;
         self.deployments.remove(&id);
         Ok(())
     }
@@ -801,7 +801,7 @@ impl Orchestrator {
     async fn handle_scale(&mut self, project: &str, name: &str, replicas: u32) -> Result<Deployment> {
         let deployment_id = self
             .find_deployment_id(project, name)
-            .ok_or_else(|| NexaError::DeploymentNotFound(format!("{project}/{name}")))?;
+            .ok_or_else(|| HelyosError::DeploymentNotFound(format!("{project}/{name}")))?;
 
         if let Some(d) = self.deployments.get_mut(&deployment_id) {
             d.spec.replicas = replicas;
@@ -817,12 +817,12 @@ impl Orchestrator {
             .pods
             .values()
             .find(|p| p.project == project && p.deployment_name == name)
-            .ok_or_else(|| NexaError::PodNotFound(format!("{project}/{name}")))?;
+            .ok_or_else(|| HelyosError::PodNotFound(format!("{project}/{name}")))?;
 
         let container_id = pod
             .container_id
             .as_ref()
-            .ok_or_else(|| NexaError::Runtime("pod has no container".into()))?;
+            .ok_or_else(|| HelyosError::Runtime("pod has no container".into()))?;
 
         self.runtime.logs(container_id, tail).await
     }
@@ -831,7 +831,7 @@ impl Orchestrator {
         let spec = self.deployments[&deployment_id].spec.clone();
         let desired = spec.replicas;
 
-        let network_name = format!("nexa-{}", spec.project);
+        let network_name = format!("helyos-{}", spec.project);
         let _ = self.runtime.create_network(&network_name).await;
 
         let mut current_pods: Vec<Uuid> = self
@@ -895,7 +895,7 @@ impl Orchestrator {
         );
 
         let container_name = pod.container_name();
-        let network_name = format!("nexa-{}", spec.project);
+        let network_name = format!("helyos-{}", spec.project);
 
         pod.status = PodStatus::Creating;
 
@@ -916,10 +916,10 @@ impl Orchestrator {
             .collect();
 
         let mut labels = StdHashMap::new();
-        labels.insert("managed-by".to_string(), "nexanet".to_string());
-        labels.insert("nexa.project".to_string(), spec.project.clone());
-        labels.insert("nexa.deployment".to_string(), spec.deployment.name.clone());
-        labels.insert("nexa.pod-id".to_string(), pod.id.to_string());
+        labels.insert("managed-by".to_string(), "helyos".to_string());
+        labels.insert("helyos.project".to_string(), spec.project.clone());
+        labels.insert("helyos.deployment".to_string(), spec.deployment.name.clone());
+        labels.insert("helyos.pod-id".to_string(), pod.id.to_string());
 
         let config = ContainerConfig {
             name: container_name,
@@ -965,42 +965,42 @@ impl Orchestrator {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1`
 Expected: all 6 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "feat: implement Orchestrator actor loop with channel-based state management"
 ```
 
 ---
 
-### Task 5: Update nexad API to use OrchestratorHandle
+### Task 5: Update helyosd API to use OrchestratorHandle
 
 **Files:**
-- Modify: `crates/nexad/src/api/mod.rs`
-- Modify: `crates/nexad/src/api/routes.rs`
-- Modify: `crates/nexad/src/api/handlers.rs`
-- Modify: `crates/nexad/src/main.rs`
-- Delete: `crates/nexad/src/engine/mod.rs`
-- Delete: `crates/nexad/src/engine/orchestrator.rs`
+- Modify: `crates/helyosd/src/api/mod.rs`
+- Modify: `crates/helyosd/src/api/routes.rs`
+- Modify: `crates/helyosd/src/api/handlers.rs`
+- Modify: `crates/helyosd/src/main.rs`
+- Delete: `crates/helyosd/src/engine/mod.rs`
+- Delete: `crates/helyosd/src/engine/orchestrator.rs`
 
 - [ ] **Step 1: Update api/mod.rs**
 
-Replace `crates/nexad/src/api/mod.rs`:
+Replace `crates/helyosd/src/api/mod.rs`:
 ```rust
 mod handlers;
 mod routes;
 
-use nexa_core::domain::orchestrator::OrchestratorHandle;
+use helyos_core::domain::orchestrator::OrchestratorHandle;
 
 pub async fn serve(handle: OrchestratorHandle, addr: &str) -> anyhow::Result<()> {
     let app = routes::build(handle);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("nexad API listening on {addr}");
+    tracing::info!("helyosd API listening on {addr}");
 
     axum::serve(listener, app).await?;
     Ok(())
@@ -1009,14 +1009,14 @@ pub async fn serve(handle: OrchestratorHandle, addr: &str) -> anyhow::Result<()>
 
 - [ ] **Step 2: Update api/routes.rs**
 
-Replace `crates/nexad/src/api/routes.rs`:
+Replace `crates/helyosd/src/api/routes.rs`:
 ```rust
 use axum::routing::{delete, get, post};
 use axum::Router;
 use tower_http::trace::TraceLayer;
 
 use super::handlers;
-use nexa_core::domain::orchestrator::OrchestratorHandle;
+use helyos_core::domain::orchestrator::OrchestratorHandle;
 
 pub fn build(handle: OrchestratorHandle) -> Router {
     Router::new()
@@ -1049,7 +1049,7 @@ pub fn build(handle: OrchestratorHandle) -> Router {
 
 - [ ] **Step 3: Update api/handlers.rs**
 
-Replace `crates/nexad/src/api/handlers.rs`:
+Replace `crates/helyosd/src/api/handlers.rs`:
 ```rust
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -1059,8 +1059,8 @@ use axum::Json;
 use futures::StreamExt;
 use serde::Deserialize;
 
-use nexa_core::config::parse_deployment;
-use nexa_core::domain::orchestrator::OrchestratorHandle;
+use helyos_core::config::parse_deployment;
+use helyos_core::domain::orchestrator::OrchestratorHandle;
 
 type AppState = State<OrchestratorHandle>;
 
@@ -1215,7 +1215,7 @@ pub async fn logs(
 
 - [ ] **Step 4: Update main.rs — composition root**
 
-Replace `crates/nexad/src/main.rs`:
+Replace `crates/helyosd/src/main.rs`:
 ```rust
 mod adapters;
 mod api;
@@ -1226,10 +1226,10 @@ use clap::Parser;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-use nexa_core::domain::orchestrator::Orchestrator;
+use helyos_core::domain::orchestrator::Orchestrator;
 
 #[derive(Parser)]
-#[command(name = "nexad", about = "NexaNet daemon", version)]
+#[command(name = "helyosd", about = "Helyos daemon", version)]
 struct Cli {
     #[arg(long, default_value = "0.0.0.0")]
     host: String,
@@ -1237,7 +1237,7 @@ struct Cli {
     #[arg(long, default_value = "6443")]
     port: u16,
 
-    #[arg(long, default_value = "/var/lib/nexa")]
+    #[arg(long, default_value = "/var/lib/helyos")]
     data_dir: String,
 }
 
@@ -1251,7 +1251,7 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    info!("starting nexad on {}:{}", cli.host, cli.port);
+    info!("starting helyosd on {}:{}", cli.host, cli.port);
 
     let runtime = adapters::runtime::DockerRuntime::new()?;
     runtime.ping().await?;
@@ -1267,12 +1267,12 @@ async fn main() -> anyhow::Result<()> {
 - [ ] **Step 5: Delete old engine module**
 
 ```bash
-rm -rf crates/nexad/src/engine
+rm -rf crates/helyosd/src/engine
 ```
 
-- [ ] **Step 6: Remove dashmap dependency from nexad Cargo.toml**
+- [ ] **Step 6: Remove dashmap dependency from helyosd Cargo.toml**
 
-In `crates/nexad/Cargo.toml`, remove the line:
+In `crates/helyosd/Cargo.toml`, remove the line:
 ```
 dashmap = { workspace = true }
 ```
@@ -1291,30 +1291,30 @@ Expected: all tests pass (config tests + orchestrator tests)
 
 ```bash
 git add -A
-git commit -m "refactor: wire nexad to actor-based orchestrator, remove old engine module"
+git commit -m "refactor: wire helyosd to actor-based orchestrator, remove old engine module"
 ```
 
 ---
 
-### Task 6: Update nexa-cli imports
+### Task 6: Update helyos-cli imports
 
 **Files:**
-- Modify: `crates/nexa-cli/src/commands.rs`
+- Modify: `crates/helyos-cli/src/commands.rs`
 
 - [ ] **Step 1: Update import paths**
 
-In `crates/nexa-cli/src/commands.rs`, change:
+In `crates/helyos-cli/src/commands.rs`, change:
 ```rust
-use nexa_core::models::{Deployment, Pod, Project};
+use helyos_core::models::{Deployment, Pod, Project};
 ```
 to:
 ```rust
-use nexa_core::domain::models::{Deployment, Pod, Project};
+use helyos_core::domain::models::{Deployment, Pod, Project};
 ```
 
 - [ ] **Step 2: Verify CLI compiles**
 
-Run: `cargo check -p nexa-cli 2>&1`
+Run: `cargo check -p helyos-cli 2>&1`
 Expected: compiles
 
 - [ ] **Step 3: Run full test suite**
@@ -1325,8 +1325,8 @@ Expected: all tests pass
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-cli/src/commands.rs
-git commit -m "fix: update nexa-cli imports for hexagonal layout"
+git add crates/helyos-cli/src/commands.rs
+git commit -m "fix: update helyos-cli imports for hexagonal layout"
 ```
 
 ---

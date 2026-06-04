@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Modernize the nexa CLI with GitHub Dark-themed box panels for all commands and a btop-style live TUI dashboard (`nexa top`).
+**Goal:** Modernize the helyos CLI with GitHub Dark-themed box panels for all commands and a btop-style live TUI dashboard (`helyos top`).
 
-**Architecture:** Two rendering paths sharing a color/icon palette. One-shot panel renderer (`src/output/`) wraps existing commands in bordered boxes using the `console` crate. TUI app (`src/tui/`) powers `nexa top` with ratatui alternate-screen, live API polling, and keyboard navigation. Two new nexad API endpoints (`GET /api/v1/nodes/stats`, `GET /api/v1/events`) feed the dashboard.
+**Architecture:** Two rendering paths sharing a color/icon palette. One-shot panel renderer (`src/output/`) wraps existing commands in bordered boxes using the `console` crate. TUI app (`src/tui/`) powers `helyos top` with ratatui alternate-screen, live API polling, and keyboard navigation. Two new helyosd API endpoints (`GET /api/v1/nodes/stats`, `GET /api/v1/events`) feed the dashboard.
 
 **Tech Stack:** Rust 2024 edition, console 0.15, ratatui 0.29, crossterm 0.28, axum 0.8, sysinfo 0.32, tokio-stream, async-stream
 
@@ -12,7 +12,7 @@
 
 ## File Structure
 
-### nexa-cli (`/Users/nassime/GitHub/NexaNet/nexa-cli/`)
+### helyos-cli (`/Users/nassime/GitHub/Helyos/helyos-cli/`)
 
 | Action | Path | Responsibility |
 |--------|------|---------------|
@@ -41,10 +41,10 @@
 | Create | `src/tui/widgets/node_gauge.rs` | Node gauge bar widget |
 | Create | `src/tui/widgets/event_list.rs` | Event list widget |
 | Modify | `src/commands/mod.rs` | Export top command |
-| Create | `src/commands/top.rs` | `nexa top` command entry point |
+| Create | `src/commands/top.rs` | `helyos top` command entry point |
 | Modify | `src/main.rs` | Add Top subcommand to clap, wire to handler |
 
-### nexad (`/Users/nassime/GitHub/NexaNet/nexad/`)
+### helyosd (`/Users/nassime/GitHub/Helyos/helyosd/`)
 
 | Action | Path | Responsibility |
 |--------|------|---------------|
@@ -59,8 +59,8 @@
 ## Task 1: Shared Style System — Colors and Icons
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/output/style.rs`
-- Test: run `cargo test -p nexa-cli`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/output/style.rs`
+- Test: run `cargo test -p helyos-cli`
 
 - [ ] **Step 1: Write tests for the style system**
 
@@ -107,7 +107,7 @@ mod tests {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo test --lib output::style`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo test --lib output::style`
 Expected: FAIL — `icon`, `color`, `status_style`, `status_dot` not found
 
 - [ ] **Step 3: Implement the style system**
@@ -136,7 +136,7 @@ pub fn color(name: &str) -> Style {
 }
 
 pub fn icon(name: &str) -> &'static str {
-    let nerd = std::env::var("NEXA_ICONS")
+    let nerd = std::env::var("HELYOS_ICONS")
         .map(|v| v == "nerd")
         .unwrap_or(false);
 
@@ -264,13 +264,13 @@ mod tests {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo test --lib output::style`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo test --lib output::style`
 Expected: 4 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/output/style.rs
 git commit -m "feat(cli): add GitHub Dark style system with color palette and icon support"
 ```
@@ -280,8 +280,8 @@ git commit -m "feat(cli): add GitHub Dark style system with color palette and ic
 ## Task 2: PanelBuilder — Bordered Box Renderer
 
 **Files:**
-- Create: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/output/panel.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/output/mod.rs`
+- Create: `/Users/nassime/GitHub/Helyos/helyos-cli/src/output/panel.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/output/mod.rs`
 
 - [ ] **Step 1: Write tests for PanelBuilder**
 
@@ -374,7 +374,7 @@ mod tests {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo test --lib output::panel`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo test --lib output::panel`
 Expected: FAIL — methods not implemented
 
 - [ ] **Step 3: Implement PanelBuilder**
@@ -805,23 +805,23 @@ Add after the existing `mod table;` line (line 6) and add the export after the `
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo test --lib output::panel`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo test --lib output::panel`
 Expected: 4 tests PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/output/panel.rs src/output/mod.rs
 git commit -m "feat(cli): add PanelBuilder for bordered box output"
 ```
 
 ---
 
-## Task 3: Migrate `nexa status` to Panel
+## Task 3: Migrate `helyos status` to Panel
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/status.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/status.rs`
 
 - [ ] **Step 1: Rewrite status command to use Panel**
 
@@ -829,13 +829,13 @@ Replace the human-readable output section (lines 48-69) of `src/commands/status.
 
 ```rust
 use anyhow::Result;
-use nexa_core::domain::models::{Deployment, DeploymentStatus, Pod, PodStatus, Project};
+use helyos_core::domain::models::{Deployment, DeploymentStatus, Pod, PodStatus, Project};
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 use crate::output;
 use crate::output::Panel;
 
-pub async fn status(client: &NexaClient) -> Result<()> {
+pub async fn status(client: &HelyosClient) -> Result<()> {
     let projects: Vec<Project> = client.get("/api/v1/projects").await?;
     let deployments: Vec<Deployment> = client.get("/api/v1/deployments").await?;
     let pods: Vec<Pod> = client.get("/api/v1/pods").await?;
@@ -900,15 +900,15 @@ pub async fn status(client: &NexaClient) -> Result<()> {
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/commands/status.rs
-git commit -m "feat(cli): migrate nexa status to panel output"
+git commit -m "feat(cli): migrate helyos status to panel output"
 ```
 
 ---
@@ -916,7 +916,7 @@ git commit -m "feat(cli): migrate nexa status to panel output"
 ## Task 4: Refactor table.rs for Panel-Aware Rendering
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/output/table.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/output/table.rs`
 
 The existing `print_table` is still used by commands that haven't migrated yet. We keep it working but update its styling to match the new palette. The Panel's `.table()` method handles bordered table rendering. The standalone `print_table` gets status dots instead of plain text.
 
@@ -1001,23 +1001,23 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/output/table.rs
 git commit -m "feat(cli): update table renderer to use GitHub Dark palette and status dots"
 ```
 
 ---
 
-## Task 5: Migrate `nexa pods` to Panel
+## Task 5: Migrate `helyos pods` to Panel
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/pods.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/pods.rs`
 
 - [ ] **Step 1: Rewrite pods command**
 
@@ -1025,13 +1025,13 @@ Replace `src/commands/pods.rs`:
 
 ```rust
 use anyhow::Result;
-use nexa_core::domain::models::Pod;
+use helyos_core::domain::models::Pod;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 use crate::output;
 use crate::output::Panel;
 
-pub async fn pods(client: &NexaClient, project: Option<&str>) -> Result<()> {
+pub async fn pods(client: &HelyosClient, project: Option<&str>) -> Result<()> {
     let path = match project {
         Some(p) => format!("/api/v1/pods?project={p}"),
         None => "/api/v1/pods".to_string(),
@@ -1072,23 +1072,23 @@ pub async fn pods(client: &NexaClient, project: Option<&str>) -> Result<()> {
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/commands/pods.rs
-git commit -m "feat(cli): migrate nexa pods to panel output"
+git commit -m "feat(cli): migrate helyos pods to panel output"
 ```
 
 ---
 
-## Task 6: Migrate `nexa deployments` to Panel
+## Task 6: Migrate `helyos deployments` to Panel
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/deployments.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/deployments.rs`
 
 - [ ] **Step 1: Rewrite deployments command**
 
@@ -1096,13 +1096,13 @@ Replace `src/commands/deployments.rs`:
 
 ```rust
 use anyhow::Result;
-use nexa_core::domain::models::Deployment;
+use helyos_core::domain::models::Deployment;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 use crate::output;
 use crate::output::Panel;
 
-pub async fn deployments(client: &NexaClient, project: Option<&str>) -> Result<()> {
+pub async fn deployments(client: &HelyosClient, project: Option<&str>) -> Result<()> {
     let path = match project {
         Some(p) => format!("/api/v1/deployments?project={p}"),
         None => "/api/v1/deployments".to_string(),
@@ -1143,23 +1143,23 @@ pub async fn deployments(client: &NexaClient, project: Option<&str>) -> Result<(
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/commands/deployments.rs
-git commit -m "feat(cli): migrate nexa deployments to panel output"
+git commit -m "feat(cli): migrate helyos deployments to panel output"
 ```
 
 ---
 
-## Task 7: Migrate `nexa nodes` to Panel with Gauge Bars
+## Task 7: Migrate `helyos nodes` to Panel with Gauge Bars
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/nodes.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/nodes.rs`
 
 - [ ] **Step 1: Rewrite nodes command with gauge bars**
 
@@ -1167,13 +1167,13 @@ Replace `src/commands/nodes.rs`:
 
 ```rust
 use anyhow::Result;
-use nexa_core::domain::models::Node;
+use helyos_core::domain::models::Node;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 use crate::output;
 use crate::output::Panel;
 
-pub async fn nodes(client: &NexaClient) -> Result<()> {
+pub async fn nodes(client: &HelyosClient) -> Result<()> {
     let nodes: Vec<Node> = client.get("/api/v1/nodes").await?;
 
     if output::is_json_mode() {
@@ -1262,15 +1262,15 @@ fn format_bytes(bytes: u64) -> String {
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/commands/nodes.rs
-git commit -m "feat(cli): migrate nexa nodes to panel output with gauge bars"
+git commit -m "feat(cli): migrate helyos nodes to panel output with gauge bars"
 ```
 
 ---
@@ -1278,9 +1278,9 @@ git commit -m "feat(cli): migrate nexa nodes to panel output with gauge bars"
 ## Task 8: Deploy Progress Panel
 
 **Files:**
-- Create: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/output/deploy.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/output/mod.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/deploy.rs`
+- Create: `/Users/nassime/GitHub/Helyos/helyos-cli/src/output/deploy.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/output/mod.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/deploy.rs`
 
 - [ ] **Step 1: Create deploy panel renderer**
 
@@ -1334,17 +1334,17 @@ Replace `src/commands/deploy.rs`:
 
 ```rust
 use anyhow::Result;
-use nexa_core::config::parse_deployment_file;
-use nexa_core::domain::models::{Deployment, PodStatus};
+use helyos_core::config::parse_deployment_file;
+use helyos_core::domain::models::{Deployment, PodStatus};
 use std::path::Path;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 use crate::output::deploy::{DeployStep, render_deploy_panel};
 use crate::output::{self, Spinner};
 
-pub async fn deploy(client: &NexaClient, file: &str) -> Result<()> {
+pub async fn deploy(client: &HelyosClient, file: &str) -> Result<()> {
     let path = Path::new(file);
     if !path.exists() {
         anyhow::bail!("file not found: {file}");
@@ -1354,7 +1354,7 @@ pub async fn deploy(client: &NexaClient, file: &str) -> Result<()> {
     let spec = parse_deployment_file(path).map_err(|e| {
         output::print_error_with_hint(
             &format!("Invalid deployment spec: {e}"),
-            "Run 'nexa init' to generate a valid template",
+            "Run 'helyos init' to generate a valid template",
         );
         e
     })?;
@@ -1397,7 +1397,7 @@ pub async fn deploy(client: &NexaClient, file: &str) -> Result<()> {
     loop {
         if start.elapsed() > timeout {
             output::print_warning(&format!(
-                "Timed out waiting for all pods (60s). Check: nexa pods -p {project}"
+                "Timed out waiting for all pods (60s). Check: helyos pods -p {project}"
             ));
             anyhow::bail!("timed out waiting for deployment '{name}'");
         }
@@ -1455,11 +1455,11 @@ fn is_terminal_failure(status: &PodStatus) -> bool {
 }
 
 async fn poll_until_ready(
-    client: &NexaClient,
+    client: &HelyosClient,
     project: &str,
     name: &str,
     replicas: u32,
-) -> Result<Vec<nexa_core::domain::models::Pod>> {
+) -> Result<Vec<helyos_core::domain::models::Pod>> {
     let timeout = Duration::from_secs(60);
     let start = Instant::now();
 
@@ -1484,13 +1484,13 @@ async fn poll_until_ready(
 
 - [ ] **Step 4: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/output/deploy.rs src/output/mod.rs src/commands/deploy.rs
 git commit -m "feat(cli): add deploy progress panel with steps and timing"
 ```
@@ -1500,16 +1500,16 @@ git commit -m "feat(cli): add deploy progress panel with steps and timing"
 ## Task 9: Migrate Remaining List Commands to Panels
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/project.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/secret.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/route.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/project.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/secret.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/route.rs`
 
 - [ ] **Step 1: Migrate project list**
 
 In `src/commands/project.rs`, replace the `list_projects` function:
 
 ```rust
-pub async fn list_projects(client: &NexaClient) -> Result<()> {
+pub async fn list_projects(client: &HelyosClient) -> Result<()> {
     let projects: Vec<Project> = client.get("/api/v1/projects").await?;
 
     if output::is_json_mode() {
@@ -1538,7 +1538,7 @@ Add `use crate::output::Panel;` is not needed since we access via `output::Panel
 In `src/commands/secret.rs`, replace the `list` function:
 
 ```rust
-pub async fn list(client: &NexaClient, project: &str) -> Result<()> {
+pub async fn list(client: &HelyosClient, project: &str) -> Result<()> {
     let path = format!("/api/v1/projects/{project}/secrets");
     let secrets: Vec<String> = client.get(&path).await?;
 
@@ -1569,7 +1569,7 @@ pub async fn list(client: &NexaClient, project: &str) -> Result<()> {
 In `src/commands/route.rs`, replace the `list` function:
 
 ```rust
-pub async fn list(client: &NexaClient, project: Option<&str>) -> Result<()> {
+pub async fn list(client: &HelyosClient, project: Option<&str>) -> Result<()> {
     let path = match project {
         Some(p) => format!("/api/v1/routes?project={p}"),
         None => "/api/v1/routes".into(),
@@ -1611,13 +1611,13 @@ Add `use crate::output::Panel;` at the top of `route.rs`.
 
 - [ ] **Step 4: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/commands/project.rs src/commands/secret.rs src/commands/route.rs
 git commit -m "feat(cli): migrate project, secret, and route list commands to panel output"
 ```
@@ -1627,7 +1627,7 @@ git commit -m "feat(cli): migrate project, secret, and route list commands to pa
 ## Task 10: Formatted Logs Output
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/logs.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/logs.rs`
 
 - [ ] **Step 1: Add formatted log lines with timestamp and color**
 
@@ -1639,11 +1639,11 @@ use chrono::Local;
 use futures::StreamExt;
 use reqwest::Response;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 use crate::output;
 
 pub async fn logs(
-    client: &NexaClient,
+    client: &HelyosClient,
     project: Option<&str>,
     name: &str,
     tail: Option<u64>,
@@ -1688,34 +1688,34 @@ pub async fn logs(
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/commands/logs.rs
 git commit -m "feat(cli): add formatted log output with timestamps and colors"
 ```
 
 ---
 
-## Task 11: nexad — Node Stats Endpoint
+## Task 11: helyosd — Node Stats Endpoint
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexad/src/api/handlers.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexad/src/api/routes.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyosd/src/api/handlers.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyosd/src/api/routes.rs`
 
 The existing `GET /api/v1/nodes` returns nodes from the store. For single-node mode (no registered nodes), we need a `GET /api/v1/nodes/stats` that returns live sysinfo data.
 
 - [ ] **Step 1: Write the handler test**
 
-In `nexad/src/api/handlers.rs`, we will add a test at the end. But first, add the handler. nexad already depends on `sysinfo = "0.32"`.
+In `helyosd/src/api/handlers.rs`, we will add a test at the end. But first, add the handler. helyosd already depends on `sysinfo = "0.32"`.
 
 - [ ] **Step 2: Add node_stats handler**
 
-Add at the end of `nexad/src/api/handlers.rs` (before the `metrics_middleware` function):
+Add at the end of `helyosd/src/api/handlers.rs` (before the `metrics_middleware` function):
 
 ```rust
 pub async fn node_stats(State(state): AppStateExtractor) -> impl IntoResponse {
@@ -1742,7 +1742,7 @@ pub async fn node_stats(State(state): AppStateExtractor) -> impl IntoResponse {
         Ok(pods) => pods
             .iter()
             .filter(|p| {
-                p.status == nexa_core::domain::models::PodStatus::Running
+                p.status == helyos_core::domain::models::PodStatus::Running
             })
             .count() as u32,
         Err(_) => 0,
@@ -1802,7 +1802,7 @@ pub async fn node_stats(State(state): AppStateExtractor) -> impl IntoResponse {
 
 - [ ] **Step 3: Register the route**
 
-In `nexad/src/api/routes.rs`, add after the `.route("/api/v1/nodes", get(handlers::list_nodes))` line (line 63):
+In `helyosd/src/api/routes.rs`, add after the `.route("/api/v1/nodes", get(handlers::list_nodes))` line (line 63):
 
 ```rust
         .route("/api/v1/nodes/stats", get(handlers::node_stats))
@@ -1810,31 +1810,31 @@ In `nexad/src/api/routes.rs`, add after the `.route("/api/v1/nodes", get(handler
 
 - [ ] **Step 4: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo check`
 Expected: no errors
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/api/handlers.rs src/api/routes.rs
 git commit -m "feat(api): add GET /api/v1/nodes/stats with live sysinfo data"
 ```
 
 ---
 
-## Task 12: nexad — Events SSE Endpoint
+## Task 12: helyosd — Events SSE Endpoint
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexad/src/api/mod.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexad/src/api/handlers.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexad/src/api/routes.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexad/src/adapters/event_watcher.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexad/src/main.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyosd/src/api/mod.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyosd/src/api/handlers.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyosd/src/api/routes.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyosd/src/adapters/event_watcher.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyosd/src/main.rs`
 
 - [ ] **Step 1: Add broadcast channel to AppState**
 
-In `nexad/src/api/mod.rs`, add `tokio::sync::broadcast` to the state:
+In `helyosd/src/api/mod.rs`, add `tokio::sync::broadcast` to the state:
 
 ```rust
 mod handlers;
@@ -1842,9 +1842,9 @@ pub mod routes;
 
 use std::sync::Arc;
 
-use nexa_core::domain::orchestrator::OrchestratorHandle;
-use nexa_core::ports::metrics::MetricsPort;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::orchestrator::OrchestratorHandle;
+use helyos_core::ports::metrics::MetricsPort;
+use helyos_core::ports::state::StateStore;
 use tokio::sync::broadcast;
 
 #[derive(Clone)]
@@ -1880,7 +1880,7 @@ pub async fn serve(
     let app = routes::build(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("nexad API listening on {addr}");
+    tracing::info!("helyosd API listening on {addr}");
 
     axum::serve(listener, app).await?;
     Ok(())
@@ -1889,7 +1889,7 @@ pub async fn serve(
 
 - [ ] **Step 2: Add events SSE handler**
 
-In `nexad/src/api/handlers.rs`, add the import for `ClusterEvent` and the handler. Update the `use super::` line:
+In `helyosd/src/api/handlers.rs`, add the import for `ClusterEvent` and the handler. Update the `use super::` line:
 
 ```rust
 use super::{AppState as SharedState, ClusterEvent};
@@ -1929,7 +1929,7 @@ use tokio::sync::broadcast;
 
 - [ ] **Step 3: Register the route**
 
-In `nexad/src/api/routes.rs`, add after the `node_stats` route:
+In `helyosd/src/api/routes.rs`, add after the `node_stats` route:
 
 ```rust
         .route("/api/v1/events", get(handlers::events_stream))
@@ -1937,7 +1937,7 @@ In `nexad/src/api/routes.rs`, add after the `node_stats` route:
 
 - [ ] **Step 4: Update event_watcher to broadcast**
 
-Modify `nexad/src/adapters/event_watcher.rs` to accept and use a broadcast sender. Replace the function signature and add broadcasting:
+Modify `helyosd/src/adapters/event_watcher.rs` to accept and use a broadcast sender. Replace the function signature and add broadcasting:
 
 ```rust
 use std::sync::Arc;
@@ -1948,9 +1948,9 @@ use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use nexa_core::domain::orchestrator::Command;
-use nexa_core::ports::metrics::MetricsPort;
-use nexa_core::ports::runtime::{ContainerRuntime, RuntimeEvent};
+use helyos_core::domain::orchestrator::Command;
+use helyos_core::ports::metrics::MetricsPort;
+use helyos_core::ports::runtime::{ContainerRuntime, RuntimeEvent};
 
 use crate::api::ClusterEvent;
 
@@ -1980,7 +1980,7 @@ pub fn spawn_event_watcher(
 }
 
 async fn handle_event_stream(
-    mut stream: nexa_core::ports::runtime::EventStream,
+    mut stream: helyos_core::ports::runtime::EventStream,
     tx: &mpsc::Sender<Command>,
     metrics: Option<&dyn MetricsPort>,
     event_broadcast: Option<&broadcast::Sender<ClusterEvent>>,
@@ -2087,7 +2087,7 @@ mod tests {
             exit_code: 1,
         }];
         let (tx, mut rx) = mpsc::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
         handle_event_stream(stream, &tx, None, None).await;
         let cmd = rx.try_recv().expect("should have received a command");
@@ -2110,7 +2110,7 @@ mod tests {
             container_id: pod_id.to_string(),
         }];
         let (tx, mut rx) = mpsc::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
         handle_event_stream(stream, &tx, None, None).await;
         let cmd = rx.try_recv().expect("should have received a command");
@@ -2132,7 +2132,7 @@ mod tests {
             container_id: Uuid::new_v4().to_string(),
         }];
         let (tx, mut rx) = mpsc::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
         handle_event_stream(stream, &tx, None, None).await;
         assert!(rx.try_recv().is_err(), "should not forward started events");
@@ -2146,7 +2146,7 @@ mod tests {
         }];
         let (tx, _rx) = mpsc::channel(16);
         let (bc_tx, mut bc_rx) = broadcast::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
         handle_event_stream(stream, &tx, None, Some(&bc_tx)).await;
         let event = bc_rx.try_recv().expect("should have broadcast event");
@@ -2156,7 +2156,7 @@ mod tests {
 
     #[tokio::test]
     async fn event_watcher_records_metrics_on_die() {
-        use nexa_core::ports::metrics::NoOpMetrics;
+        use helyos_core::ports::metrics::NoOpMetrics;
 
         let pod_id = Uuid::new_v4();
         let events = vec![RuntimeEvent::ContainerDied {
@@ -2164,7 +2164,7 @@ mod tests {
             exit_code: 1,
         }];
         let (tx, _rx) = mpsc::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
         let metrics = NoOpMetrics;
         handle_event_stream(stream, &tx, Some(&metrics), None).await;
@@ -2174,7 +2174,7 @@ mod tests {
 
 - [ ] **Step 5: Update main.rs to create broadcast channel and pass it**
 
-In `nexad/src/main.rs`, find where `spawn_event_watcher` is called and add the broadcast channel. Also update the `api::serve` call to pass `event_tx`.
+In `helyosd/src/main.rs`, find where `spawn_event_watcher` is called and add the broadcast channel. Also update the `api::serve` call to pass `event_tx`.
 
 Find the `spawn_event_watcher` call (around line 247-252) and change it from:
 
@@ -2197,18 +2197,18 @@ api::serve(handle, store, metrics, event_tx, &addr).await
 
 - [ ] **Step 6: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo check`
 Expected: no errors
 
 - [ ] **Step 7: Run existing tests**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test`
 Expected: all tests pass (event_watcher tests updated)
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/api/mod.rs src/api/handlers.rs src/api/routes.rs src/adapters/event_watcher.rs src/main.rs
 git commit -m "feat(api): add events SSE endpoint and broadcast channel for cluster events"
 ```
@@ -2218,11 +2218,11 @@ git commit -m "feat(api): add events SSE endpoint and broadcast channel for clus
 ## Task 13: Add ratatui/crossterm Dependencies
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/Cargo.toml`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/Cargo.toml`
 
 - [ ] **Step 1: Add TUI dependencies**
 
-In `nexa-cli/Cargo.toml`, add after the `dialoguer = "0.11"` line:
+In `helyos-cli/Cargo.toml`, add after the `dialoguer = "0.11"` line:
 
 ```toml
 ratatui = "0.29"
@@ -2231,13 +2231,13 @@ crossterm = "0.28"
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors (new deps download and compile)
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add Cargo.toml Cargo.lock
 git commit -m "deps(cli): add ratatui 0.29 and crossterm 0.28 for TUI dashboard"
 ```
@@ -2247,9 +2247,9 @@ git commit -m "deps(cli): add ratatui 0.29 and crossterm 0.28 for TUI dashboard"
 ## Task 14: TUI — App State and Event Loop
 
 **Files:**
-- Create: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/mod.rs`
-- Create: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/app.rs`
-- Create: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/event.rs`
+- Create: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/mod.rs`
+- Create: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/app.rs`
+- Create: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/event.rs`
 
 - [ ] **Step 1: Create the TUI module entry point**
 
@@ -2272,11 +2272,11 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 use app::App;
 use event::EventHandler;
 
-pub async fn run(client: NexaClient) -> anyhow::Result<()> {
+pub async fn run(client: HelyosClient) -> anyhow::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -2294,7 +2294,7 @@ pub async fn run(client: NexaClient) -> anyhow::Result<()> {
 
 async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    client: NexaClient,
+    client: HelyosClient,
 ) -> anyhow::Result<()> {
     let mut app = App::new(client);
     let mut events = EventHandler::new(std::time::Duration::from_secs(2));
@@ -2325,7 +2325,7 @@ Create `src/tui/app.rs`:
 ```rust
 use serde::Deserialize;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActivePanel {
@@ -2356,10 +2356,10 @@ pub struct ClusterEvent {
 }
 
 pub struct App {
-    pub client: NexaClient,
+    pub client: HelyosClient,
     pub active_panel: ActivePanel,
-    pub pods: Vec<nexa_core::domain::models::Pod>,
-    pub deployments: Vec<nexa_core::domain::models::Deployment>,
+    pub pods: Vec<helyos_core::domain::models::Pod>,
+    pub deployments: Vec<helyos_core::domain::models::Deployment>,
     pub nodes: Vec<NodeStats>,
     pub events: Vec<ClusterEvent>,
     pub pod_cursor: usize,
@@ -2370,7 +2370,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(client: NexaClient) -> Self {
+    pub fn new(client: HelyosClient) -> Self {
         Self {
             client,
             active_panel: ActivePanel::Pods,
@@ -2389,11 +2389,11 @@ impl App {
     pub async fn refresh(&mut self) {
         let pods_result = self
             .client
-            .get::<Vec<nexa_core::domain::models::Pod>>("/api/v1/pods")
+            .get::<Vec<helyos_core::domain::models::Pod>>("/api/v1/pods")
             .await;
         let deployments_result = self
             .client
-            .get::<Vec<nexa_core::domain::models::Deployment>>("/api/v1/deployments")
+            .get::<Vec<helyos_core::domain::models::Deployment>>("/api/v1/deployments")
             .await;
         let nodes_result = self.client.get::<Vec<NodeStats>>("/api/v1/nodes/stats").await;
 
@@ -2506,7 +2506,7 @@ impl EventHandler {
 
 - [ ] **Step 4: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors (ui, actions, widgets modules empty — create stubs)
 
 We need to create stub files for the other modules referenced:
@@ -2584,13 +2584,13 @@ Create `src/tui/widgets/event_list.rs`:
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/tui/
 git commit -m "feat(cli): add TUI app state, event loop, and keyboard actions"
 ```
@@ -2600,10 +2600,10 @@ git commit -m "feat(cli): add TUI app state, event loop, and keyboard actions"
 ## Task 15: TUI — Rendering (ui.rs and widgets)
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/ui.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/widgets/pod_table.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/widgets/node_gauge.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/widgets/event_list.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/ui.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/widgets/pod_table.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/widgets/node_gauge.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/widgets/event_list.rs`
 
 - [ ] **Step 1: Implement pod_table widget**
 
@@ -2945,7 +2945,7 @@ fn draw_status_bar(f: &mut Frame, area: Rect, app: &App) {
 
     let line = Line::from(vec![
         Span::styled(
-            " ⊞ NexaNet ",
+            " ⊞ Helyos ",
             Style::default()
                 .fg(Color::Rgb(88, 166, 255))
                 .add_modifier(Modifier::BOLD),
@@ -3053,25 +3053,25 @@ fn draw_help_overlay(f: &mut Frame, area: Rect) {
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/tui/
 git commit -m "feat(cli): implement TUI rendering with pod table, node gauges, and event list"
 ```
 
 ---
 
-## Task 16: Wire `nexa top` Command into CLI
+## Task 16: Wire `helyos top` Command into CLI
 
 **Files:**
-- Create: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/top.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/commands/mod.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/main.rs`
+- Create: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/top.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/commands/mod.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/main.rs`
 
 - [ ] **Step 1: Create the top command handler**
 
@@ -3080,9 +3080,9 @@ Create `src/commands/top.rs`:
 ```rust
 use anyhow::Result;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 
-pub async fn top(client: NexaClient) -> Result<()> {
+pub async fn top(client: HelyosClient) -> Result<()> {
     crate::tui::run(client).await
 }
 ```
@@ -3126,20 +3126,20 @@ Note: `top` takes ownership of `client` (not a reference), so this arm must be p
 
 - [ ] **Step 6: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 7: Run all tests**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo test`
 Expected: all tests pass (including the new parse test for `top`)
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/commands/top.rs src/commands/mod.rs src/main.rs
-git commit -m "feat(cli): wire nexa top command to TUI dashboard"
+git commit -m "feat(cli): wire helyos top command to TUI dashboard"
 ```
 
 ---
@@ -3149,34 +3149,34 @@ git commit -m "feat(cli): wire nexa top command to TUI dashboard"
 **Files:**
 - Verify all changes compile and pass tests across both repos
 
-- [ ] **Step 1: Run full build and tests for nexa-cli**
+- [ ] **Step 1: Run full build and tests for helyos-cli**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo build && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo build && cargo test`
 Expected: build succeeds, all tests pass
 
-- [ ] **Step 2: Run full build and tests for nexad**
+- [ ] **Step 2: Run full build and tests for helyosd**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo build && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo build && cargo test`
 Expected: build succeeds, all tests pass
 
 - [ ] **Step 3: Run clippy on both repos**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo clippy -- -D warnings`
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo clippy -- -D warnings`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo clippy -- -D warnings`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo clippy -- -D warnings`
 Expected: no warnings
 
 - [ ] **Step 4: Run fmt check on both repos**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo fmt -- --check`
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo fmt -- --check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo fmt -- --check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo fmt -- --check`
 Expected: no formatting issues
 
 - [ ] **Step 5: Fix any issues found and commit**
 
 ```bash
 # If needed:
-cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo fmt
-cd /Users/nassime/GitHub/NexaNet/nexad && cargo fmt
+cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo fmt
+cd /Users/nassime/GitHub/Helyos/helyosd && cargo fmt
 git add -A && git commit -m "chore: fix formatting and clippy warnings"
 ```
 
@@ -3187,9 +3187,9 @@ git add -A && git commit -m "chore: fix formatting and clippy warnings"
 The TUI's events list is always empty because nothing consumes the `GET /api/v1/events` SSE stream. Fix the event loop to use tokio channels and spawn a background SSE reader.
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/event.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/mod.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/app.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/event.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/mod.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/app.rs`
 
 - [ ] **Step 1: Rewrite event.rs with tokio channels**
 
@@ -3212,7 +3212,7 @@ pub struct EventHandler {
 }
 
 impl EventHandler {
-    pub fn new(tick_rate: Duration, client: &crate::client::NexaClient, server_url: &str) -> Self {
+    pub fn new(tick_rate: Duration, client: &crate::client::HelyosClient, server_url: &str) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
         // Key event thread (crossterm is sync)
@@ -3301,11 +3301,11 @@ use crossterm::terminal::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 use app::App;
 use event::EventHandler;
 
-pub async fn run(client: NexaClient, server_url: &str) -> anyhow::Result<()> {
+pub async fn run(client: HelyosClient, server_url: &str) -> anyhow::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
@@ -3323,7 +3323,7 @@ pub async fn run(client: NexaClient, server_url: &str) -> anyhow::Result<()> {
 
 async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    client: NexaClient,
+    client: HelyosClient,
     server_url: &str,
 ) -> anyhow::Result<()> {
     let mut app = App::new(client);
@@ -3376,9 +3376,9 @@ In `src/commands/top.rs`:
 ```rust
 use anyhow::Result;
 
-use crate::client::NexaClient;
+use crate::client::HelyosClient;
 
-pub async fn top(client: NexaClient, server_url: &str) -> Result<()> {
+pub async fn top(client: HelyosClient, server_url: &str) -> Result<()> {
     crate::tui::run(client, server_url).await
 }
 ```
@@ -3391,13 +3391,13 @@ In `src/main.rs`, update the `Commands::Top` match arm:
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/tui/ src/commands/top.rs src/main.rs
 git commit -m "feat(cli): add SSE event streaming to TUI dashboard"
 ```
@@ -3407,9 +3407,9 @@ git commit -m "feat(cli): add SSE event streaming to TUI dashboard"
 ## Task 19: TUI — Pod Actions (Delete and Scale)
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/app.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/actions.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/ui.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/app.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/actions.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/ui.rs`
 
 - [ ] **Step 1: Add interaction modes to App state**
 
@@ -3443,7 +3443,7 @@ Initialize in `App::new`:
 In `src/tui/app.rs`, add to `impl App`:
 
 ```rust
-    pub fn selected_pod(&self) -> Option<&nexa_core::domain::models::Pod> {
+    pub fn selected_pod(&self) -> Option<&helyos_core::domain::models::Pod> {
         self.pods.get(self.pod_cursor)
     }
 
@@ -3475,7 +3475,7 @@ In `src/tui/app.rs`, add to `impl App`:
                 let body = serde_json::json!({ "replicas": replicas }).to_string();
                 match self
                     .client
-                    .post_json::<nexa_core::domain::models::Deployment>(&path, &body)
+                    .post_json::<helyos_core::domain::models::Deployment>(&path, &body)
                     .await
                 {
                     Ok(d) => {
@@ -3635,13 +3635,13 @@ Update `draw()` to pass `app` to `draw_keybinds`:
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/tui/
 git commit -m "feat(cli): add pod delete and scale actions to TUI dashboard"
 ```
@@ -3651,9 +3651,9 @@ git commit -m "feat(cli): add pod delete and scale actions to TUI dashboard"
 ## Task 20: TUI — Log Sub-View
 
 **Files:**
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/app.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/actions.rs`
-- Modify: `/Users/nassime/GitHub/NexaNet/nexa-cli/src/tui/ui.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/app.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/actions.rs`
+- Modify: `/Users/nassime/GitHub/Helyos/helyos-cli/src/tui/ui.rs`
 
 - [ ] **Step 1: Add log view state to App**
 
@@ -3806,13 +3806,13 @@ use super::app::{ActivePanel, App, InputMode};
 
 - [ ] **Step 4: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check`
 Expected: no errors
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/tui/
 git commit -m "feat(cli): add log sub-view to TUI dashboard"
 ```
@@ -3824,19 +3824,19 @@ git commit -m "feat(cli): add log sub-view to TUI dashboard"
 **Files:**
 - Both repos
 
-- [ ] **Step 1: Full build, test, clippy, fmt for nexa-cli**
+- [ ] **Step 1: Full build, test, clippy, fmt for helyos-cli**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo fmt && cargo clippy -- -D warnings && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo fmt && cargo clippy -- -D warnings && cargo test`
 Expected: all pass
 
-- [ ] **Step 2: Full build, test, clippy, fmt for nexad**
+- [ ] **Step 2: Full build, test, clippy, fmt for helyosd**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo fmt && cargo clippy -- -D warnings && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo fmt && cargo clippy -- -D warnings && cargo test`
 Expected: all pass
 
 - [ ] **Step 3: Commit any fixes**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli && git add -A && git commit -m "chore: final cleanup for CLI UI redesign"
-cd /Users/nassime/GitHub/NexaNet/nexad && git add -A && git commit -m "chore: final cleanup for events API"
+cd /Users/nassime/GitHub/Helyos/helyos-cli && git add -A && git commit -m "chore: final cleanup for CLI UI redesign"
+cd /Users/nassime/GitHub/Helyos/helyosd && git add -A && git commit -m "chore: final cleanup for events API"
 ```

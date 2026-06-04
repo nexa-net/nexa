@@ -1,23 +1,23 @@
-# NexaNet Testing Suite Implementation Plan
+# Helyos Testing Suite Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add integration tests, E2E tests with real Docker, and Criterion benchmarks with CI regression detection across all NexaNet repos.
+**Goal:** Add integration tests, E2E tests with real Docker, and Criterion benchmarks with CI regression detection across all Helyos repos.
 
-**Architecture:** Three test layers, each independent. Layer 1 adds integration tests to nexad (API + SQLite) and nexa-cli (command parsing + output). Layer 2 adds full-stack E2E tests to nexad using real Docker containers. Layer 3 adds Criterion benchmarks to nexa-core and nexad with CI regression gating via `github-action-benchmark`.
+**Architecture:** Three test layers, each independent. Layer 1 adds integration tests to helyosd (API + SQLite) and helyos-cli (command parsing + output). Layer 2 adds full-stack E2E tests to helyosd using real Docker containers. Layer 3 adds Criterion benchmarks to helyos-core and helyosd with CI regression gating via `github-action-benchmark`.
 
 **Tech Stack:** Rust test framework, criterion 0.5, reqwest 0.12 (test HTTP client), tempfile 3 (temp dirs), hyper 1 (test HTTP servers), tokio (async test runtime), github-action-benchmark (CI regression detection)
 
 **Multi-repo layout:**
-- nexa-core: `/Users/nassime/GitHub/NexaNet/nexa-core`
-- nexad: `/Users/nassime/GitHub/NexaNet/nexad`
-- nexa-cli: `/Users/nassime/GitHub/NexaNet/nexa-cli`
+- helyos-core: `/Users/nassime/GitHub/Helyos/helyos-core`
+- helyosd: `/Users/nassime/GitHub/Helyos/helyosd`
+- helyos-cli: `/Users/nassime/GitHub/Helyos/helyos-cli`
 
 ---
 
 ## File Structure
 
-### nexad changes
+### helyosd changes
 - **Modify:** `src/lib.rs` — expose `api` module publicly for integration tests
 - **Modify:** `src/main.rs` — move `mod api` from here to `src/lib.rs`
 - **Modify:** `Cargo.toml` — add `reqwest`, `criterion` dev-dependencies
@@ -30,30 +30,30 @@
 - **Modify:** `.github/workflows/ci.yml` — add integration + e2e jobs
 - **Create:** `.github/workflows/bench.yml` — benchmark CI with regression gate
 
-### nexa-core changes
+### helyos-core changes
 - **Modify:** `Cargo.toml` — add `criterion` dev-dependency
 - **Create:** `benches/scheduler.rs` — scheduler benchmark
 - **Create:** `benches/config_parsing.rs` — YAML parsing benchmark
 - **Create:** `.github/workflows/bench.yml` — benchmark CI
 
-### nexa-cli changes
+### helyos-cli changes
 - **Modify:** `src/output/table.rs` — add tests for table rendering + JSON mode
 - **Modify:** `src/output/mod.rs` — add tests for style functions
 - **Modify:** `src/main.rs` — add tests for CLI argument parsing
 
 ---
 
-### Task 1: Expose nexad API module for integration tests
+### Task 1: Expose helyosd API module for integration tests
 
 **Files:**
-- Modify: `nexad/src/lib.rs`
-- Modify: `nexad/src/main.rs`
+- Modify: `helyosd/src/lib.rs`
+- Modify: `helyosd/src/main.rs`
 
 The `api` module is currently private to the binary (`mod api` in `main.rs`). Integration tests use the library crate, so they can't access it. We need to move it to `lib.rs` as a public module.
 
 - [ ] **Step 1: Move `mod api` from main.rs to lib.rs**
 
-In `nexad/src/lib.rs`, add `pub mod api;`:
+In `helyosd/src/lib.rs`, add `pub mod api;`:
 
 ```rust
 pub mod adapters;
@@ -62,7 +62,7 @@ pub mod cluster;
 pub mod crypto;
 ```
 
-In `nexad/src/main.rs`, remove the `mod api;` line (line 1). Replace internal usages of `api::` with `nexad::api::`. The main.rs already uses `nexad::adapters::...` for adapters, so update the `api::serve` call:
+In `helyosd/src/main.rs`, remove the `mod api;` line (line 1). Replace internal usages of `api::` with `helyosd::api::`. The main.rs already uses `helyosd::adapters::...` for adapters, so update the `api::serve` call:
 
 Find this in main.rs:
 ```rust
@@ -70,36 +70,36 @@ mod api;
 ```
 Remove it.
 
-Find calls like `api::serve(...)` and replace with `nexad::api::serve(...)`.
+Find calls like `api::serve(...)` and replace with `helyosd::api::serve(...)`.
 
 - [ ] **Step 2: Verify compilation**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo build`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo build`
 Expected: Compiles successfully
 
 - [ ] **Step 3: Verify existing tests pass**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test --lib`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test --lib`
 Expected: All 156 tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/lib.rs src/main.rs
 git commit -m "refactor: expose api module publicly for integration tests"
 ```
 
 ---
 
-### Task 2: Add dev-dependencies to nexad
+### Task 2: Add dev-dependencies to helyosd
 
 **Files:**
-- Modify: `nexad/Cargo.toml`
+- Modify: `helyosd/Cargo.toml`
 
 - [ ] **Step 1: Add reqwest and criterion to dev-dependencies**
 
-In `nexad/Cargo.toml`, add to the existing `[dev-dependencies]` section:
+In `helyosd/Cargo.toml`, add to the existing `[dev-dependencies]` section:
 
 ```toml
 [dev-dependencies]
@@ -111,39 +111,39 @@ criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 
 - [ ] **Step 2: Verify compilation**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test --lib --no-run`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test --lib --no-run`
 Expected: Compiles with new dependencies
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add Cargo.toml
 git commit -m "build: add reqwest and criterion dev-dependencies"
 ```
 
 ---
 
-### Task 3: nexad API integration tests — health + projects
+### Task 3: helyosd API integration tests — health + projects
 
 **Files:**
-- Create: `nexad/tests/api_integration.rs`
+- Create: `helyosd/tests/api_integration.rs`
 
 These tests spin up the full axum API with real SQLite and MockRuntime (no Docker needed).
 
 - [ ] **Step 1: Create the test file with setup helpers and first tests**
 
-Create `nexad/tests/api_integration.rs`:
+Create `helyosd/tests/api_integration.rs`:
 
 ```rust
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use nexa_core::domain::orchestrator::Orchestrator;
-use nexa_core::ports::state::StateStore;
-use nexad::adapters::secrets::EncryptedSqliteSecretStore;
-use nexad::adapters::state::SqliteStore;
-use nexad::api;
+use helyos_core::domain::orchestrator::Orchestrator;
+use helyos_core::ports::state::StateStore;
+use helyosd::adapters::secrets::EncryptedSqliteSecretStore;
+use helyosd::adapters::state::SqliteStore;
+use helyosd::api;
 
 struct TestServer {
     addr: SocketAddr,
@@ -162,14 +162,14 @@ impl TestServer {
         let secret_db_path = data_dir.path().join("secrets.db");
         let secret_conn = rusqlite::Connection::open(&secret_db_path).unwrap();
         let master_key = [0u8; 32];
-        let secret_store: Arc<dyn nexa_core::ports::secrets::SecretStore> =
+        let secret_store: Arc<dyn helyos_core::ports::secrets::SecretStore> =
             Arc::new(EncryptedSqliteSecretStore::new(secret_conn, &master_key).unwrap());
 
-        let runtime: Arc<dyn nexa_core::ports::runtime::ContainerRuntime> =
+        let runtime: Arc<dyn helyos_core::ports::runtime::ContainerRuntime> =
             Arc::new(MockRuntime);
 
-        let transport: Arc<dyn nexa_core::ports::cluster::ClusterTransport> =
-            Arc::new(nexad::adapters::transport::LocalTransport::new(Arc::clone(&runtime)));
+        let transport: Arc<dyn helyos_core::ports::cluster::ClusterTransport> =
+            Arc::new(helyosd::adapters::transport::LocalTransport::new(Arc::clone(&runtime)));
 
         let handle = Orchestrator::spawn(
             runtime,
@@ -206,52 +206,52 @@ impl TestServer {
 struct MockRuntime;
 
 #[async_trait::async_trait]
-impl nexa_core::ports::runtime::ContainerRuntime for MockRuntime {
+impl helyos_core::ports::runtime::ContainerRuntime for MockRuntime {
     fn runtime_name(&self) -> &'static str { "mock" }
-    async fn pull_image(&self, _image: &str) -> nexa_core::error::Result<()> { Ok(()) }
+    async fn pull_image(&self, _image: &str) -> helyos_core::error::Result<()> { Ok(()) }
     async fn create_container(
         &self,
-        config: &nexa_core::ports::runtime::ContainerConfig,
-    ) -> nexa_core::error::Result<String> {
+        config: &helyos_core::ports::runtime::ContainerConfig,
+    ) -> helyos_core::error::Result<String> {
         Ok(format!("mock-{}", config.name))
     }
-    async fn start_container(&self, _id: &str) -> nexa_core::error::Result<()> { Ok(()) }
-    async fn stop_container(&self, _id: &str, _timeout: u64) -> nexa_core::error::Result<()> { Ok(()) }
-    async fn remove_container(&self, _id: &str, _force: bool) -> nexa_core::error::Result<()> { Ok(()) }
+    async fn start_container(&self, _id: &str) -> helyos_core::error::Result<()> { Ok(()) }
+    async fn stop_container(&self, _id: &str, _timeout: u64) -> helyos_core::error::Result<()> { Ok(()) }
+    async fn remove_container(&self, _id: &str, _force: bool) -> helyos_core::error::Result<()> { Ok(()) }
     async fn inspect_container(
         &self,
         _id: &str,
-    ) -> nexa_core::error::Result<nexa_core::ports::runtime::ContainerInfo> {
-        Ok(nexa_core::ports::runtime::ContainerInfo {
+    ) -> helyos_core::error::Result<helyos_core::ports::runtime::ContainerInfo> {
+        Ok(helyos_core::ports::runtime::ContainerInfo {
             id: "mock".into(),
             name: "mock".into(),
             image: "mock".into(),
-            state: nexa_core::ports::runtime::ContainerState::Running,
+            state: helyos_core::ports::runtime::ContainerState::Running,
         })
     }
     async fn logs(
         &self,
         _id: &str,
         _tail: Option<u64>,
-    ) -> nexa_core::error::Result<nexa_core::ports::runtime::LogStream> {
+    ) -> helyos_core::error::Result<helyos_core::ports::runtime::LogStream> {
         Ok(Box::pin(futures::stream::empty()))
     }
-    async fn container_exists(&self, _name: &str) -> nexa_core::error::Result<bool> { Ok(false) }
-    async fn create_network(&self, _name: &str) -> nexa_core::error::Result<String> {
+    async fn container_exists(&self, _name: &str) -> helyos_core::error::Result<bool> { Ok(false) }
+    async fn create_network(&self, _name: &str) -> helyos_core::error::Result<String> {
         Ok("net-id".into())
     }
-    async fn remove_network(&self, _name: &str) -> nexa_core::error::Result<()> { Ok(()) }
-    async fn connect_to_network(&self, _id: &str, _net: &str) -> nexa_core::error::Result<()> {
+    async fn remove_network(&self, _name: &str) -> helyos_core::error::Result<()> { Ok(()) }
+    async fn connect_to_network(&self, _id: &str, _net: &str) -> helyos_core::error::Result<()> {
         Ok(())
     }
     async fn container_ip(
         &self,
         _container_id: &str,
         _network: &str,
-    ) -> nexa_core::error::Result<String> {
+    ) -> helyos_core::error::Result<String> {
         Ok("172.17.0.2".to_string())
     }
-    async fn events(&self) -> nexa_core::error::Result<nexa_core::ports::runtime::EventStream> {
+    async fn events(&self) -> helyos_core::error::Result<helyos_core::ports::runtime::EventStream> {
         Ok(Box::pin(futures::stream::pending()))
     }
 }
@@ -341,27 +341,27 @@ async fn suspend_and_resume_project() {
 
 - [ ] **Step 2: Run to verify tests pass**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test --test api_integration`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test --test api_integration`
 Expected: 4 tests pass
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add tests/api_integration.rs
 git commit -m "test: add API integration tests for health and project CRUD"
 ```
 
 ---
 
-### Task 4: nexad API integration tests — deploy, scale, pods, secrets, routes
+### Task 4: helyosd API integration tests — deploy, scale, pods, secrets, routes
 
 **Files:**
-- Modify: `nexad/tests/api_integration.rs`
+- Modify: `helyosd/tests/api_integration.rs`
 
 - [ ] **Step 1: Add deploy lifecycle test**
 
-Append to `nexad/tests/api_integration.rs`:
+Append to `helyosd/tests/api_integration.rs`:
 
 ```rust
 #[tokio::test]
@@ -655,13 +655,13 @@ async fn deploy_invalid_spec_returns_400() {
 
 - [ ] **Step 2: Run all API integration tests**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test --test api_integration`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test --test api_integration`
 Expected: 11 tests pass
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add tests/api_integration.rs
 git commit -m "test: add API integration tests for deploy, scale, secrets, routes"
 ```
@@ -671,15 +671,15 @@ git commit -m "test: add API integration tests for deploy, scale, secrets, route
 ### Task 5: Enrich SQLite integration tests
 
 **Files:**
-- Modify: `nexad/tests/sqlite_integration.rs`
+- Modify: `helyosd/tests/sqlite_integration.rs`
 
 - [ ] **Step 1: Read the existing file**
 
-Read: `nexad/tests/sqlite_integration.rs` to see current structure and imports.
+Read: `helyosd/tests/sqlite_integration.rs` to see current structure and imports.
 
 - [ ] **Step 2: Add cascade delete, node CRUD, and concurrent write tests**
 
-Append the following tests to `nexad/tests/sqlite_integration.rs`:
+Append the following tests to `helyosd/tests/sqlite_integration.rs`:
 
 ```rust
 #[tokio::test]
@@ -687,10 +687,10 @@ async fn cascade_delete_project_removes_deployments_and_pods() {
     let dir = tempfile::tempdir().unwrap();
     let db_path = dir.path().join("cascade.db");
     let url = format!("sqlite:{}?mode=rwc", db_path.display());
-    let store = nexad::adapters::state::SqliteStore::connect(&url).await.unwrap();
+    let store = helyosd::adapters::state::SqliteStore::connect(&url).await.unwrap();
 
-    use nexa_core::domain::models::*;
-    use nexa_core::ports::state::StateStore;
+    use helyos_core::domain::models::*;
+    use helyos_core::ports::state::StateStore;
 
     let project = Project::new("cascadetest");
     store.insert_project(&project).await.unwrap();
@@ -733,10 +733,10 @@ async fn node_crud_lifecycle() {
     let dir = tempfile::tempdir().unwrap();
     let db_path = dir.path().join("nodes.db");
     let url = format!("sqlite:{}?mode=rwc", db_path.display());
-    let store = nexad::adapters::state::SqliteStore::connect(&url).await.unwrap();
+    let store = helyosd::adapters::state::SqliteStore::connect(&url).await.unwrap();
 
-    use nexa_core::domain::models::*;
-    use nexa_core::ports::state::StateStore;
+    use helyos_core::domain::models::*;
+    use helyos_core::ports::state::StateStore;
 
     // Insert node
     let node = Node {
@@ -780,11 +780,11 @@ async fn concurrent_pod_inserts() {
     let db_path = dir.path().join("concurrent.db");
     let url = format!("sqlite:{}?mode=rwc", db_path.display());
     let store = std::sync::Arc::new(
-        nexad::adapters::state::SqliteStore::connect(&url).await.unwrap(),
+        helyosd::adapters::state::SqliteStore::connect(&url).await.unwrap(),
     );
 
-    use nexa_core::domain::models::*;
-    use nexa_core::ports::state::StateStore;
+    use helyos_core::domain::models::*;
+    use helyos_core::ports::state::StateStore;
 
     let project = Project::new("conctest");
     store.insert_project(&project).await.unwrap();
@@ -827,28 +827,28 @@ async fn concurrent_pod_inserts() {
 
 - [ ] **Step 3: Run to verify**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test --test sqlite_integration`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test --test sqlite_integration`
 Expected: 4 tests pass (1 existing + 3 new)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add tests/sqlite_integration.rs
 git commit -m "test: enrich SQLite integration tests with cascade, nodes, concurrency"
 ```
 
 ---
 
-### Task 6: nexa-cli command parsing and output tests
+### Task 6: helyos-cli command parsing and output tests
 
 **Files:**
-- Modify: `nexa-cli/src/output/table.rs`
-- Modify: `nexa-cli/src/main.rs`
+- Modify: `helyos-cli/src/output/table.rs`
+- Modify: `helyos-cli/src/main.rs`
 
 - [ ] **Step 1: Add table rendering tests**
 
-Append to the bottom of `nexa-cli/src/output/table.rs`:
+Append to the bottom of `helyos-cli/src/output/table.rs`:
 
 ```rust
 #[cfg(test)]
@@ -897,7 +897,7 @@ mod tests {
 
 - [ ] **Step 2: Add CLI argument parsing tests**
 
-Append to the bottom of `nexa-cli/src/main.rs`:
+Append to the bottom of `helyos-cli/src/main.rs`:
 
 ```rust
 #[cfg(test)]
@@ -907,7 +907,7 @@ mod tests {
 
     #[test]
     fn parse_deploy_command() {
-        let cli = Cli::try_parse_from(["nexa", "deploy", "app.yaml"]).unwrap();
+        let cli = Cli::try_parse_from(["helyos", "deploy", "app.yaml"]).unwrap();
         match cli.command {
             Commands::Deploy { file } => assert_eq!(file, "app.yaml"),
             _ => panic!("expected Deploy"),
@@ -916,7 +916,7 @@ mod tests {
 
     #[test]
     fn parse_scale_command() {
-        let cli = Cli::try_parse_from(["nexa", "scale", "api", "5", "-p", "myapp"]).unwrap();
+        let cli = Cli::try_parse_from(["helyos", "scale", "api", "5", "-p", "myapp"]).unwrap();
         match cli.command {
             Commands::Scale { name, replicas, project } => {
                 assert_eq!(name, "api");
@@ -929,7 +929,7 @@ mod tests {
 
     #[test]
     fn parse_pods_with_project() {
-        let cli = Cli::try_parse_from(["nexa", "pods", "--project", "web"]).unwrap();
+        let cli = Cli::try_parse_from(["helyos", "pods", "--project", "web"]).unwrap();
         match cli.command {
             Commands::Pods { project } => assert_eq!(project.as_deref(), Some("web")),
             _ => panic!("expected Pods"),
@@ -938,19 +938,19 @@ mod tests {
 
     #[test]
     fn parse_json_flag() {
-        let cli = Cli::try_parse_from(["nexa", "--json", "status"]).unwrap();
+        let cli = Cli::try_parse_from(["helyos", "--json", "status"]).unwrap();
         assert!(cli.json);
     }
 
     #[test]
     fn parse_server_flag() {
-        let cli = Cli::try_parse_from(["nexa", "--server", "http://10.0.1.1:6443", "status"]).unwrap();
+        let cli = Cli::try_parse_from(["helyos", "--server", "http://10.0.1.1:6443", "status"]).unwrap();
         assert_eq!(cli.server, "http://10.0.1.1:6443");
     }
 
     #[test]
     fn parse_secret_set() {
-        let cli = Cli::try_parse_from(["nexa", "secret", "set", "DB_PASS", "s3cret", "-p", "myapp"]).unwrap();
+        let cli = Cli::try_parse_from(["helyos", "secret", "set", "DB_PASS", "s3cret", "-p", "myapp"]).unwrap();
         match cli.command {
             Commands::Secret { command: SecretCommands::Set { name, value, project } } => {
                 assert_eq!(name, "DB_PASS");
@@ -964,7 +964,7 @@ mod tests {
     #[test]
     fn parse_route_add() {
         let cli = Cli::try_parse_from([
-            "nexa", "route", "add", "api.example.com",
+            "helyos", "route", "add", "api.example.com",
             "-p", "web", "--deployment", "api", "--https",
         ]).unwrap();
         match cli.command {
@@ -982,13 +982,13 @@ mod tests {
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo test`
 Expected: All existing + new tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add src/output/table.rs src/main.rs
 git commit -m "test: add CLI argument parsing and table output tests"
 ```
@@ -998,11 +998,11 @@ git commit -m "test: add CLI argument parsing and table output tests"
 ### Task 7: Update CI workflows — integration + E2E jobs
 
 **Files:**
-- Modify: `nexad/.github/workflows/ci.yml`
+- Modify: `helyosd/.github/workflows/ci.yml`
 
-- [ ] **Step 1: Update nexad CI with integration and E2E jobs**
+- [ ] **Step 1: Update helyosd CI with integration and E2E jobs**
 
-Replace the full content of `nexad/.github/workflows/ci.yml`:
+Replace the full content of `helyosd/.github/workflows/ci.yml`:
 
 ```yaml
 name: CI
@@ -1075,34 +1075,34 @@ jobs:
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add .github/workflows/ci.yml
 git commit -m "ci: add integration and E2E test jobs"
 ```
 
 ---
 
-### Task 8: nexad E2E tests with real Docker
+### Task 8: helyosd E2E tests with real Docker
 
 **Files:**
-- Create: `nexad/tests/e2e.rs`
+- Create: `helyosd/tests/e2e.rs`
 
 These tests require Docker and are `#[ignore]`d by default.
 
 - [ ] **Step 1: Create E2E test file**
 
-Create `nexad/tests/e2e.rs`:
+Create `helyosd/tests/e2e.rs`:
 
 ```rust
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use nexa_core::domain::orchestrator::Orchestrator;
-use nexa_core::ports::state::StateStore;
-use nexad::adapters::secrets::EncryptedSqliteSecretStore;
-use nexad::adapters::state::SqliteStore;
-use nexad::adapters::transport::LocalTransport;
-use nexad::api;
+use helyos_core::domain::orchestrator::Orchestrator;
+use helyos_core::ports::state::StateStore;
+use helyosd::adapters::secrets::EncryptedSqliteSecretStore;
+use helyosd::adapters::state::SqliteStore;
+use helyosd::adapters::transport::LocalTransport;
+use helyosd::api;
 
 struct E2eServer {
     addr: SocketAddr,
@@ -1121,17 +1121,17 @@ impl E2eServer {
         let secret_db_path = data_dir.path().join("secrets.db");
         let secret_conn = rusqlite::Connection::open(&secret_db_path).unwrap();
         let master_key = [0u8; 32];
-        let secret_store: Arc<dyn nexa_core::ports::secrets::SecretStore> =
+        let secret_store: Arc<dyn helyos_core::ports::secrets::SecretStore> =
             Arc::new(EncryptedSqliteSecretStore::new(secret_conn, &master_key).unwrap());
 
         // Real Docker runtime
-        let runtime: Arc<dyn nexa_core::ports::runtime::ContainerRuntime> = Arc::new(
-            nexad::adapters::runtime::DockerRuntime::new(data_dir.path().to_str().unwrap())
+        let runtime: Arc<dyn helyos_core::ports::runtime::ContainerRuntime> = Arc::new(
+            helyosd::adapters::runtime::DockerRuntime::new(data_dir.path().to_str().unwrap())
                 .await
                 .expect("Docker must be running for E2E tests"),
         );
 
-        let transport: Arc<dyn nexa_core::ports::cluster::ClusterTransport> =
+        let transport: Arc<dyn helyos_core::ports::cluster::ClusterTransport> =
             Arc::new(LocalTransport::new(Arc::clone(&runtime)));
 
         let handle = Orchestrator::spawn(
@@ -1180,10 +1180,10 @@ impl E2eServer {
     }
 }
 
-/// Clean up any Docker containers with the `nexa-e2e-` prefix.
+/// Clean up any Docker containers with the `helyos-e2e-` prefix.
 async fn cleanup_containers() {
     let output = tokio::process::Command::new("docker")
-        .args(["ps", "-a", "--filter", "name=nexa-e2e-", "--format", "{{.Names}}"])
+        .args(["ps", "-a", "--filter", "name=helyos-e2e-", "--format", "{{.Names}}"])
         .output()
         .await;
     if let Ok(output) = output {
@@ -1418,34 +1418,34 @@ async fn e2e_route_management() {
 
 - [ ] **Step 2: Verify E2E tests compile**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test --test e2e --no-run`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test --test e2e --no-run`
 Expected: Compiles successfully (tests are `#[ignore]` so won't run)
 
 - [ ] **Step 3: Run E2E tests locally (requires Docker)**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && docker pull busybox:latest && cargo test --test e2e -- --ignored --test-threads=1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && docker pull busybox:latest && cargo test --test e2e -- --ignored --test-threads=1`
 Expected: 3 tests pass (takes ~30 seconds)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add tests/e2e.rs
 git commit -m "test: add E2E tests with real Docker containers"
 ```
 
 ---
 
-### Task 9: nexa-core Criterion benchmarks
+### Task 9: helyos-core Criterion benchmarks
 
 **Files:**
-- Modify: `nexa-core/Cargo.toml`
-- Create: `nexa-core/benches/scheduler.rs`
-- Create: `nexa-core/benches/config_parsing.rs`
+- Modify: `helyos-core/Cargo.toml`
+- Create: `helyos-core/benches/scheduler.rs`
+- Create: `helyos-core/benches/config_parsing.rs`
 
 - [ ] **Step 1: Add criterion dev-dependency and bench targets**
 
-Add to `nexa-core/Cargo.toml`:
+Add to `helyos-core/Cargo.toml`:
 
 ```toml
 [dev-dependencies]
@@ -1462,11 +1462,11 @@ harness = false
 
 - [ ] **Step 2: Create scheduler benchmark**
 
-Create `nexa-core/benches/scheduler.rs`:
+Create `helyos-core/benches/scheduler.rs`:
 
 ```rust
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use nexa_core::domain::scheduler::{
+use helyos_core::domain::scheduler::{
     NodeSnapshot, PodRequest, SchedulerWeights, WeightedScheduler,
 };
 use uuid::Uuid;
@@ -1540,11 +1540,11 @@ criterion_main!(benches);
 
 - [ ] **Step 3: Create config parsing benchmark**
 
-Create `nexa-core/benches/config_parsing.rs`:
+Create `helyos-core/benches/config_parsing.rs`:
 
 ```rust
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use nexa_core::config::parse_deployment;
+use helyos_core::config::parse_deployment;
 
 const MINIMAL_SPEC: &str = r#"
 project: test
@@ -1600,30 +1600,30 @@ criterion_main!(benches);
 
 - [ ] **Step 4: Run benchmarks**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-core && cargo bench`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-core && cargo bench`
 Expected: Benchmarks run and output timing results
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core
+cd /Users/nassime/GitHub/Helyos/helyos-core
 git add Cargo.toml benches/
 git commit -m "bench: add Criterion benchmarks for scheduler and config parsing"
 ```
 
 ---
 
-### Task 10: nexad Criterion benchmarks
+### Task 10: helyosd Criterion benchmarks
 
 **Files:**
-- Modify: `nexad/Cargo.toml` (add bench targets)
-- Create: `nexad/benches/sqlite_store.rs`
-- Create: `nexad/benches/crypto.rs`
-- Create: `nexad/benches/dns.rs`
+- Modify: `helyosd/Cargo.toml` (add bench targets)
+- Create: `helyosd/benches/sqlite_store.rs`
+- Create: `helyosd/benches/crypto.rs`
+- Create: `helyosd/benches/dns.rs`
 
 - [ ] **Step 1: Add bench targets to Cargo.toml**
 
-Append to `nexad/Cargo.toml`:
+Append to `helyosd/Cargo.toml`:
 
 ```toml
 [[bench]]
@@ -1641,13 +1641,13 @@ harness = false
 
 - [ ] **Step 2: Create SQLite store benchmark**
 
-Create `nexad/benches/sqlite_store.rs`:
+Create `helyosd/benches/sqlite_store.rs`:
 
 ```rust
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use nexa_core::domain::models::*;
-use nexa_core::ports::state::StateStore;
-use nexad::adapters::state::SqliteStore;
+use helyos_core::domain::models::*;
+use helyos_core::ports::state::StateStore;
+use helyosd::adapters::state::SqliteStore;
 use tokio::runtime::Runtime;
 
 async fn setup_store() -> (SqliteStore, tempfile::TempDir) {
@@ -1748,12 +1748,12 @@ criterion_main!(benches);
 
 - [ ] **Step 3: Create crypto benchmark**
 
-Create `nexad/benches/crypto.rs`:
+Create `helyosd/benches/crypto.rs`:
 
 ```rust
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use nexa_core::ports::secrets::SecretStore;
-use nexad::adapters::secrets::EncryptedSqliteSecretStore;
+use helyos_core::ports::secrets::SecretStore;
+use helyosd::adapters::secrets::EncryptedSqliteSecretStore;
 
 fn bench_crypto(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -1819,11 +1819,11 @@ criterion_main!(benches);
 
 - [ ] **Step 4: Create DNS benchmark**
 
-Create `nexad/benches/dns.rs`:
+Create `helyosd/benches/dns.rs`:
 
 ```rust
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use nexad::adapters::dns::record_store::DnsRecordStore;
+use helyosd::adapters::dns::record_store::DnsRecordStore;
 use std::net::{IpAddr, Ipv4Addr};
 
 fn bench_dns(c: &mut Criterion) {
@@ -1864,13 +1864,13 @@ criterion_main!(benches);
 
 - [ ] **Step 5: Run benchmarks**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo bench`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo bench`
 Expected: All benchmarks run with timing output
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add Cargo.toml benches/
 git commit -m "bench: add Criterion benchmarks for SQLite, crypto, and DNS"
 ```
@@ -1880,12 +1880,12 @@ git commit -m "bench: add Criterion benchmarks for SQLite, crypto, and DNS"
 ### Task 11: Benchmark CI workflows with regression detection
 
 **Files:**
-- Create: `nexa-core/.github/workflows/bench.yml`
-- Create: `nexad/.github/workflows/bench.yml`
+- Create: `helyos-core/.github/workflows/bench.yml`
+- Create: `helyosd/.github/workflows/bench.yml`
 
-- [ ] **Step 1: Create nexa-core bench workflow**
+- [ ] **Step 1: Create helyos-core bench workflow**
 
-Create `nexa-core/.github/workflows/bench.yml`:
+Create `helyos-core/.github/workflows/bench.yml`:
 
 ```yaml
 name: Benchmarks
@@ -1920,9 +1920,9 @@ jobs:
           benchmark-data-dir-path: dev/bench
 ```
 
-- [ ] **Step 2: Create nexad bench workflow**
+- [ ] **Step 2: Create helyosd bench workflow**
 
-Create `nexad/.github/workflows/bench.yml`:
+Create `helyosd/.github/workflows/bench.yml`:
 
 ```yaml
 name: Benchmarks
@@ -1962,11 +1962,11 @@ jobs:
 - [ ] **Step 3: Commit all bench workflows**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core
+cd /Users/nassime/GitHub/Helyos/helyos-core
 git add .github/workflows/bench.yml
 git commit -m "ci: add benchmark workflow with regression detection"
 
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add .github/workflows/bench.yml
 git commit -m "ci: add benchmark workflow with regression detection"
 ```
@@ -1978,13 +1978,13 @@ git commit -m "ci: add benchmark workflow with regression detection"
 - [ ] **Step 1: Push all repos**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core && git push
-cd /Users/nassime/GitHub/NexaNet/nexad && git push
-cd /Users/nassime/GitHub/NexaNet/nexa-cli && git push
+cd /Users/nassime/GitHub/Helyos/helyos-core && git push
+cd /Users/nassime/GitHub/Helyos/helyosd && git push
+cd /Users/nassime/GitHub/Helyos/helyos-cli && git push
 ```
 
 - [ ] **Step 2: Verify CI passes on all repos**
 
-Run: `gh run list --repo nexa-net/nexa-core --limit 1 && gh run list --repo nexa-net/nexad --limit 1 && gh run list --repo nexa-net/nexa-cli --limit 1`
+Run: `gh run list --repo helyos-labs/helyos-core --limit 1 && gh run list --repo helyos-labs/helyosd --limit 1 && gh run list --repo helyos-labs/helyos-cli --limit 1`
 
-Expected: All CI runs succeed (E2E may take a few minutes on nexad).
+Expected: All CI runs succeed (E2E may take a few minutes on helyosd).

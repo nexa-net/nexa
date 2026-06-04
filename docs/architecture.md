@@ -1,38 +1,38 @@
-# NexaNet Architecture
+# Helyos Architecture
 
-This document describes how NexaNet is structured, how a request flows through
+This document describes how Helyos is structured, how a request flows through
 the system, and the key cross-cutting concerns (persistence, the cluster
 protocol, security, and observability). It is intended for contributors and
 operators who need a mental model of the system beyond any single crate.
 
 ## 1. Repository layout
 
-NexaNet is developed as a **multi-repo** project. Each crate is released
+Helyos is developed as a **multi-repo** project. Each crate is released
 independently and consumes its upstream by a pinned git tag, not a workspace
 path. The crates and their roles:
 
 | Crate | Role | Depends on |
 |-------|------|-----------|
-| `nexa-core` | Pure domain logic — the orchestrator, scheduling, models, and the port (trait) definitions. No I/O. | — |
-| `nexad` | The daemon. Implements every port (`nexa-core`) with a concrete adapter (Docker/containerd, SQLite, gRPC, Prometheus, …) and exposes the HTTP API and the cluster gRPC service. | `nexa-core` (git tag) |
-| `nexa-cli` (`nexa`) | The user-facing CLI / TUI. Talks to `nexad` over HTTP. | `nexa-core` (git tag) |
+| `helyos-core` | Pure domain logic — the orchestrator, scheduling, models, and the port (trait) definitions. No I/O. | — |
+| `helyosd` | The daemon. Implements every port (`helyos-core`) with a concrete adapter (Docker/containerd, SQLite, gRPC, Prometheus, …) and exposes the HTTP API and the cluster gRPC service. | `helyos-core` (git tag) |
+| `helyos-cli` (`helyos`) | The user-facing CLI / TUI. Talks to `helyosd` over HTTP. | `helyos-core` (git tag) |
 
-Because `nexad` and `nexa-cli` pin `nexa-core` by tag (e.g. `tag = "v0.1.4"`),
-a change to `nexa-core` only reaches them after `nexa-core` is released and the
+Because `helyosd` and `helyos-cli` pin `helyos-core` by tag (e.g. `tag = "v0.1.4"`),
+a change to `helyos-core` only reaches them after `helyos-core` is released and the
 tag bump is applied downstream. Keep this in mind when adding trait methods:
 extend ports with **defaulted** methods so existing downstream adapters keep
 compiling against the older tag.
 
 Supporting directories in this meta-repo:
 
-- `proto/` (under `nexad/`) — the cluster gRPC contract (`cluster.proto`).
+- `proto/` (under `helyosd/`) — the cluster gRPC contract (`cluster.proto`).
 - `deploy/` — Prometheus scrape config + alert rules, Grafana dashboard.
 - `install.sh` — checksum-verified installer.
 - `docs/` — this document, the audit, and the design specs/plans.
 
-## 2. nexa-core: hexagonal domain
+## 2. helyos-core: hexagonal domain
 
-`nexa-core` follows a **ports-and-adapters (hexagonal)** architecture:
+`helyos-core` follows a **ports-and-adapters (hexagonal)** architecture:
 
 ```
             domain/models/         pure data types (Deployment, Pod, Node, …)
@@ -44,7 +44,7 @@ Supporting directories in this meta-repo:
                   │                 ClusterTransport, MetricsPort, RouteStore
                   ▼
             adapters/*.rs           in-memory reference implementations
-                                    (real adapters live in nexad)
+                                    (real adapters live in helyosd)
 ```
 
 - **Models** (`domain/models/`) are plain types with validation helpers
@@ -66,9 +66,9 @@ write through to the `StateStore` and, on failure, log a warning **and**
 increment the `MetricsPort::record_persistence_error` counter rather than
 aborting the in-memory operation.
 
-## 3. nexad: the daemon
+## 3. helyosd: the daemon
 
-`nexad` wires the domain to the real world. It runs in one of two modes:
+`helyosd` wires the domain to the real world. It runs in one of two modes:
 
 - **single-node** — one process is both control plane and worker.
 - **cluster** — a control-plane node (master) schedules pods and assigns them to
@@ -116,13 +116,13 @@ pods). When a worker stops heartbeating, the master reschedules its pods onto
 healthy workers. gRPC can run over TLS using a self-signed CA and per-server
 certificates generated with `rcgen`.
 
-## 4. Request flow: `nexa deploy`
+## 4. Request flow: `helyos deploy`
 
 ```
- nexa deploy app.yaml
+ helyos deploy app.yaml
       │  (HTTP POST /api/v1/deploy, Bearer token)
       ▼
- nexad API handler  ──►  Orchestrator::deploy (command)        [nexa-core]
+ helyosd API handler  ──►  Orchestrator::deploy (command)        [helyos-core]
       │                       │
       │                       ├─ spec.validate()               reject bad specs (400)
       │                       ├─ ensure project / upsert deployment
@@ -131,7 +131,7 @@ certificates generated with `rcgen`.
       │                                          │
       │  single-node: run locally               │ cluster: AssignPod over gRPC
       ▼                                          ▼
- ContainerRuntime.create/start            worker nexad runs the container
+ ContainerRuntime.create/start            worker helyosd runs the container
       │
       ▼
  proxy + DNS updated for public deployments
@@ -139,11 +139,11 @@ certificates generated with `rcgen`.
 
 ## 5. Persistence
 
-`nexad` uses **two** SQLite databases:
+`helyosd` uses **two** SQLite databases:
 
-- `nexa.db` — cluster state (projects, deployments, pods, nodes, routes,
+- `helyos.db` — cluster state (projects, deployments, pods, nodes, routes,
   certificates, subnet allocations). Managed by sqlx with versioned migrations
-  under `nexad/migrations/`.
+  under `helyosd/migrations/`.
 - `secrets.db` — application secrets, encrypted at rest (AES-256-GCM) with a
   master key. Managed separately via rusqlite.
 
@@ -165,7 +165,7 @@ Schema changes are forward-only migrations; never edit a released migration
 
 ## 7. Observability
 
-- `nexad` exposes Prometheus metrics at `/metrics` (`nexa_*` series for HTTP,
+- `helyosd` exposes Prometheus metrics at `/metrics` (`helyos_*` series for HTTP,
   containers, scheduling, proxy, and gauges for node/pod/deployment counts).
 - `deploy/prometheus/` ships a scrape config (static + file/DNS service
   discovery) and alert rules (error rate, latency, OOM, crash loops,
@@ -176,9 +176,9 @@ Schema changes are forward-only migrations; never edit a released migration
 
 ## 8. Versioning
 
-Crates are versioned independently. `nexad` and `nexa-cli` track the daemon/CLI
-surface (currently `0.2.x`); `nexa-core` versions its domain/port API
-(`0.1.x`). Downstream crates pin `nexa-core` by **git tag**, so the effective
+Crates are versioned independently. `helyosd` and `helyos-cli` track the daemon/CLI
+surface (currently `0.2.x`); `helyos-core` versions its domain/port API
+(`0.1.x`). Downstream crates pin `helyos-core` by **git tag**, so the effective
 contract is the tag, not the version field. When changing a port trait, prefer
-additive, defaulted methods and bump `nexa-core`'s tag before bumping the
+additive, defaulted methods and bump `helyos-core`'s tag before bumping the
 downstream pin. Pre-`1.0`, treat minor bumps as potentially breaking.

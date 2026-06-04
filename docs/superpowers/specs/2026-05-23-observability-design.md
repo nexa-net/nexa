@@ -1,25 +1,25 @@
-# NexaNet Observability Design — Prometheus Integration
+# Helyos Observability Design — Prometheus Integration
 
 **Date:** 2026-05-23
 **Status:** Approved
 
 ## Goal
 
-Add Prometheus-native metrics exposition to nexad, covering the full stack: API requests, container lifecycle, scheduler decisions, proxy throughput, and cluster state. Ship ready-to-use Grafana dashboards and Prometheus alerting rules.
+Add Prometheus-native metrics exposition to helyosd, covering the full stack: API requests, container lifecycle, scheduler decisions, proxy throughput, and cluster state. Ship ready-to-use Grafana dashboards and Prometheus alerting rules.
 
 ## Decisions
 
 - **Metrics consumer:** Prometheus only — expose `/metrics` in Prometheus text format
 - **Scope:** Full stack (API, containers, scheduler, proxy, node/cluster gauges)
-- **Endpoint location:** Same axum server in nexad (port 6443)
-- **Architecture:** MetricsPort trait in nexa-core (hexagonal), Prometheus adapter in nexad
+- **Endpoint location:** Same axum server in helyosd (port 6443)
+- **Architecture:** MetricsPort trait in helyos-core (hexagonal), Prometheus adapter in helyosd
 - **Dashboards & alerts:** Ship Grafana JSON dashboard and Prometheus alerting rules as files
 
 ## Architecture
 
-### MetricsPort Trait (nexa-core)
+### MetricsPort Trait (helyos-core)
 
-New port at `nexa-core/src/ports/metrics.rs`:
+New port at `helyos-core/src/ports/metrics.rs`:
 
 ```rust
 #[async_trait]
@@ -41,7 +41,7 @@ pub trait MetricsPort: Send + Sync {
     fn set_pod_count(&self, count: usize);
     fn set_deployment_count(&self, count: usize);
 
-    // Proxy (emitted by nexad when proxying via Traefik/Nginx/Caddy)
+    // Proxy (emitted by helyosd when proxying via Traefik/Nginx/Caddy)
     fn record_proxy_request(&self, domain: &str, status: u16, duration_secs: f64);
     fn record_proxy_error(&self, domain: &str, error_type: &str);
 }
@@ -49,31 +49,31 @@ pub trait MetricsPort: Send + Sync {
 
 A `NoOpMetrics` struct implements this trait with empty bodies for use in tests.
 
-### Prometheus Adapter (nexad)
+### Prometheus Adapter (helyosd)
 
-New adapter at `nexad/src/adapters/metrics/prometheus.rs` using the `prometheus` crate.
+New adapter at `helyosd/src/adapters/metrics/prometheus.rs` using the `prometheus` crate.
 
 #### Metrics Table
 
 | Metric Name | Type | Labels |
 |---|---|---|
-| `nexa_http_requests_total` | Counter | `method`, `path`, `status` |
-| `nexa_http_request_duration_seconds` | Histogram | `method`, `path` |
-| `nexa_container_events_total` | Counter | `event` |
-| `nexa_schedule_duration_seconds` | Histogram | `strategy` |
-| `nexa_deployment_ops_total` | Counter | `op` |
-| `nexa_nodes_total` | Gauge | — |
-| `nexa_pods_total` | Gauge | — |
-| `nexa_deployments_total` | Gauge | — |
-| `nexa_proxy_requests_total` | Counter | `domain`, `status` | (emitted by nexad) |
-| `nexa_proxy_request_duration_seconds` | Histogram | `domain` | (emitted by nexad) |
-| `nexa_proxy_errors_total` | Counter | `domain`, `error_type` | (emitted by nexad) |
+| `helyos_http_requests_total` | Counter | `method`, `path`, `status` |
+| `helyos_http_request_duration_seconds` | Histogram | `method`, `path` |
+| `helyos_container_events_total` | Counter | `event` |
+| `helyos_schedule_duration_seconds` | Histogram | `strategy` |
+| `helyos_deployment_ops_total` | Counter | `op` |
+| `helyos_nodes_total` | Gauge | — |
+| `helyos_pods_total` | Gauge | — |
+| `helyos_deployments_total` | Gauge | — |
+| `helyos_proxy_requests_total` | Counter | `domain`, `status` | (emitted by helyosd) |
+| `helyos_proxy_request_duration_seconds` | Histogram | `domain` | (emitted by helyosd) |
+| `helyos_proxy_errors_total` | Counter | `domain`, `error_type` | (emitted by helyosd) |
 
 The adapter holds a `prometheus::Registry`, pre-registers all metrics in `new()`, and exposes an `encode()` method that renders the registry to Prometheus text format.
 
 ### Endpoint
 
-`GET /metrics` added to the existing axum router in `nexad/src/api/routes.rs`. The handler calls `metrics.encode()` and returns `Content-Type: text/plain; version=0.0.4`. Proxy-related metrics are emitted by nexad itself (not by the external proxy backend).
+`GET /metrics` added to the existing axum router in `helyosd/src/api/routes.rs`. The handler calls `metrics.encode()` and returns `Content-Type: text/plain; version=0.0.4`. Proxy-related metrics are emitted by helyosd itself (not by the external proxy backend).
 
 ## Integration Points
 
@@ -101,9 +101,9 @@ Handlers themselves never touch metrics — the middleware handles it.
 
 ### Event Watcher
 
-`nexad/src/adapters/event_watcher.rs` already listens to Docker events (die, start, oom). Add `record_container_event()` calls alongside the existing `send_container_exited()` dispatch.
+`helyosd/src/adapters/event_watcher.rs` already listens to Docker events (die, start, oom). Add `record_container_event()` calls alongside the existing `send_container_exited()` dispatch.
 
-### Wiring (nexad main.rs)
+### Wiring (helyosd main.rs)
 
 ```rust
 let metrics = Arc::new(PrometheusMetrics::new());
@@ -116,14 +116,14 @@ let state = AppState { handle, store, metrics };
 
 ## Grafana Dashboard
 
-Shipped as `deploy/grafana/nexanet-dashboard.json`.
+Shipped as `deploy/grafana/helyos-dashboard.json`.
 
 - **Row 1 — API:** Request rate (rpm), latency p50/p95/p99, error rate (5xx %)
 - **Row 2 — Containers:** Events over time (stacked: started/died/oom), pod/deployment/node gauges
 - **Row 3 — Scheduler:** Decision latency histogram, decisions/min by strategy
 - **Row 4 — Proxy:** Throughput by domain, upstream latency p50/p95, error rate by domain
 
-Template variable `$instance` for filtering by nexad instance.
+Template variable `$instance` for filtering by helyosd instance.
 
 ## Prometheus Alerting Rules
 
@@ -131,31 +131,31 @@ Shipped as `deploy/prometheus/alerts.yml`.
 
 | Alert | Condition | Severity |
 |---|---|---|
-| `NexaHighErrorRate` | 5xx rate > 5% over 5m | warning |
-| `NexaContainerOOM` | any OOM event in last 5m | critical |
-| `NexaNodeDown` | `nexa_nodes_total` drops below expected for 2m | critical |
-| `NexaHighAPILatency` | p99 > 2s over 5m | warning |
-| `NexaProxyUpstreamErrors` | proxy error rate > 10% over 5m | warning |
-| `NexaSchedulerSlow` | schedule decision p99 > 500ms over 5m | warning |
+| `HelyosHighErrorRate` | 5xx rate > 5% over 5m | warning |
+| `HelyosContainerOOM` | any OOM event in last 5m | critical |
+| `HelyosNodeDown` | `helyos_nodes_total` drops below expected for 2m | critical |
+| `HelyosHighAPILatency` | p99 > 2s over 5m | warning |
+| `HelyosProxyUpstreamErrors` | proxy error rate > 10% over 5m | warning |
+| `HelyosSchedulerSlow` | schedule decision p99 > 500ms over 5m | warning |
 
 ## Scrape Config
 
-Shipped as `deploy/prometheus/scrape-config.yml` with sample `scrape_configs` targeting nexad:6443 `/metrics`.
+Shipped as `deploy/prometheus/scrape-config.yml` with sample `scrape_configs` targeting helyosd:6443 `/metrics`.
 
 ## File Map
 
-### nexa-core (new files)
+### helyos-core (new files)
 - `src/ports/metrics.rs` — MetricsPort trait + NoOpMetrics
 
-### nexa-core (modified)
+### helyos-core (modified)
 - `src/ports/mod.rs` — add `pub mod metrics`
 - `src/domain/orchestrator.rs` — add metrics parameter, instrument handlers
 
-### nexad (new files)
+### helyosd (new files)
 - `src/adapters/metrics/mod.rs` — module declaration
 - `src/adapters/metrics/prometheus.rs` — PrometheusMetrics adapter
 
-### nexad (modified)
+### helyosd (modified)
 - `src/adapters/mod.rs` — add `pub mod metrics`
 - `src/api/routes.rs` — add `/metrics` route
 - `src/api/handlers.rs` — add metrics handler + middleware
@@ -165,6 +165,6 @@ Shipped as `deploy/prometheus/scrape-config.yml` with sample `scrape_configs` ta
 - `Cargo.toml` — add `prometheus` dependency
 
 ### Deploy configs (new files)
-- `deploy/grafana/nexanet-dashboard.json`
+- `deploy/grafana/helyos-dashboard.json`
 - `deploy/prometheus/alerts.yml`
 - `deploy/prometheus/scrape-config.yml`

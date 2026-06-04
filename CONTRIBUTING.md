@@ -1,17 +1,17 @@
-# Contributing to NexaNet
+# Contributing to Helyos
 
-Thank you for your interest in contributing to NexaNet! This guide covers the basics.
+Thank you for your interest in contributing to Helyos! This guide covers the basics.
 
 ## Repository Structure
 
-NexaNet is a multi-repo project under the [`nexa-net`](https://github.com/nexa-net) GitHub organization:
+Helyos is a multi-repo project under the [`helyos-labs`](https://github.com/helyos-labs) GitHub organization:
 
 | Repository | Description |
 |:--|:--|
-| [`nexa`](https://github.com/nexa-net/nexa) | Documentation, specs, install script |
-| [`nexa-core`](https://github.com/nexa-net/nexa-core) | Core library (domain types, port traits, orchestrator) |
-| [`nexad`](https://github.com/nexa-net/nexad) | Daemon (runtime adapters, REST API, gRPC clustering) |
-| [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | CLI tool (deploy, scale, manage) |
+| [`helyos`](https://github.com/helyos-labs/helyos) | Documentation, specs, install script |
+| [`helyos-core`](https://github.com/helyos-labs/helyos-core) | Core library (domain types, port traits, orchestrator) |
+| [`helyosd`](https://github.com/helyos-labs/helyosd) | Daemon (runtime adapters, REST API, gRPC clustering) |
+| [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | CLI tool (deploy, scale, manage) |
 
 ## Getting Started
 
@@ -19,20 +19,20 @@ NexaNet is a multi-repo project under the [`nexa-net`](https://github.com/nexa-n
 
 - Rust 1.85+ (`rustup update stable`)
 - Docker or containerd running on the host
-- `protoc` (Protocol Buffers compiler) for building `nexad`
+- `protoc` (Protocol Buffers compiler) for building `helyosd`
 
 ### Building
 
 ```bash
 # Clone and build each crate
-git clone https://github.com/nexa-net/nexa-core.git
-cd nexa-core && cargo build
+git clone https://github.com/helyos-labs/helyos-core.git
+cd helyos-core && cargo build
 
-git clone https://github.com/nexa-net/nexad.git
-cd nexad && cargo build
+git clone https://github.com/helyos-labs/helyosd.git
+cd helyosd && cargo build
 
-git clone https://github.com/nexa-net/nexa-cli.git
-cd nexa-cli && cargo build
+git clone https://github.com/helyos-labs/helyos-cli.git
+cd helyos-cli && cargo build
 ```
 
 ## Before Submitting a PR
@@ -55,7 +55,7 @@ cargo test                  # unit + integration tests
 
 ## Architecture
 
-NexaNet follows hexagonal architecture (ports and adapters):
+Helyos follows hexagonal architecture (ports and adapters):
 
 - **`ports/`** — Trait definitions (interfaces)
 - **`adapters/`** — Concrete implementations
@@ -67,7 +67,7 @@ Open issues on the relevant repository. Include:
 
 - Steps to reproduce
 - Expected vs actual behavior
-- NexaNet version (`nexa --version`, `nexad --version`)
+- Helyos version (`helyos --version`, `helyosd --version`)
 - OS and architecture
 
 ## License
