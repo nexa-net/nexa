@@ -1,7 +1,7 @@
 # Audit Production-Readiness — NexaNet
 
 **Date**: 2026-05-26  
-**Derniere mise a jour**: 2026-06-01  
+**Derniere mise a jour**: 2026-06-04  
 **Scope**: 3 crates (~53K lignes Rust), infra, CI/CD, proto, monitoring  
 **Auditeur**: Claude (automated deep audit)
 
@@ -13,10 +13,12 @@
 |----------|-----------|-------|----------|-------|-----------|-------------|
 | CRITICAL | 1 | 4 | 1 | 2 | **8** | **8 (100%)** |
 | HIGH | 8 | 10 | 7 | 7 | **32** | **32 (100%)** |
-| MEDIUM | 13 | 9 | 10 | 14 | **46** | **29 (63%)** |
-| LOW | 8 | 9 | 12 | 11 | **40** | **25 (63%)** |
+| MEDIUM | 13 | 9 | 10 | 14 | **46** | **38 (83%)** |
+| LOW | 8 | 9 | 12 | 11 | **40** | **32 (80%)** |
 
-**Progression : 94/126 issues corrigees (75%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 29/46 MEDIUM corriges. 25/40 LOW corriges. Les 17 MEDIUM restants et 15 LOW restants sont soit trop invasifs (builder pattern, NexaError refactor), soit necessitent un effort significatif (integration tests, architecture docs, config file support).
+**Progression : 110/126 issues corrigees (87%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 38/46 MEDIUM corriges (nexa-core 9/13, nexad 9/9, nexa-cli 10/10, infra 11/14). 32/40 LOW corriges. Les ~8 MEDIUM et ~8 LOW restants sont soit trop invasifs (builder pattern, `NexaError` refactor structurel, `Command` enum, consolidation dual-SQLite), soit non applicables au setup multi-repo (Cargo workspace, drift de deps partagees), soit hors scope d'un pass de cleanup (proto `bytes`→messages structures, property-based/fuzz testing, suites d'integration completes CLI/gRPC).
+
+Mise a jour 2026-06-04 : ajout validation de config au demarrage + metrique sur echec de persistence (nexa-core), tests containerd offline (nexad), fichier de config `~/.nexa/config.toml` + tests d'erreur client + pinning de versions (nexa-cli), alertes Prometheus (disk/cert/split-brain/crash-loop/process-down) + service discovery, doc d'architecture, coverage + SBOM + buf lint en CI, `google.protobuf.Empty`, migration de suppression de la table `secrets` morte, constante de capacite du broadcast channel, message d'allocateur de subnet corrige. Tous les crates : `cargo test` + `cargo clippy -D warnings` verts.
 
 Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
 
@@ -116,7 +118,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - `Orchestrator::spawn` a 9 parametres `Option` positionnels — builder pattern necessaire
 - ~~Regex recompilee a chaque appel~~ → ✅ `LazyLock<Regex>` (`src/config.rs`)
 - Error variants stringly-typed (`NexaError::Runtime(String)`)
-- Persistence failures logguees en warning, pas d'alerte metrique
+- ~~Persistence failures logguees en warning, pas d'alerte metrique~~ → ✅ `MetricsPort::record_persistence_error` (methode defaultee) incrementee dans les 6 helpers `persist_*` (`src/domain/orchestrator.rs`, `src/ports/metrics.rs`)
 - ~~Scale-down trie par UUID~~ → ✅ Tri par `created_at` timestamp
 - Pas de property-based testing ni fuzz testing
 - `Command` enum expose le protocole interne (requis par `command_sender()`)
@@ -124,7 +126,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - ~~O(n) lookup par nom de deployment~~ → ✅ `deployment_index` HashMap O(1)
 - ~~O(n) filtrage des pods par deployment_id (multiple sites)~~ → ✅ `pods_by_deployment` HashMap index O(1)
 - ~~`tokio features = ["full"]`~~ → ✅ Features minimales `sync/rt/time/macros`
-- Pas de validation de configuration au demarrage
+- ~~Pas de validation de configuration au demarrage~~ → ✅ `DeploymentSpec::validate()` publique, appelee au choke point `handle_deploy` (couvre HTTP/YAML/gRPC/reschedule) (`src/config.rs`, `src/domain/orchestrator.rs`)
 
 ### nexad (9)
 
@@ -134,7 +136,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - ~~Migration rollback risquee avec `PRAGMA foreign_keys=OFF`~~ → ✅ SAVEPOINT + documentation + `foreign_key_check`
 - ~~DNS server sans rate limiting~~ → ✅ Token-bucket rate limiter (1000 qps/IP)
 - ~~DNS upstream cree un socket par query~~ → ✅ Socket UDP partage
-- Pas de tests containerd runtime
+- ~~Pas de tests containerd runtime~~ → ✅ Tests offline : `build_create_args`/`log_uri` extraits en fns pures, + tests `extract_container_id`/`extract_exit_code`/path builders (`src/adapters/runtime/containerd.rs`)
 - ~~Health checker interval hardcode a 1s~~ → ✅ Configurable via `with_interval()`
 - ~~`node_stats` handler bloque 200ms~~ → ✅ `spawn_blocking`
 
@@ -146,25 +148,25 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - ~~URL path parameters non percent-encoded~~ → ✅ `urlencoding::encode()` partout
 - ~~Query parameters non encodes~~ → ✅ `urlencoding::encode()` sur les valeurs
 - ~~Pas de support `NO_COLOR`~~ → ✅ `console::set_colors_enabled(false)` si `NO_COLOR` set
-- Pas de fichier de configuration (`~/.nexa/config`)
+- ~~Pas de fichier de configuration (`~/.nexa/config`)~~ → ✅ `~/.nexa/config.toml` (override `NEXA_CONFIG`), precedence flag > env > fichier > defaut, module std-only sans nouvelle dep (`src/config.rs`)
 - ~~`nexa logs` sans interruption gracieuse~~ → ✅ `tokio::select!` + `signal::ctrl_c()`
-- Loose version pinning sur toutes les deps
-- Pas de tests pour `client.rs` error handling
+- ~~Loose version pinning sur toutes les deps~~ → ✅ Deps directes pinnees a `major.minor` du lockfile (`Cargo.toml`)
+- ~~Pas de tests pour `client.rs` error handling~~ → ✅ Tests unitaires offline de `format_api_error` / `error_hint` / normalisation `base_url` (`src/client.rs`)
 
 ### Infra (14)
 
-- Scrape config Prometheus utilise seulement `static_configs` (pas de service discovery)
-- Alertes manquantes : disk space, cert expiry, split-brain, crash loops, process down
+- ~~Scrape config Prometheus utilise seulement `static_configs`~~ → ✅ `file_sd_configs` + exemple `dns_sd_configs` + fichier de cibles d'exemple (`deploy/prometheus/scrape-config.yml`, `targets.example.json`)
+- ~~Alertes manquantes : disk space, cert expiry, split-brain, crash loops, process down~~ → ✅ Ajoutees (`deploy/prometheus/alerts.yml`) : `NexaDaemonDown`, `NexaContainerCrashLoop`, `NexaClusterSplitBrain`, `NexaNodeDiskSpace{Low,Critical}`, `NexaTlsCertExpiring{Soon,Critical}`
 - ~~Proto sans versioning~~ → ✅ `nexa.cluster.v1`
 - ~~String-typed enumerations dans le proto (status, action)~~ → ✅ Proto enums `NodeStatusProto`, `PodStatusProto`, `PodActionType`
 - `bytes` fields pour des donnees structurees dans le proto
-- Version misalignment entre crates (0.1.0 vs 0.2.0)
+- Version misalignment entre crates (0.1.0 vs 0.2.0) → ⚠️ Politique de versioning documentee (`docs/architecture.md` §8) ; alignement effectif laisse au process de release multi-repo
 - Shared dependency version drift sans workspace
 - ~~Service units user-level seulement~~ → ✅ Hardening systemd (NoNewPrivileges, ProtectSystem, etc.)
 - ~~Pas de mecanisme d'uninstall~~ → ✅ `install.sh --uninstall`
 - ~~nexa-core CI ne lance que `cargo test --lib`~~ → ✅ `cargo test` (tous les tests)
 - ~~Pas de CI multi-plateforme~~ → ✅ macOS ajoute aux 3 repos
-- Pas de documentation architecture
+- ~~Pas de documentation architecture~~ → ✅ `docs/architecture.md` (layout multi-repo, hexagonal, protocole cluster, flux de requete, persistence, securite, observabilite, versioning)
 - ~~Pas de CONTRIBUTING.md~~ → ✅ CONTRIBUTING.md ajoute
 - ~~README reference des features non implementees~~ → ✅ WireGuard/CNI marques experimental
 
@@ -186,14 +188,14 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 ### nexad (9)
 
 - ~~Master key genere avec `thread_rng()` au lieu de `OsRng`~~ → ✅ `OsRng` directement
-- Dead schema : table `secrets` dans les migrations jamais utilisee
-- Subnet allocator wrap correct mais message misleading
+- ~~Dead schema : table `secrets` dans les migrations jamais utilisee~~ → ✅ Migration forward `DROP TABLE IF EXISTS secrets` (les vrais secrets vivent dans `secrets.db` chiffre) (`migrations/20260523000006_drop_dead_secrets_table.sql`)
+- ~~Subnet allocator wrap correct mais message misleading~~ → ✅ Message d'epuisement clarifie (allocation monotone, pas de reclamation des subnets liberes) (`src/adapters/runtime/cni.rs`)
 - ~~Event watcher reconnection sans backoff~~ → ✅ Backoff exponentiel (1s→60s cap)
 - ~~Heartbeat sender reconnection sans backoff~~ → ✅ Backoff exponentiel (1s→60s cap)
 - ~~`expect()` dans HealthChecker constructor~~ → ✅ Retourne `Result`, degradation gracieuse
 - Dual SQLite (sqlx + rusqlite) augmente la surface d'attaque
 - `rand` 0.8 outdated (0.9 disponible)
-- Broadcast channel capacity hardcode a 256 (`src/main.rs:301`)
+- ~~Broadcast channel capacity hardcode a 256~~ → ✅ Constante `CLUSTER_EVENT_CHANNEL_CAPACITY` (`src/main.rs`)
 
 ### nexa-cli (12)
 
@@ -213,14 +215,14 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 ### Infra (10)
 
 - ~~`set -e` sans `-u` dans install.sh~~ → ✅ `set -eu` avec valeurs par defaut pour variables optionnelles
-- Pas de code coverage en CI
+- ~~Pas de code coverage en CI~~ → ✅ Job `coverage` (`cargo-llvm-cov` → lcov en artifact) ajoute aux 3 crates
 - ~~Benchmarks sur chaque push (bruyant)~~ → ✅ Schedule hebdomadaire + workflow_dispatch
-- Custom `Empty` message dans le proto au lieu de `google.protobuf.Empty`
-- Pas de proto linting (`buf`)
+- ~~Custom `Empty` message dans le proto~~ → ✅ `import "google/protobuf/empty.proto"` + `google.protobuf.Empty` (mappe sur `()`), message custom supprime (`proto/cluster.proto`, `src/cluster/server.rs`)
+- ~~Pas de proto linting (`buf`)~~ → ✅ `buf.yaml` (lint BASIC + breaking FILE) + workflow `proto.yml` (`buf lint`) dans nexad
 - ~~Pas de `cargo doc` en CI~~ → ✅ `cargo doc --no-deps` ajoute au CI nexa-core
 - ~~Example YAML avec credentials hardcodes~~ → ✅ Placeholders `<db-user>:<db-password>`
 - ~~Pas de fichier NOTICE (Apache-2.0 section 4d)~~ → ✅ Fichier NOTICE cree
-- Pas de SBOM generation
+- ~~Pas de SBOM generation~~ → ✅ `anchore/sbom-action` (SPDX) dans les release workflows nexad + nexa-cli, attache a la release + checksums
 - ~~OOM alert sans `for` duration~~ → ✅ `for: 1m` ajoute a `NexaContainerOOM`
 
 ---
@@ -304,7 +306,7 @@ Points faibles :
 - Pas de graceful shutdown (l'actor loop tourne jusqu'a fermeture du channel)
 - ~~`handle_create_project` ne persiste pas~~ → ✅ Appels `set_cluster_config` apres creation
 - ~~`TlsMode::Auto` avec email vide~~ → ✅ Validation email avant persist
-- Pas de validation de config au demarrage
+- ~~Pas de validation de config au demarrage~~ → ✅ `DeploymentSpec::validate()` au choke point `handle_deploy`
 - Pas de rate limiting sur le command channel
 
 ---
@@ -380,7 +382,7 @@ Points faibles :
 
 #### UX
 
-- Pas de fichier de configuration (`~/.nexa/config`)
+- ~~Pas de fichier de configuration (`~/.nexa/config`)~~ → ✅ `~/.nexa/config.toml` (precedence flag > env > fichier > defaut)
 - ~~Pas de shell completion~~ → ✅ Subcommande `completions` (bash/zsh/fish/powershell)
 - ~~TUI panic laisse le terminal casse~~ → ✅ `std::panic::set_hook` restaure le terminal
 - Pas de signal handling pendant `deploy` polling
@@ -390,7 +392,7 @@ Points faibles :
 
 - Zero tests d'integration
 - 16 commandes avec zero couverture de test
-- Client error handling non teste
+- ~~Client error handling non teste~~ → ✅ Tests unitaires `format_api_error` / `error_hint` / `base_url`
 
 ---
 
@@ -416,7 +418,7 @@ Points faibles :
 - Pas de versioning du package (`nexa.cluster` au lieu de `nexa.cluster.v1`)
 - String-typed enumerations (status, action) au lieu de proto enums
 - `bytes` fields pour des donnees structurees (pod_spec, pod_data)
-- Custom `Empty` message au lieu de `google.protobuf.Empty`
+- ~~Custom `Empty` message au lieu de `google.protobuf.Empty`~~ → ✅ `google.protobuf.Empty` (+ `buf lint` via `buf.yaml`)
 
 #### Cross-Crate
 
@@ -434,7 +436,7 @@ Points faibles :
 
 #### Documentation
 
-- Pas de documentation architecture
+- ~~Pas de documentation architecture~~ → ✅ `docs/architecture.md`
 - Pas de CONTRIBUTING.md
 - README reference des features non implementees
 - Pas de rustdoc en CI
