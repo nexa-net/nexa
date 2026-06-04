@@ -50,7 +50,7 @@ backward-compatibility shims.
 - **helyos-cli** (was nexa-cli): `Cargo.toml` package name → `helyos-cli`, bin name → `helyos`; dependency `helyos-core` (new URL + tag); imports; env vars (`HELYOS_SERVER`/`HELYOS_API_TOKEN`/`HELYOS_CONFIG`/`HELYOS_ICONS`); config dir `~/.nexa`→`~/.helyos`; README; CI.
 - **helyos** (was nexa, meta): READMEs, `install.sh` (binary names, service files, paths, download URLs), `deploy/prometheus/*` (metric + alert names, scrape comments), `deploy/grafana/*` (dashboard file + content), `docs/architecture.md`, `docs/audit/*`, CONTRIBUTING, LICENSE/NOTICE.
 
-**Historical docs** (`docs/superpowers/specs/`, `docs/superpowers/plans/`): dated design records. They get the same mechanical token replacement for the project identity, but are otherwise preserved (not rewritten). [Confirm with user.]
+**Historical docs** (`docs/superpowers/specs/`, `docs/superpowers/plans/`): dated design records. **Decision: included** — they get the same mechanical token replacement for the project identity (so `git grep -i nexa` is empty everywhere), but are otherwise preserved (not rewritten on substance; dates and historical context stay).
 
 ## 5. Sequencing (approach A — GitHub-first, then code in dependency order)
 
@@ -67,7 +67,7 @@ Each crate stays buildable at every step; the org/repo redirects mean old URLs k
 
 - Per crate: `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo audit` (with the existing documented ignores) all green; main-branch CI green after merge.
 - Smoke: `helyos --help`, `helyos completions bash`, `helyosd --help`.
-- Final sweep: `git grep -i nexa` returns nothing in active code/docs (only, if confirmed, in dated historical records).
+- Final sweep: `git grep -i nexa` returns **nothing** in any of the 4 repos (active code, docs, and historical records).
 
 ## 7. Risks & mitigations
 
