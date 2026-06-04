@@ -68,3 +68,85 @@ groups:
         annotations:
           summary: "Slow scheduler decisions"
           description: "Scheduler p99 latency is above 500ms for the last 5 minutes."
+
+      # --- Process / availability ---
+      - alert: NexaDaemonDown
+        # `up` is synthesized by Prometheus for every scrape target.
+        expr: up{job=~"nexad.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "nexad target is down"
+          description: "Prometheus cannot scrape nexad at {{ $labels.instance }} — the daemon process is down or unreachable for 1 minute."
+
+      # --- Crash loops ---
+      - alert: NexaContainerCrashLoop
+        expr: increase(nexa_container_events_total{event="died"}[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container crash loop suspected"
+          description: "More than 5 container deaths in the last 15 minutes ({{ $value | printf \"%.0f\" }}) — a workload is likely crash-looping."
+
+      # --- Split-brain ---
+      - alert: NexaClusterSplitBrain
+        # Control-plane instances disagree on the cluster node count for a
+        # sustained period — a network partition or split-brain is likely.
+        # Requires scraping more than one nexad control-plane instance.
+        expr: (max(nexa_nodes_total) - min(nexa_nodes_total)) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cluster split-brain suspected"
+          description: "nexad instances report disagreeing node counts (spread={{ $value | printf \"%.0f\" }}) for 5 minutes — investigate for a network partition."
+
+  # These rules depend on companion exporters scraped alongside nexad:
+  #   - node_exporter        -> disk-space rules
+  #   - blackbox_exporter     -> TLS certificate-expiry rules
+  # They are inert (no series, never fire) until those exporters are configured.
+  - name: nexanet-host
+    rules:
+      # --- Disk space ---
+      - alert: NexaNodeDiskSpaceLow
+        expr: >
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+           / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is below 10% free."
+
+      - alert: NexaNodeDiskSpaceCritical
+        expr: >
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+           / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) < 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critically low disk space"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is below 5% free — writes may fail imminently."
+
+      # --- TLS certificate expiry ---
+      - alert: NexaTlsCertExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) < (14 * 24 * 3600)
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate expiring soon"
+          description: "The certificate probed for {{ $labels.instance }} expires in less than 14 days."
+
+      - alert: NexaTlsCertExpiringCritical
+        expr: (probe_ssl_earliest_cert_expiry - time()) < (3 * 24 * 3600)
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "TLS certificate expiring imminently"
+          description: "The certificate probed for {{ $labels.instance }} expires in less than 3 days — renew now."
