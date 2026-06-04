@@ -20,6 +20,11 @@
 
 Mise a jour 2026-06-04 : ajout validation de config au demarrage + metrique sur echec de persistence (nexa-core), tests containerd offline (nexad), fichier de config `~/.nexa/config.toml` + tests d'erreur client + pinning de versions (nexa-cli), alertes Prometheus (disk/cert/split-brain/crash-loop/process-down) + service discovery, doc d'architecture, coverage + SBOM + buf lint en CI, `google.protobuf.Empty`, migration de suppression de la table `secrets` morte, constante de capacite du broadcast channel, message d'allocateur de subnet corrige. Tous les crates : `cargo test` + `cargo clippy -D warnings` verts.
 
+Mise a jour 2026-06-04 (CI verte + release) : la CI des 3 crates est passee au vert.
+- **Security Audit** : il echouait car `Cargo.lock` n'etait jamais commite (`Couldn't load ./Cargo.lock`). Les lockfiles sont desormais commites, et le job utilise un `cargo audit` explicite avec une liste `--ignore` documentee. Vraies vulnerabilites **corrigees** (pas masquees) : `protobuf` RUSTSEC-2024-0437 (prometheus `default-features=false`), `time` RUSTSEC-2026-0009 (>=0.3.47, MSRV nexad -> 1.88), `atty` RUSTSEC-2021-0145/2024-0375 (`std::io::IsTerminal`). Avis sans correctif (transitifs non maintenus : `rsa` mysql-only, `rustls-pemfile`, `number_prefix`, `paste`, `lru`, `serde_yml`/`libyml`) ignores avec justification. Migration `serde_yml` -> `serde_yaml_ng` recommandee en suivi.
+- **fmt** : `cargo fmt` applique repo-wide (skew rustfmt historique) ; 2 `collapsible_if` corriges en let-chains.
+- **Propagation** : `nexa-core` **v0.1.5** publie (validation de config + metrique de persistence) ; `nexad` et `nexa-cli` bumpes sur `tag = "v0.1.5"`.
+
 Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
 
 ---
