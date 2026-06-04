@@ -1,28 +1,28 @@
-# NexaNet Testing Suite Design Spec
+# Helyos Testing Suite Design Spec
 
 ## Overview
 
-Add a comprehensive, layered test suite across all NexaNet repositories: integration tests, end-to-end tests with real Docker containers, and Criterion performance benchmarks with automated regression detection in CI.
+Add a comprehensive, layered test suite across all Helyos repositories: integration tests, end-to-end tests with real Docker containers, and Criterion performance benchmarks with automated regression detection in CI.
 
 **Current state:** 349 unit tests + 7 integration tests (ignored in CI). Zero benchmarks. Very light CLI and proxy test coverage.
 
-**Target state:** Integration tests running in CI with real Docker, full-stack E2E scenarios, Criterion benchmarks with CI regression gates, and significantly improved coverage for nexa-cli.
+**Target state:** Integration tests running in CI with real Docker, full-stack E2E scenarios, Criterion benchmarks with CI regression gates, and significantly improved coverage for helyos-cli.
 
 ## Scope
 
 This spec covers testing infrastructure only. Observability and Prometheus integration are a separate spec.
 
-**Repositories affected:** nexa-core, nexad, nexa-cli.
+**Repositories affected:** helyos-core, helyosd, helyos-cli.
 
 ---
 
 ## Layer 1: Integration Tests
 
-### nexa-core
+### helyos-core
 
 Current coverage is strong (177 unit tests covering orchestrator, scheduler, health, restart, models). No new integration tests needed. The existing mock implementations (MockRuntime, ConfigurableMockRuntime) are sufficient.
 
-### nexad
+### helyosd
 
 #### API Integration Tests
 
@@ -82,7 +82,7 @@ Add scenarios:
 - Route store: insert, list with project filter, delete, certificate operations
 - Large dataset: insert 1000 pods, verify list and filter performance is acceptable (< 100ms)
 
-### nexa-cli
+### helyos-cli
 
 **File:** `src/commands/mod.rs` (inline tests) and `tests/cli_integration.rs`
 
@@ -103,9 +103,9 @@ Add scenarios:
 
 ## Layer 2: End-to-End Tests
 
-**File:** `nexad/tests/e2e.rs`
+**File:** `helyosd/tests/e2e.rs`
 
-Full-stack tests that start a real nexad instance with Docker runtime, perform operations via HTTP, and verify real containers are created/destroyed.
+Full-stack tests that start a real helyosd instance with Docker runtime, perform operations via HTTP, and verify real containers are created/destroyed.
 
 ### Setup
 
@@ -117,14 +117,14 @@ struct TestServer {
 }
 ```
 
-- Start nexad's full server stack (API + orchestrator + Docker runtime) on a random port
+- Start helyosd's full server stack (API + orchestrator + Docker runtime) on a random port
 - Use a temporary data directory for SQLite + secrets
 - Wait for `/health` to return 200 before running tests
-- On drop: send shutdown signal, clean up any leftover Docker containers with a `nexa-test-` prefix
+- On drop: send shutdown signal, clean up any leftover Docker containers with a `helyos-test-` prefix
 
 ### Container naming
 
-All E2E test containers use the prefix `nexa-test-` followed by a UUID. Teardown cleans up any containers matching this prefix to prevent leaks.
+All E2E test containers use the prefix `helyos-test-` followed by a UUID. Teardown cleans up any containers matching this prefix to prevent leaks.
 
 ### Test scenarios
 
@@ -191,7 +191,7 @@ All E2E tests are marked `#[ignore]` so `cargo test` locally skips them by defau
 
 ## Layer 3: Performance Benchmarks (Criterion)
 
-### nexa-core benchmarks
+### helyos-core benchmarks
 
 **File:** `benches/scheduler.rs`
 
@@ -215,7 +215,7 @@ All E2E tests are marked `#[ignore]` so `cargo test` locally skips them by defau
 | `parse_minimal_spec` | Minimal YAML with just image + name |
 | `parse_full_spec` | Full YAML with healthcheck, volumes, env, network |
 
-### nexad benchmarks
+### helyosd benchmarks
 
 **File:** `benches/sqlite_store.rs`
 
@@ -308,7 +308,7 @@ This uses `github-action-benchmark` to:
 
 After implementation, each repo's CI pipeline will have these jobs:
 
-### nexa-core
+### helyos-core
 
 | Job | Trigger | Tests |
 |---|---|---|
@@ -316,7 +316,7 @@ After implementation, each repo's CI pipeline will have these jobs:
 | `test` | push + PR | `cargo test` (all unit tests) |
 | `bench` | push to main only | Criterion benchmarks with regression gate |
 
-### nexad
+### helyosd
 
 | Job | Trigger | Tests |
 |---|---|---|
@@ -326,7 +326,7 @@ After implementation, each repo's CI pipeline will have these jobs:
 | `e2e` | push to main only | Full-stack E2E with Docker (--test-threads=1) |
 | `bench` | push to main only | Criterion benchmarks with regression gate |
 
-### nexa-cli
+### helyos-cli
 
 | Job | Trigger | Tests |
 |---|---|---|
@@ -339,10 +339,10 @@ After implementation, each repo's CI pipeline will have these jobs:
 
 | Repo | Crate | Purpose |
 |---|---|---|
-| nexad | `reqwest = "0.12"` (dev) | HTTP client for API/E2E tests |
-| nexad | `criterion = "0.5"` (dev) | Performance benchmarks |
-| nexad | `tokio-test = "0.4"` (dev) | Async test utilities |
-| nexa-core | `criterion = "0.5"` (dev) | Performance benchmarks |
+| helyosd | `reqwest = "0.12"` (dev) | HTTP client for API/E2E tests |
+| helyosd | `criterion = "0.5"` (dev) | Performance benchmarks |
+| helyosd | `tokio-test = "0.4"` (dev) | Async test utilities |
+| helyos-core | `criterion = "0.5"` (dev) | Performance benchmarks |
 
 ---
 
@@ -352,5 +352,5 @@ After implementation, each repo's CI pipeline will have these jobs:
 - Mutation testing
 - Fuzz testing
 - Load/stress testing (beyond Criterion micro-benchmarks)
-- nexa-cli E2E tests (would need a running nexad, better tested from nexad's E2E suite)
+- helyos-cli E2E tests (would need a running helyosd, better tested from helyosd's E2E suite)
 - Observability/Prometheus (separate spec)

@@ -5,15 +5,15 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
-**Goal:** Persist all orchestrator state (projects, deployments, pods) to SQLite so nexad survives restarts without losing cluster state.
+**Goal:** Persist all orchestrator state (projects, deployments, pods) to SQLite so helyosd survives restarts without losing cluster state.
 
-**Architecture:** A `StateStore` port trait is defined in `nexa-core/src/ports/state.rs`, keeping the domain pure. An `SqliteStore` adapter in `nexad/src/adapters/state/sqlite.rs` implements it using sqlx with compile-time-checked migrations. An `InMemoryStore` in `nexa-core` serves unit tests. The orchestrator receives `Arc<dyn StateStore>` at spawn time, writes to it after every mutation, and loads from it on startup. A reconciliation pass on startup detects stale pods by querying the container runtime.
+**Architecture:** A `StateStore` port trait is defined in `helyos-core/src/ports/state.rs`, keeping the domain pure. An `SqliteStore` adapter in `helyosd/src/adapters/state/sqlite.rs` implements it using sqlx with compile-time-checked migrations. An `InMemoryStore` in `helyos-core` serves unit tests. The orchestrator receives `Arc<dyn StateStore>` at spawn time, writes to it after every mutation, and loads from it on startup. A reconciliation pass on startup detects stale pods by querying the container runtime.
 
 **Tech Stack:** sqlx 0.8 (runtime-tokio, sqlite), chrono, uuid, serde_json, async-trait, tokio
 
@@ -23,8 +23,8 @@
 
 **Files:**
 - Modify: `Cargo.toml` (workspace)
-- Modify: `crates/nexad/Cargo.toml`
-- Create: `crates/nexad/migrations/20260521000001_initial_schema.sql`
+- Modify: `crates/helyosd/Cargo.toml`
+- Create: `crates/helyosd/migrations/20260521000001_initial_schema.sql`
 
 - [ ] **Step 1: Add sqlx to workspace dependencies**
 
@@ -38,7 +38,7 @@ Full `[workspace.dependencies]` section becomes:
 
 ```toml
 [workspace.dependencies]
-nexa-core = { path = "crates/nexa-core" }
+helyos-core = { path = "crates/helyos-core" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -64,9 +64,9 @@ tokio-stream = "0.1"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 ```
 
-- [ ] **Step 2: Add sqlx to nexad Cargo.toml**
+- [ ] **Step 2: Add sqlx to helyosd Cargo.toml**
 
-In `crates/nexad/Cargo.toml`, add under `[dependencies]`:
+In `crates/helyosd/Cargo.toml`, add under `[dependencies]`:
 
 ```toml
 sqlx = { workspace = true }
@@ -75,13 +75,13 @@ sqlx = { workspace = true }
 - [ ] **Step 3: Create migration directory and initial migration file**
 
 ```bash
-mkdir -p crates/nexad/migrations
+mkdir -p crates/helyosd/migrations
 ```
 
-Create `crates/nexad/migrations/20260521000001_initial_schema.sql`:
+Create `crates/helyosd/migrations/20260521000001_initial_schema.sql`:
 
 ```sql
--- Initial NexaNet state schema
+-- Initial Helyos state schema
 
 CREATE TABLE IF NOT EXISTS projects (
     name        TEXT PRIMARY KEY,
@@ -126,13 +126,13 @@ CREATE TABLE IF NOT EXISTS secrets (
 
 - [ ] **Step 4: Verify workspace resolves sqlx**
 
-Run: `cargo check -p nexad 2>&1 | head -20`
+Run: `cargo check -p helyosd 2>&1 | head -20`
 Expected: compiles (sqlx is available but unused, warnings OK)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Cargo.toml crates/nexad/Cargo.toml crates/nexad/migrations/
+git add Cargo.toml crates/helyosd/Cargo.toml crates/helyosd/migrations/
 git commit -m "build: add sqlx workspace dependency and initial SQLite migration"
 ```
 
@@ -141,12 +141,12 @@ git commit -m "build: add sqlx workspace dependency and initial SQLite migration
 ### Task 2: Update domain models — add ProjectStatus and restart_count
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/models/project.rs`
-- Modify: `crates/nexa-core/src/domain/models/pod.rs`
+- Modify: `crates/helyos-core/src/domain/models/project.rs`
+- Modify: `crates/helyos-core/src/domain/models/pod.rs`
 
 - [ ] **Step 1: Write failing test for ProjectStatus**
 
-Add test to `crates/nexa-core/src/domain/models/project.rs`:
+Add test to `crates/helyos-core/src/domain/models/project.rs`:
 
 ```rust
 #[cfg(test)]
@@ -175,12 +175,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexa-core -- domain::models::project 2>&1`
+Run: `cargo test -p helyos-core -- domain::models::project 2>&1`
 Expected: FAIL — `ProjectStatus` does not exist
 
 - [ ] **Step 2: Implement ProjectStatus and update Project**
 
-Replace `crates/nexa-core/src/domain/models/project.rs` with:
+Replace `crates/helyos-core/src/domain/models/project.rs` with:
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -257,12 +257,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexa-core -- domain::models::project 2>&1`
+Run: `cargo test -p helyos-core -- domain::models::project 2>&1`
 Expected: 3 tests pass
 
 - [ ] **Step 3: Write failing test for Pod restart_count**
 
-Add test to `crates/nexa-core/src/domain/models/pod.rs`:
+Add test to `crates/helyos-core/src/domain/models/pod.rs`:
 
 ```rust
 #[cfg(test)]
@@ -283,12 +283,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexa-core -- domain::models::pod 2>&1`
+Run: `cargo test -p helyos-core -- domain::models::pod 2>&1`
 Expected: FAIL — `restart_count` field does not exist on Pod
 
 - [ ] **Step 4: Add restart_count to Pod struct**
 
-In `crates/nexa-core/src/domain/models/pod.rs`, add the field to the `Pod` struct and update `Pod::new()`:
+In `crates/helyos-core/src/domain/models/pod.rs`, add the field to the `Pod` struct and update `Pod::new()`:
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -345,7 +345,7 @@ impl Pod {
 
     pub fn container_name(&self) -> String {
         format!(
-            "nexa-{}-{}-{}",
+            "helyos-{}-{}-{}",
             self.project, self.deployment_name, self.replica_index
         )
     }
@@ -400,12 +400,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexa-core -- domain::models::pod 2>&1`
+Run: `cargo test -p helyos-core -- domain::models::pod 2>&1`
 Expected: 1 test passes
 
 - [ ] **Step 5: Also add FromStr for DeploymentStatus**
 
-In `crates/nexa-core/src/domain/models/deployment.rs`, add after the `DeploymentStatus` enum:
+In `crates/helyos-core/src/domain/models/deployment.rs`, add after the `DeploymentStatus` enum:
 
 ```rust
 impl std::fmt::Display for DeploymentStatus {
@@ -436,15 +436,15 @@ impl std::str::FromStr for DeploymentStatus {
 }
 ```
 
-- [ ] **Step 6: Verify full nexa-core compiles and tests pass**
+- [ ] **Step 6: Verify full helyos-core compiles and tests pass**
 
-Run: `cargo test -p nexa-core 2>&1`
+Run: `cargo test -p helyos-core 2>&1`
 Expected: all tests pass (model tests + orchestrator tests + config tests)
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/models/
+git add crates/helyos-core/src/domain/models/
 git commit -m "feat: add ProjectStatus, Pod restart_count, and Display/FromStr for status enums"
 ```
 
@@ -453,12 +453,12 @@ git commit -m "feat: add ProjectStatus, Pod restart_count, and Display/FromStr f
 ### Task 3: Define StateStore port trait
 
 **Files:**
-- Create: `crates/nexa-core/src/ports/state.rs`
-- Modify: `crates/nexa-core/src/ports/mod.rs`
+- Create: `crates/helyos-core/src/ports/state.rs`
+- Modify: `crates/helyos-core/src/ports/mod.rs`
 
 - [ ] **Step 1: Create the StateStore trait**
 
-Create `crates/nexa-core/src/ports/state.rs`:
+Create `crates/helyos-core/src/ports/state.rs`:
 
 ```rust
 use async_trait::async_trait;
@@ -531,7 +531,7 @@ pub trait StateStore: Send + Sync {
 
 - [ ] **Step 2: Register the module in ports/mod.rs**
 
-Update `crates/nexa-core/src/ports/mod.rs` (which currently contains `pub mod runtime;`):
+Update `crates/helyos-core/src/ports/mod.rs` (which currently contains `pub mod runtime;`):
 
 ```rust
 pub mod runtime;
@@ -540,13 +540,13 @@ pub mod state;
 
 - [ ] **Step 3: Verify it compiles**
 
-Run: `cargo check -p nexa-core 2>&1`
+Run: `cargo check -p helyos-core 2>&1`
 Expected: compiles with no errors
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/
+git add crates/helyos-core/src/ports/
 git commit -m "feat: define StateStore port trait for persistence"
 ```
 
@@ -555,12 +555,12 @@ git commit -m "feat: define StateStore port trait for persistence"
 ### Task 4: Implement InMemoryStore (for tests)
 
 **Files:**
-- Create: `crates/nexa-core/src/ports/state_memory.rs`
-- Modify: `crates/nexa-core/src/ports/mod.rs`
+- Create: `crates/helyos-core/src/ports/state_memory.rs`
+- Modify: `crates/helyos-core/src/ports/mod.rs`
 
 - [ ] **Step 1: Write failing test for InMemoryStore**
 
-Create `crates/nexa-core/src/ports/state_memory.rs` with tests first:
+Create `crates/helyos-core/src/ports/state_memory.rs` with tests first:
 
 ```rust
 use std::collections::HashMap;
@@ -570,7 +570,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::domain::models::*;
-use crate::error::{NexaError, Result};
+use crate::error::{HelyosError, Result};
 use super::state::StateStore;
 
 /// In-memory state store for tests. All data lives in `Mutex<HashMap>`s.
@@ -597,7 +597,7 @@ impl StateStore for InMemoryStore {
     async fn insert_project(&self, project: &Project) -> Result<()> {
         let mut map = self.projects.lock().unwrap();
         if map.contains_key(&project.name) {
-            return Err(NexaError::InvalidSpec(format!(
+            return Err(HelyosError::InvalidSpec(format!(
                 "project '{}' already exists",
                 project.name
             )));
@@ -623,7 +623,7 @@ impl StateStore for InMemoryStore {
                 p.status = status;
                 Ok(())
             }
-            None => Err(NexaError::ProjectNotFound(name.to_string())),
+            None => Err(HelyosError::ProjectNotFound(name.to_string())),
         }
     }
 
@@ -823,7 +823,7 @@ mod tests {
 
 - [ ] **Step 2: Register the module**
 
-Update `crates/nexa-core/src/ports/mod.rs`:
+Update `crates/helyos-core/src/ports/mod.rs`:
 
 ```rust
 pub mod runtime;
@@ -833,13 +833,13 @@ pub mod state_memory;
 
 - [ ] **Step 3: Run InMemoryStore tests**
 
-Run: `cargo test -p nexa-core -- ports::state_memory 2>&1`
+Run: `cargo test -p helyos-core -- ports::state_memory 2>&1`
 Expected: all 6 tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/
+git add crates/helyos-core/src/ports/
 git commit -m "feat: implement InMemoryStore for test-time StateStore"
 ```
 
@@ -848,19 +848,19 @@ git commit -m "feat: implement InMemoryStore for test-time StateStore"
 ### Task 5: Implement SqliteStore adapter
 
 **Files:**
-- Create: `crates/nexad/src/adapters/state/mod.rs`
-- Create: `crates/nexad/src/adapters/state/sqlite.rs`
-- Modify: `crates/nexad/src/adapters/mod.rs`
+- Create: `crates/helyosd/src/adapters/state/mod.rs`
+- Create: `crates/helyosd/src/adapters/state/sqlite.rs`
+- Modify: `crates/helyosd/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write failing integration test (inline in sqlite.rs)**
 
 Create directory structure:
 
 ```bash
-mkdir -p crates/nexad/src/adapters/state
+mkdir -p crates/helyosd/src/adapters/state
 ```
 
-Create `crates/nexad/src/adapters/state/sqlite.rs`:
+Create `crates/helyosd/src/adapters/state/sqlite.rs`:
 
 ```rust
 use async_trait::async_trait;
@@ -868,9 +868,9 @@ use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use sqlx::Row;
 use uuid::Uuid;
 
-use nexa_core::domain::models::*;
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::models::*;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::state::StateStore;
 
 pub struct SqliteStore {
     pool: SqlitePool,
@@ -921,7 +921,7 @@ impl StateStore for SqliteStore {
         .bind(project.created_at.to_rfc3339())
         .execute(&self.pool)
         .await
-        .map_err(|e| NexaError::InvalidSpec(format!("insert project failed: {e}")))?;
+        .map_err(|e| HelyosError::InvalidSpec(format!("insert project failed: {e}")))?;
         Ok(())
     }
 
@@ -932,7 +932,7 @@ impl StateStore for SqliteStore {
         .bind(name)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| NexaError::Runtime(format!("get project failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("get project failed: {e}")))?;
 
         match row {
             Some(row) => {
@@ -941,9 +941,9 @@ impl StateStore for SqliteStore {
                 Ok(Some(Project {
                     name: row.get("name"),
                     status: status_str.parse::<ProjectStatus>()
-                        .map_err(|e| NexaError::Runtime(e))?,
+                        .map_err(|e| HelyosError::Runtime(e))?,
                     created_at: chrono::DateTime::parse_from_rfc3339(&created_str)
-                        .map_err(|e| NexaError::Runtime(e.to_string()))?
+                        .map_err(|e| HelyosError::Runtime(e.to_string()))?
                         .with_timezone(&chrono::Utc),
                 }))
             }
@@ -955,7 +955,7 @@ impl StateStore for SqliteStore {
         let rows = sqlx::query("SELECT name, status, created_at FROM projects")
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| NexaError::Runtime(format!("list projects failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("list projects failed: {e}")))?;
 
         let mut projects = Vec::with_capacity(rows.len());
         for row in rows {
@@ -964,9 +964,9 @@ impl StateStore for SqliteStore {
             projects.push(Project {
                 name: row.get("name"),
                 status: status_str.parse::<ProjectStatus>()
-                    .map_err(|e| NexaError::Runtime(e))?,
+                    .map_err(|e| HelyosError::Runtime(e))?,
                 created_at: chrono::DateTime::parse_from_rfc3339(&created_str)
-                    .map_err(|e| NexaError::Runtime(e.to_string()))?
+                    .map_err(|e| HelyosError::Runtime(e.to_string()))?
                     .with_timezone(&chrono::Utc),
             });
         }
@@ -979,10 +979,10 @@ impl StateStore for SqliteStore {
             .bind(name)
             .execute(&self.pool)
             .await
-            .map_err(|e| NexaError::Runtime(format!("update project status failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("update project status failed: {e}")))?;
 
         if result.rows_affected() == 0 {
-            return Err(NexaError::ProjectNotFound(name.to_string()));
+            return Err(HelyosError::ProjectNotFound(name.to_string()));
         }
         Ok(())
     }
@@ -992,7 +992,7 @@ impl StateStore for SqliteStore {
             .bind(name)
             .execute(&self.pool)
             .await
-            .map_err(|e| NexaError::Runtime(format!("delete project failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("delete project failed: {e}")))?;
         Ok(())
     }
 
@@ -1000,7 +1000,7 @@ impl StateStore for SqliteStore {
 
     async fn insert_deployment(&self, deployment: &Deployment) -> Result<()> {
         let spec_json = serde_json::to_string(&deployment.spec)
-            .map_err(|e| NexaError::Serialization(e))?;
+            .map_err(|e| HelyosError::Serialization(e))?;
 
         sqlx::query(
             "INSERT INTO deployments (id, project, name, spec_json, status, created_at, updated_at)
@@ -1015,7 +1015,7 @@ impl StateStore for SqliteStore {
         .bind(deployment.updated_at.to_rfc3339())
         .execute(&self.pool)
         .await
-        .map_err(|e| NexaError::Runtime(format!("insert deployment failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("insert deployment failed: {e}")))?;
         Ok(())
     }
 
@@ -1028,7 +1028,7 @@ impl StateStore for SqliteStore {
         .bind(name)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| NexaError::Runtime(format!("get deployment failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("get deployment failed: {e}")))?;
 
         match row {
             Some(row) => Ok(Some(Self::row_to_deployment(&row)?)),
@@ -1056,7 +1056,7 @@ impl StateStore for SqliteStore {
                 .await
             }
         }
-        .map_err(|e| NexaError::Runtime(format!("list deployments failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("list deployments failed: {e}")))?;
 
         let mut deployments = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -1067,7 +1067,7 @@ impl StateStore for SqliteStore {
 
     async fn update_deployment(&self, deployment: &Deployment) -> Result<()> {
         let spec_json = serde_json::to_string(&deployment.spec)
-            .map_err(|e| NexaError::Serialization(e))?;
+            .map_err(|e| HelyosError::Serialization(e))?;
 
         sqlx::query(
             "UPDATE deployments SET spec_json = ?, status = ?, updated_at = ? WHERE id = ?"
@@ -1078,7 +1078,7 @@ impl StateStore for SqliteStore {
         .bind(deployment.id.to_string())
         .execute(&self.pool)
         .await
-        .map_err(|e| NexaError::Runtime(format!("update deployment failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("update deployment failed: {e}")))?;
         Ok(())
     }
 
@@ -1087,7 +1087,7 @@ impl StateStore for SqliteStore {
             .bind(id.to_string())
             .execute(&self.pool)
             .await
-            .map_err(|e| NexaError::Runtime(format!("delete deployment failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("delete deployment failed: {e}")))?;
         Ok(())
     }
 
@@ -1111,7 +1111,7 @@ impl StateStore for SqliteStore {
         .bind(pod.created_at.to_rfc3339())
         .execute(&self.pool)
         .await
-        .map_err(|e| NexaError::Runtime(format!("insert pod failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("insert pod failed: {e}")))?;
         Ok(())
     }
 
@@ -1137,7 +1137,7 @@ impl StateStore for SqliteStore {
                 .await
             }
         }
-        .map_err(|e| NexaError::Runtime(format!("list pods failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("list pods failed: {e}")))?;
 
         let mut pods = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -1156,7 +1156,7 @@ impl StateStore for SqliteStore {
         .bind(pod.id.to_string())
         .execute(&self.pool)
         .await
-        .map_err(|e| NexaError::Runtime(format!("update pod failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("update pod failed: {e}")))?;
         Ok(())
     }
 
@@ -1165,7 +1165,7 @@ impl StateStore for SqliteStore {
             .bind(id.to_string())
             .execute(&self.pool)
             .await
-            .map_err(|e| NexaError::Runtime(format!("delete pod failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("delete pod failed: {e}")))?;
         Ok(())
     }
 
@@ -1178,7 +1178,7 @@ impl StateStore for SqliteStore {
         .bind(deployment_id.to_string())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| NexaError::Runtime(format!("pods by deployment failed: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("pods by deployment failed: {e}")))?;
 
         let mut pods = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -1199,16 +1199,16 @@ impl SqliteStore {
         let updated_str: String = row.get("updated_at");
 
         let id = Uuid::parse_str(&id_str)
-            .map_err(|e| NexaError::Runtime(format!("invalid deployment UUID: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("invalid deployment UUID: {e}")))?;
         let spec: DeploymentSpec = serde_json::from_str(&spec_json)?;
         let status: DeploymentStatus = status_str
             .parse()
-            .map_err(|e: String| NexaError::Runtime(e))?;
+            .map_err(|e: String| HelyosError::Runtime(e))?;
         let created_at = chrono::DateTime::parse_from_rfc3339(&created_str)
-            .map_err(|e| NexaError::Runtime(e.to_string()))?
+            .map_err(|e| HelyosError::Runtime(e.to_string()))?
             .with_timezone(&chrono::Utc);
         let updated_at = chrono::DateTime::parse_from_rfc3339(&updated_str)
-            .map_err(|e| NexaError::Runtime(e.to_string()))?
+            .map_err(|e| HelyosError::Runtime(e.to_string()))?
             .with_timezone(&chrono::Utc);
 
         Ok(Deployment {
@@ -1229,14 +1229,14 @@ impl SqliteStore {
         let replica_index: i64 = row.get("replica_index");
 
         let id = Uuid::parse_str(&id_str)
-            .map_err(|e| NexaError::Runtime(format!("invalid pod UUID: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("invalid pod UUID: {e}")))?;
         let deployment_id = Uuid::parse_str(&deployment_id_str)
-            .map_err(|e| NexaError::Runtime(format!("invalid deployment UUID: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("invalid deployment UUID: {e}")))?;
         let status: PodStatus = status_str
             .parse()
-            .map_err(|e: String| NexaError::Runtime(e))?;
+            .map_err(|e: String| HelyosError::Runtime(e))?;
         let created_at = chrono::DateTime::parse_from_rfc3339(&created_str)
-            .map_err(|e| NexaError::Runtime(e.to_string()))?
+            .map_err(|e| HelyosError::Runtime(e.to_string()))?
             .with_timezone(&chrono::Utc);
 
         Ok(Pod {
@@ -1472,7 +1472,7 @@ mod tests {
 
 - [ ] **Step 2: Create mod.rs files and register the adapter**
 
-Create `crates/nexad/src/adapters/state/mod.rs`:
+Create `crates/helyosd/src/adapters/state/mod.rs`:
 
 ```rust
 mod sqlite;
@@ -1480,7 +1480,7 @@ mod sqlite;
 pub use sqlite::SqliteStore;
 ```
 
-Update `crates/nexad/src/adapters/mod.rs` (currently has `pub mod runtime;`):
+Update `crates/helyosd/src/adapters/mod.rs` (currently has `pub mod runtime;`):
 
 ```rust
 pub mod runtime;
@@ -1489,13 +1489,13 @@ pub mod state;
 
 - [ ] **Step 3: Run SqliteStore tests**
 
-Run: `cargo test -p nexad -- adapters::state::sqlite 2>&1`
+Run: `cargo test -p helyosd -- adapters::state::sqlite 2>&1`
 Expected: all 8 tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/state/ crates/nexad/src/adapters/mod.rs
+git add crates/helyosd/src/adapters/state/ crates/helyosd/src/adapters/mod.rs
 git commit -m "feat: implement SqliteStore adapter with migration and full CRUD"
 ```
 
@@ -1504,13 +1504,13 @@ git commit -m "feat: implement SqliteStore adapter with migration and full CRUD"
 ### Task 6: Update Orchestrator to accept and use StateStore
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
 
 This is the largest task. The Orchestrator's `spawn()` method gains an `Arc<dyn StateStore>` parameter. Every mutation writes through to the state store after updating in-memory state. A new `load_state()` method hydrates in-memory state from the store on startup.
 
 - [ ] **Step 1: Write failing test for state-store-backed orchestrator**
 
-Add to the `tests` module in `crates/nexa-core/src/domain/orchestrator.rs`:
+Add to the `tests` module in `crates/helyos-core/src/domain/orchestrator.rs`:
 
 ```rust
 use crate::ports::state_memory::InMemoryStore;
@@ -1606,7 +1606,7 @@ async fn scale_persists_to_state_store() {
 }
 ```
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1`
 Expected: FAIL — `Orchestrator::spawn` does not accept a state store parameter
 
 - [ ] **Step 2: Update Orchestrator::spawn to accept Optional StateStore**
@@ -1793,7 +1793,7 @@ async fn create_pod(&mut self, deployment_id: Uuid, spec: &DeploymentSpec, index
     );
 
     let container_name = pod.container_name();
-    let network_name = format!("nexa-{}", spec.project);
+    let network_name = format!("helyos-{}", spec.project);
 
     pod.status = PodStatus::Creating;
 
@@ -1814,10 +1814,10 @@ async fn create_pod(&mut self, deployment_id: Uuid, spec: &DeploymentSpec, index
         .collect();
 
     let mut labels = StdHashMap::new();
-    labels.insert("managed-by".to_string(), "nexanet".to_string());
-    labels.insert("nexa.project".to_string(), spec.project.clone());
-    labels.insert("nexa.deployment".to_string(), spec.deployment.name.clone());
-    labels.insert("nexa.pod-id".to_string(), pod.id.to_string());
+    labels.insert("managed-by".to_string(), "helyos".to_string());
+    labels.insert("helyos.project".to_string(), spec.project.clone());
+    labels.insert("helyos.deployment".to_string(), spec.deployment.name.clone());
+    labels.insert("helyos.pod-id".to_string(), pod.id.to_string());
 
     let config = ContainerConfig {
         name: container_name,
@@ -1860,7 +1860,7 @@ async fn create_pod(&mut self, deployment_id: Uuid, spec: &DeploymentSpec, index
 async fn handle_stop(&mut self, project: &str, name: &str) -> Result<()> {
     let deployment_id = self
         .find_deployment_id(project, name)
-        .ok_or_else(|| NexaError::DeploymentNotFound(format!("{project}/{name}")))?;
+        .ok_or_else(|| HelyosError::DeploymentNotFound(format!("{project}/{name}")))?;
 
     let pod_ids: Vec<Uuid> = self
         .pods
@@ -1899,7 +1899,7 @@ async fn reconcile_deployment(&mut self, deployment_id: Uuid) -> Result<()> {
     let spec = self.deployments[&deployment_id].spec.clone();
     let desired = spec.replicas;
 
-    let network_name = format!("nexa-{}", spec.project);
+    let network_name = format!("helyos-{}", spec.project);
     let _ = self.runtime.create_network(&network_name).await;
 
     let mut current_pods: Vec<Uuid> = self
@@ -1964,7 +1964,7 @@ async fn handle_remove_deployment(&mut self, project: &str, name: &str) -> Resul
     self.handle_stop(project, name).await?;
     let id = self
         .find_deployment_id(project, name)
-        .ok_or_else(|| NexaError::DeploymentNotFound(format!("{project}/{name}")))?;
+        .ok_or_else(|| HelyosError::DeploymentNotFound(format!("{project}/{name}")))?;
 
     if let Some(store) = &self.state_store {
         if let Err(e) = store.delete_deployment(&id).await {
@@ -1979,13 +1979,13 @@ async fn handle_remove_deployment(&mut self, project: &str, name: &str) -> Resul
 
 - [ ] **Step 11: Run all tests**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1`
 Expected: all tests pass (existing tests with `None` store + new persistence tests)
 
 - [ ] **Step 12: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "feat: orchestrator writes all mutations through StateStore"
 ```
 
@@ -1994,7 +1994,7 @@ git commit -m "feat: orchestrator writes all mutations through StateStore"
 ### Task 7: Startup reconciliation — load from StateStore
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
 
 - [ ] **Step 1: Write failing test for startup load**
 
@@ -2049,7 +2049,7 @@ async fn loads_state_on_startup() {
 }
 ```
 
-Run: `cargo test -p nexa-core -- domain::orchestrator::tests::loads_state_on_startup 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator::tests::loads_state_on_startup 2>&1`
 Expected: FAIL — orchestrator does not load from store yet (projects list will be empty)
 
 - [ ] **Step 2: Implement load_state method**
@@ -2119,13 +2119,13 @@ async fn run(&mut self, mut rx: mpsc::Receiver<Command>) {
 
 - [ ] **Step 4: Run test to verify load works**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator::tests::loads_state_on_startup 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator::tests::loads_state_on_startup 2>&1`
 Expected: test passes
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "feat: load persisted state from StateStore on startup"
 ```
 
@@ -2134,7 +2134,7 @@ git commit -m "feat: load persisted state from StateStore on startup"
 ### Task 8: Startup stale pod reconciliation
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
 
 - [ ] **Step 1: Write failing test for stale pod detection**
 
@@ -2181,7 +2181,7 @@ impl ContainerRuntime for ConfigurableMockRuntime {
                 image: "mock".into(),
                 state: state.clone(),
             }),
-            None => Err(NexaError::Runtime(format!("container {id} not found"))),
+            None => Err(HelyosError::Runtime(format!("container {id} not found"))),
         }
     }
     async fn logs(&self, _id: &str, _tail: Option<u64>) -> Result<LogStream> {
@@ -2246,7 +2246,7 @@ async fn reconcile_marks_stale_pods_failed() {
 }
 ```
 
-Run: `cargo test -p nexa-core -- domain::orchestrator::tests::reconcile_marks_stale_pods_failed 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator::tests::reconcile_marks_stale_pods_failed 2>&1`
 Expected: FAIL — `reconcile_stale_pods` not implemented yet
 
 - [ ] **Step 2: Implement reconcile_stale_pods**
@@ -2338,31 +2338,31 @@ async fn reconcile_stale_pods(&mut self) {
 
 - [ ] **Step 3: Run tests**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1`
 Expected: all tests pass including the stale pod test
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "feat: reconcile stale pods on startup by checking container runtime"
 ```
 
 ---
 
-### Task 9: Wire SqliteStore into nexad main.rs
+### Task 9: Wire SqliteStore into helyosd main.rs
 
 **Files:**
-- Modify: `crates/nexad/src/main.rs`
-- Modify: `crates/nexa-core/src/error.rs` (add StateStore error variant)
+- Modify: `crates/helyosd/src/main.rs`
+- Modify: `crates/helyos-core/src/error.rs` (add StateStore error variant)
 
 - [ ] **Step 1: Add StateStore error variant**
 
-In `crates/nexa-core/src/error.rs`, add a new variant to `NexaError`:
+In `crates/helyos-core/src/error.rs`, add a new variant to `HelyosError`:
 
 ```rust
 #[derive(Debug, Error)]
-pub enum NexaError {
+pub enum HelyosError {
     #[error("project not found: {0}")]
     ProjectNotFound(String),
 
@@ -2401,9 +2401,9 @@ pub enum NexaError {
 }
 ```
 
-- [ ] **Step 2: Update nexad main.rs to create SqliteStore**
+- [ ] **Step 2: Update helyosd main.rs to create SqliteStore**
 
-Replace `crates/nexad/src/main.rs`:
+Replace `crates/helyosd/src/main.rs`:
 
 ```rust
 mod adapters;
@@ -2415,11 +2415,11 @@ use clap::Parser;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-use nexa_core::domain::orchestrator::Orchestrator;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::orchestrator::Orchestrator;
+use helyos_core::ports::state::StateStore;
 
 #[derive(Parser)]
-#[command(name = "nexad", about = "NexaNet daemon", version)]
+#[command(name = "helyosd", about = "Helyos daemon", version)]
 struct Cli {
     #[arg(long, default_value = "0.0.0.0")]
     host: String,
@@ -2427,7 +2427,7 @@ struct Cli {
     #[arg(long, default_value = "6443")]
     port: u16,
 
-    #[arg(long, default_value = "/var/lib/nexa")]
+    #[arg(long, default_value = "/var/lib/helyos")]
     data_dir: String,
 }
 
@@ -2441,13 +2441,13 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    info!("starting nexad on {}:{}", cli.host, cli.port);
+    info!("starting helyosd on {}:{}", cli.host, cli.port);
 
     // Ensure data directory exists
     std::fs::create_dir_all(&cli.data_dir)?;
 
     // Initialize SQLite state store
-    let db_path = format!("{}/nexa.db", cli.data_dir);
+    let db_path = format!("{}/helyos.db", cli.data_dir);
     let database_url = format!("sqlite:{}?mode=rwc", db_path);
     let store = adapters::state::SqliteStore::connect(&database_url).await?;
     let store: Arc<dyn StateStore> = Arc::new(store);
@@ -2466,16 +2466,16 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-- [ ] **Step 3: Verify nexad compiles**
+- [ ] **Step 3: Verify helyosd compiles**
 
-Run: `cargo check -p nexad 2>&1`
+Run: `cargo check -p helyosd 2>&1`
 Expected: compiles with no errors
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/main.rs crates/nexa-core/src/error.rs
-git commit -m "feat: wire SqliteStore into nexad startup with data_dir persistence"
+git add crates/helyosd/src/main.rs crates/helyos-core/src/error.rs
+git commit -m "feat: wire SqliteStore into helyosd startup with data_dir persistence"
 ```
 
 ---
@@ -2483,8 +2483,8 @@ git commit -m "feat: wire SqliteStore into nexad startup with data_dir persisten
 ### Task 10: End-to-end integration test with real SQLite (tempfile)
 
 **Files:**
-- Create: `crates/nexad/tests/sqlite_integration.rs`
-- Modify: `crates/nexad/Cargo.toml` (add dev-dependency tempfile)
+- Create: `crates/helyosd/tests/sqlite_integration.rs`
+- Modify: `crates/helyosd/Cargo.toml` (add dev-dependency tempfile)
 
 - [ ] **Step 1: Add tempfile dev-dependency**
 
@@ -2494,27 +2494,27 @@ In `Cargo.toml` (workspace), add:
 tempfile = "3"
 ```
 
-In `crates/nexad/Cargo.toml`, add:
+In `crates/helyosd/Cargo.toml`, add:
 
 ```toml
 [dev-dependencies]
 tempfile = { workspace = true }
-nexa-core = { workspace = true }
+helyos-core = { workspace = true }
 ```
 
 - [ ] **Step 2: Write the integration test**
 
-Create `crates/nexad/tests/sqlite_integration.rs`:
+Create `crates/helyosd/tests/sqlite_integration.rs`:
 
 ```rust
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use nexa_core::domain::models::*;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::models::*;
+use helyos_core::ports::state::StateStore;
 
 // We test SqliteStore directly without the full daemon.
-// The adapters module is internal to nexad, so we import via the crate.
+// The adapters module is internal to helyosd, so we import via the crate.
 // For integration tests, we reference the adapter through the public path.
 
 #[tokio::test]
@@ -2524,7 +2524,7 @@ async fn full_lifecycle_with_sqlite() {
     let url = format!("sqlite:{}?mode=rwc", db_path.display());
 
     // ── Connect and migrate ──
-    let store = nexad::adapters::state::SqliteStore::connect(&url)
+    let store = helyosd::adapters::state::SqliteStore::connect(&url)
         .await
         .expect("failed to connect to SQLite");
 
@@ -2585,7 +2585,7 @@ async fn full_lifecycle_with_sqlite() {
 
     // ── Reconnect to same DB and verify persistence ──
     drop(store);
-    let store2 = nexad::adapters::state::SqliteStore::connect(&url)
+    let store2 = helyosd::adapters::state::SqliteStore::connect(&url)
         .await
         .expect("reconnect failed");
 
@@ -2595,23 +2595,23 @@ async fn full_lifecycle_with_sqlite() {
 }
 ```
 
-**Important:** This test requires `nexad` to expose `adapters` publicly. Since `adapters` is currently `mod adapters;` (private), we need to make it public for integration test access.
+**Important:** This test requires `helyosd` to expose `adapters` publicly. Since `adapters` is currently `mod adapters;` (private), we need to make it public for integration test access.
 
-Update `crates/nexad/src/main.rs` — change `mod adapters;` to:
-
-```rust
-pub mod adapters;
-```
-
-Also add `#[path]` or make the crate a lib+bin. The simplest approach: create `crates/nexad/src/lib.rs` to re-export:
-
-Create `crates/nexad/src/lib.rs`:
+Update `crates/helyosd/src/main.rs` — change `mod adapters;` to:
 
 ```rust
 pub mod adapters;
 ```
 
-And update `crates/nexad/src/main.rs` to use `nexad::adapters` instead of `mod adapters`:
+Also add `#[path]` or make the crate a lib+bin. The simplest approach: create `crates/helyosd/src/lib.rs` to re-export:
+
+Create `crates/helyosd/src/lib.rs`:
+
+```rust
+pub mod adapters;
+```
+
+And update `crates/helyosd/src/main.rs` to use `helyosd::adapters` instead of `mod adapters`:
 
 ```rust
 mod api;
@@ -2622,11 +2622,11 @@ use clap::Parser;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-use nexa_core::domain::orchestrator::Orchestrator;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::orchestrator::Orchestrator;
+use helyos_core::ports::state::StateStore;
 
 #[derive(Parser)]
-#[command(name = "nexad", about = "NexaNet daemon", version)]
+#[command(name = "helyosd", about = "Helyos daemon", version)]
 struct Cli {
     #[arg(long, default_value = "0.0.0.0")]
     host: String,
@@ -2634,7 +2634,7 @@ struct Cli {
     #[arg(long, default_value = "6443")]
     port: u16,
 
-    #[arg(long, default_value = "/var/lib/nexa")]
+    #[arg(long, default_value = "/var/lib/helyos")]
     data_dir: String,
 }
 
@@ -2648,20 +2648,20 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    info!("starting nexad on {}:{}", cli.host, cli.port);
+    info!("starting helyosd on {}:{}", cli.host, cli.port);
 
     // Ensure data directory exists
     std::fs::create_dir_all(&cli.data_dir)?;
 
     // Initialize SQLite state store
-    let db_path = format!("{}/nexa.db", cli.data_dir);
+    let db_path = format!("{}/helyos.db", cli.data_dir);
     let database_url = format!("sqlite:{}?mode=rwc", db_path);
-    let store = nexad::adapters::state::SqliteStore::connect(&database_url).await?;
+    let store = helyosd::adapters::state::SqliteStore::connect(&database_url).await?;
     let store: Arc<dyn StateStore> = Arc::new(store);
     info!(path = db_path, "state store initialized");
 
     // Connect to Docker runtime
-    let runtime = nexad::adapters::runtime::DockerRuntime::new()?;
+    let runtime = helyosd::adapters::runtime::DockerRuntime::new()?;
     runtime.ping().await?;
     info!("connected to Docker runtime");
 
@@ -2675,7 +2675,7 @@ async fn main() -> anyhow::Result<()> {
 
 - [ ] **Step 3: Run the integration test**
 
-Run: `cargo test -p nexad -- sqlite_integration 2>&1`
+Run: `cargo test -p helyosd -- sqlite_integration 2>&1`
 Expected: test passes
 
 - [ ] **Step 4: Run full workspace test suite**
@@ -2686,7 +2686,7 @@ Expected: all tests pass across all crates
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Cargo.toml crates/nexad/
+git add Cargo.toml crates/helyosd/
 git commit -m "test: add end-to-end SQLite integration test with tempfile"
 ```
 

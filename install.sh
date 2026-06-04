@@ -1,18 +1,18 @@
 #!/bin/sh
 set -eu
 
-# NexaNet Installer
-# Usage: curl -sSfL https://raw.githubusercontent.com/nexa-net/nexa/main/install.sh | sh
+# Helyos Installer
+# Usage: curl -sSfL https://raw.githubusercontent.com/helyos-labs/helyos/main/install.sh | sh
 #
-# Uninstall: curl -sSfL https://raw.githubusercontent.com/nexa-net/nexa/main/install.sh | sh -s -- --uninstall
+# Uninstall: curl -sSfL https://raw.githubusercontent.com/helyos-labs/helyos/main/install.sh | sh -s -- --uninstall
 #
 # Environment variables:
 #   INSTALL_DIR   Override install directory (default: /usr/local/bin)
 #   VERSION       Install a specific version (default: latest)
 #   NO_SERVICE    Set to 1 to skip auto-start service installation
-#   NO_START      Set to 1 to skip launching nexad after install
+#   NO_START      Set to 1 to skip launching helyosd after install
 #   FORCE         Set to 1 to skip upgrade prompt and always overwrite
-#   UNINSTALL     Set to 1 to uninstall NexaNet
+#   UNINSTALL     Set to 1 to uninstall Helyos
 
 # Default optional environment variables (safe under set -u)
 INSTALL_DIR="${INSTALL_DIR:-}"
@@ -22,8 +22,8 @@ NO_START="${NO_START:-}"
 FORCE="${FORCE:-}"
 UNINSTALL="${UNINSTALL:-}"
 
-GITHUB_ORG="nexa-net"
-NEXA_HOME="${HOME}/.nexa"
+GITHUB_ORG="helyos-labs"
+HELYOS_HOME="${HOME}/.helyos"
 
 # ────────────────────── helpers ──────────────────────
 
@@ -279,7 +279,7 @@ setup_path() {
     detect_shell_profile
 
     PATH_LINE="export PATH=\"${INSTALL_DIR}:\$PATH\""
-    MARKER="# NexaNet"
+    MARKER="# Helyos"
 
     if echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
         return 0
@@ -303,25 +303,25 @@ setup_path() {
 
 # ────────────────────── service management ──────────────────────
 
-stop_nexad_service() {
+stop_helyosd_service() {
     if [ "$PLATFORM" = "darwin" ]; then
-        PLIST_FILE="${HOME}/Library/LaunchAgents/net.nexa.nexad.plist"
+        PLIST_FILE="${HOME}/Library/LaunchAgents/net.helyos.helyosd.plist"
         if [ -f "$PLIST_FILE" ]; then
             launchctl bootout "gui/$(id -u)" "$PLIST_FILE" 2>/dev/null || true
             sleep 1
         fi
     elif command -v systemctl >/dev/null 2>&1; then
-        systemctl --user stop nexad.service 2>/dev/null || true
+        systemctl --user stop helyosd.service 2>/dev/null || true
         sleep 1
     fi
-    # Also kill any stray nexad process
-    pkill -x nexad 2>/dev/null || true
+    # Also kill any stray helyosd process
+    pkill -x helyosd 2>/dev/null || true
 }
 
 install_launchd_service() {
     PLIST_DIR="${HOME}/Library/LaunchAgents"
-    PLIST_FILE="${PLIST_DIR}/net.nexa.nexad.plist"
-    LOG_DIR="${NEXA_HOME}/log"
+    PLIST_FILE="${PLIST_DIR}/net.helyos.helyosd.plist"
+    LOG_DIR="${HELYOS_HOME}/log"
 
     mkdir -p "$PLIST_DIR" "$LOG_DIR"
 
@@ -332,19 +332,19 @@ install_launchd_service() {
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>net.nexa.nexad</string>
+    <string>net.helyos.helyosd</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${INSTALL_DIR}/nexad</string>
+        <string>${INSTALL_DIR}/helyosd</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>${LOG_DIR}/nexad.log</string>
+    <string>${LOG_DIR}/helyosd.log</string>
     <key>StandardErrorPath</key>
-    <string>${LOG_DIR}/nexad.err</string>
+    <string>${LOG_DIR}/helyosd.err</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
@@ -360,25 +360,25 @@ PLIST
         launchctl load "$PLIST_FILE" 2>/dev/null || true
 
     success "Installed launchd service (auto-starts on login)"
-    info "Logs: ${LOG_DIR}/nexad.log"
+    info "Logs: ${LOG_DIR}/helyosd.log"
 }
 
 install_systemd_service() {
     UNIT_DIR="${HOME}/.config/systemd/user"
-    UNIT_FILE="${UNIT_DIR}/nexad.service"
-    LOG_DIR="${NEXA_HOME}/log"
+    UNIT_FILE="${UNIT_DIR}/helyosd.service"
+    LOG_DIR="${HELYOS_HOME}/log"
 
     mkdir -p "$UNIT_DIR" "$LOG_DIR"
 
     cat > "$UNIT_FILE" <<UNIT
 [Unit]
-Description=NexaNet daemon
+Description=Helyos daemon
 After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${INSTALL_DIR}/nexad
+ExecStart=${INSTALL_DIR}/helyosd
 Restart=on-failure
 RestartSec=5
 Environment=HOME=${HOME}
@@ -388,7 +388,7 @@ Environment=PATH=${INSTALL_DIR}:/usr/local/bin:/usr/bin:/bin
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=${NEXA_HOME}
+ReadWritePaths=${HELYOS_HOME}
 PrivateTmp=true
 ProtectClock=true
 ProtectKernelModules=true
@@ -402,10 +402,10 @@ WantedBy=default.target
 UNIT
 
     systemctl --user daemon-reload 2>/dev/null || true
-    systemctl --user enable nexad.service 2>/dev/null || true
+    systemctl --user enable helyosd.service 2>/dev/null || true
 
     success "Installed systemd user service (auto-starts on login)"
-    info "Logs: journalctl --user -u nexad -f"
+    info "Logs: journalctl --user -u helyosd -f"
 }
 
 install_service() {
@@ -413,7 +413,7 @@ install_service() {
         return 0
     fi
 
-    if [ ! -f "${INSTALL_DIR}/nexad" ]; then
+    if [ ! -f "${INSTALL_DIR}/helyosd" ]; then
         return 0
     fi
 
@@ -429,43 +429,43 @@ install_service() {
     fi
 }
 
-# ────────────────────── start nexad ──────────────────────
+# ────────────────────── start helyosd ──────────────────────
 
-start_nexad() {
+start_helyosd() {
     if [ "$NO_START" = "1" ]; then
         return 0
     fi
 
-    if [ ! -f "${INSTALL_DIR}/nexad" ]; then
+    if [ ! -f "${INSTALL_DIR}/helyosd" ]; then
         return 0
     fi
 
-    info "Starting nexad..."
+    info "Starting helyosd..."
 
     if [ "$PLATFORM" = "darwin" ]; then
         # launchd already started it via bootstrap, just verify
         sleep 2
         if curl -sf http://localhost:6443/health >/dev/null 2>&1; then
-            success "nexad is running on http://localhost:6443"
+            success "helyosd is running on http://localhost:6443"
         else
-            warn "nexad may still be starting — check: nexa status"
+            warn "helyosd may still be starting — check: helyos status"
         fi
     elif [ "$PLATFORM" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
-        systemctl --user start nexad.service 2>/dev/null || true
+        systemctl --user start helyosd.service 2>/dev/null || true
         sleep 2
         if curl -sf http://localhost:6443/health >/dev/null 2>&1; then
-            success "nexad is running on http://localhost:6443"
+            success "helyosd is running on http://localhost:6443"
         else
-            warn "nexad may still be starting — check: nexa status"
+            warn "helyosd may still be starting — check: helyos status"
         fi
     else
         # No service manager — start in background
-        nohup "${INSTALL_DIR}/nexad" > "${NEXA_HOME}/log/nexad.log" 2>&1 &
+        nohup "${INSTALL_DIR}/helyosd" > "${HELYOS_HOME}/log/helyosd.log" 2>&1 &
         sleep 2
         if curl -sf http://localhost:6443/health >/dev/null 2>&1; then
-            success "nexad is running on http://localhost:6443 (PID $!)"
+            success "helyosd is running on http://localhost:6443 (PID $!)"
         else
-            warn "nexad may still be starting — check: nexa status"
+            warn "helyosd may still be starting — check: helyos status"
         fi
     fi
 }
@@ -474,14 +474,14 @@ start_nexad() {
 
 uninstall() {
     printf '\n'
-    info "Uninstalling NexaNet..."
+    info "Uninstalling Helyos..."
     printf '\n'
 
     # Stop running services
-    stop_nexad_service
+    stop_helyosd_service
 
     # Remove launchd service (macOS)
-    PLIST="$HOME/Library/LaunchAgents/net.nexa.nexad.plist"
+    PLIST="$HOME/Library/LaunchAgents/net.helyos.helyosd.plist"
     if [ -f "$PLIST" ]; then
         launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
         rm -f "$PLIST"
@@ -489,9 +489,9 @@ uninstall() {
     fi
 
     # Remove systemd service (Linux)
-    UNIT_FILE="${HOME}/.config/systemd/user/nexad.service"
+    UNIT_FILE="${HOME}/.config/systemd/user/helyosd.service"
     if [ -f "$UNIT_FILE" ]; then
-        systemctl --user disable nexad.service 2>/dev/null || true
+        systemctl --user disable helyosd.service 2>/dev/null || true
         rm -f "$UNIT_FILE"
         systemctl --user daemon-reload 2>/dev/null || true
         success "Removed systemd service"
@@ -499,17 +499,17 @@ uninstall() {
 
     # Determine install directory
     if [ -z "$INSTALL_DIR" ]; then
-        if [ -f "/usr/local/bin/nexad" ]; then
+        if [ -f "/usr/local/bin/helyosd" ]; then
             INSTALL_DIR="/usr/local/bin"
-        elif [ -f "${NEXA_HOME}/bin/nexad" ]; then
-            INSTALL_DIR="${NEXA_HOME}/bin"
+        elif [ -f "${HELYOS_HOME}/bin/helyosd" ]; then
+            INSTALL_DIR="${HELYOS_HOME}/bin"
         else
             INSTALL_DIR="/usr/local/bin"
         fi
     fi
 
     # Remove binaries
-    for bin in nexad nexa; do
+    for bin in helyosd helyos; do
         if [ -f "${INSTALL_DIR}/${bin}" ]; then
             rm -f "${INSTALL_DIR}/${bin}"
             success "Removed ${INSTALL_DIR}/${bin}"
@@ -518,8 +518,8 @@ uninstall() {
 
     printf '\n'
     info "Binaries and services removed."
-    info "Data directory preserved at: ${NEXA_HOME}"
-    info "To remove all data: rm -rf ${NEXA_HOME}"
+    info "Data directory preserved at: ${HELYOS_HOME}"
+    info "To remove all data: rm -rf ${HELYOS_HOME}"
     printf '\n'
 }
 
@@ -547,14 +547,14 @@ main() {
     fi
 
     if [ ! -w "$INSTALL_DIR" ] && [ "$(id -u)" != "0" ]; then
-        INSTALL_DIR="${NEXA_HOME}/bin"
+        INSTALL_DIR="${HELYOS_HOME}/bin"
     fi
 
-    mkdir -p "$INSTALL_DIR" "${NEXA_HOME}/data" "${NEXA_HOME}/log"
+    mkdir -p "$INSTALL_DIR" "${HELYOS_HOME}/data" "${HELYOS_HOME}/log"
 
     # Detect existing installation
-    EXISTING_NEXAD=$(get_installed_version "${INSTALL_DIR}/nexad")
-    EXISTING_NEXA=$(get_installed_version "${INSTALL_DIR}/nexa")
+    EXISTING_HELYOSD=$(get_installed_version "${INSTALL_DIR}/helyosd")
+    EXISTING_HELYOS=$(get_installed_version "${INSTALL_DIR}/helyos")
 
     printf '\n'
     printf '  _   _                _   _      _   \n'
@@ -564,56 +564,56 @@ main() {
     printf ' |_| \\_|\\___/_/\\_\\__||_| \\_|\\___|\\__|\n'
     printf '\n'
 
-    if [ -n "$EXISTING_NEXAD" ] || [ -n "$EXISTING_NEXA" ]; then
-        printf '  NexaNet Updater\n'
+    if [ -n "$EXISTING_HELYOSD" ] || [ -n "$EXISTING_HELYOS" ]; then
+        printf '  Helyos Updater\n'
     else
-        printf '  NexaNet Installer\n'
+        printf '  Helyos Installer\n'
     fi
 
     printf '\n'
     info "Platform:     ${PLATFORM}/${ARCH}"
     info "Install dir:  ${INSTALL_DIR}"
 
-    if [ -n "$EXISTING_NEXAD" ]; then
-        info "Installed:    nexad ${EXISTING_NEXAD}, nexa ${EXISTING_NEXA:-n/a}"
+    if [ -n "$EXISTING_HELYOSD" ]; then
+        info "Installed:    helyosd ${EXISTING_HELYOSD}, helyos ${EXISTING_HELYOS:-n/a}"
     fi
 
     printf '\n'
 
-    # Stop running nexad before overwriting binaries (if updating)
-    if [ -n "$EXISTING_NEXAD" ]; then
-        stop_nexad_service
+    # Stop running helyosd before overwriting binaries (if updating)
+    if [ -n "$EXISTING_HELYOSD" ]; then
+        stop_helyosd_service
     fi
 
-    download_and_install "nexad" "nexad"
-    download_and_install "nexa-cli" "nexa"
+    download_and_install "helyosd" "helyosd"
+    download_and_install "helyos-cli" "helyos"
 
     printf '\n'
 
     setup_path
     install_service
-    start_nexad
+    start_helyosd
 
     printf '\n'
-    if [ -n "$EXISTING_NEXAD" ]; then
+    if [ -n "$EXISTING_HELYOSD" ]; then
         success "Update complete!"
     else
         success "Installation complete!"
     fi
     printf '\n'
     info "Try it now:"
-    info "  nexa status           # Check cluster status"
-    info "  nexa deploy app.yaml  # Deploy a service"
+    info "  helyos status           # Check cluster status"
+    info "  helyos deploy app.yaml  # Deploy a service"
     printf '\n'
     if [ "$PLATFORM" = "darwin" ]; then
-        info "nexad starts automatically on login."
-        info "  Stop:    launchctl bootout gui/\$(id -u) ~/Library/LaunchAgents/net.nexa.nexad.plist"
-        info "  Restart: launchctl kickstart -k gui/\$(id -u)/net.nexa.nexad"
+        info "helyosd starts automatically on login."
+        info "  Stop:    launchctl bootout gui/\$(id -u) ~/Library/LaunchAgents/net.helyos.helyosd.plist"
+        info "  Restart: launchctl kickstart -k gui/\$(id -u)/net.helyos.helyosd"
     elif command -v systemctl >/dev/null 2>&1; then
-        info "nexad starts automatically on login."
-        info "  Stop:    systemctl --user stop nexad"
-        info "  Restart: systemctl --user restart nexad"
-        info "  Logs:    journalctl --user -u nexad -f"
+        info "helyosd starts automatically on login."
+        info "  Stop:    systemctl --user stop helyosd"
+        info "  Restart: systemctl --user restart helyosd"
+        info "  Logs:    journalctl --user -u helyosd -f"
     fi
     printf '\n'
 }

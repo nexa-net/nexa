@@ -5,11 +5,11 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
 **Goal:** Add an active health-checking subsystem that probes running pods over HTTP, tracks per-pod health state through a Healthy/Failing/Unhealthy state machine, and triggers restart actions when a pod exceeds its failure threshold.
 
@@ -22,13 +22,13 @@
 ### Task 1: Add `container_ip` to Pod Model + `container_ip()` to ContainerRuntime Trait
 
 **Files:**
-- Modify: `crates/nexa-core/src/models/pod.rs`
-- Modify: `crates/nexa-core/src/runtime/traits.rs`
-- Modify: `crates/nexa-core/src/runtime/docker.rs`
+- Modify: `crates/helyos-core/src/models/pod.rs`
+- Modify: `crates/helyos-core/src/runtime/traits.rs`
+- Modify: `crates/helyos-core/src/runtime/docker.rs`
 
 - [ ] **Step 1: Write failing test — Pod serialization includes `container_ip`**
 
-  In `crates/nexa-core/src/models/pod.rs`, add a `#[cfg(test)]` module at the bottom:
+  In `crates/helyos-core/src/models/pod.rs`, add a `#[cfg(test)]` module at the bottom:
 
   ```rust
   #[cfg(test)]
@@ -65,12 +65,12 @@
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexa-core pod`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyos-core pod`
   Expected: **FAILS** — `Pod` has no field `container_ip`.
 
 - [ ] **Step 2: Add `container_ip` field to Pod struct**
 
-  In `crates/nexa-core/src/models/pod.rs`, add the field to `Pod`:
+  In `crates/helyos-core/src/models/pod.rs`, add the field to `Pod`:
 
   ```rust
   #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,23 +90,23 @@
 
   Update `Pod::new()` to initialize `container_ip: None`.
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexa-core pod`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyos-core pod`
   Expected: **PASSES** — both tests green.
 
 - [ ] **Step 3: Add `container_ip()` method to ContainerRuntime trait**
 
-  In `crates/nexa-core/src/runtime/traits.rs`, add to the trait:
+  In `crates/helyos-core/src/runtime/traits.rs`, add to the trait:
 
   ```rust
   async fn container_ip(&self, container_id: &str, network: &str) -> Result<String>;
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo check -p nexa-core`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo check -p helyos-core`
   Expected: **FAILS** — `DockerRuntime` doesn't implement the new method.
 
 - [ ] **Step 4: Implement `container_ip()` in DockerRuntime**
 
-  In `crates/nexa-core/src/runtime/docker.rs`, add:
+  In `crates/helyos-core/src/runtime/docker.rs`, add:
 
   ```rust
   async fn container_ip(&self, container_id: &str, network: &str) -> Result<String> {
@@ -114,7 +114,7 @@
           .client
           .inspect_container(container_id, None)
           .await
-          .map_err(|e| NexaError::Runtime(e.to_string()))?;
+          .map_err(|e| HelyosError::Runtime(e.to_string()))?;
 
       let ip = info
           .network_settings
@@ -123,7 +123,7 @@
           .and_then(|ep| ep.ip_address)
           .filter(|ip| !ip.is_empty())
           .ok_or_else(|| {
-              NexaError::Runtime(format!(
+              HelyosError::Runtime(format!(
                   "no IP found for container {container_id} on network {network}"
               ))
           })?;
@@ -132,12 +132,12 @@
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo check`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo check`
   Expected: **PASSES** — full workspace compiles.
 
 - [ ] **Step 5: Populate `container_ip` after pod creation in orchestrator**
 
-  In `crates/nexad/src/engine/orchestrator.rs`, inside `create_pod()`, after the successful `start_container` call (inside the `Ok(container_id)` arm), add IP lookup:
+  In `crates/helyosd/src/engine/orchestrator.rs`, inside `create_pod()`, after the successful `start_container` call (inside the `Ok(container_id)` arm), add IP lookup:
 
   ```rust
   Ok(container_id) => {
@@ -146,7 +146,7 @@
       pod.status = PodStatus::Running;
 
       // Populate container IP for health checking
-      let network_name = format!("nexa-{}", spec.project);
+      let network_name = format!("helyos-{}", spec.project);
       match self.runtime.container_ip(&container_id, &network_name).await {
           Ok(ip) => {
               pod.container_ip = Some(ip);
@@ -160,14 +160,14 @@
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo build`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo build`
   Expected: **PASSES** — compiles cleanly.
 
 - [ ] **Step 6: Commit**
 
   ```bash
-  cd /Users/nassime/GitHub/NexaNet
-  git add crates/nexa-core/src/models/pod.rs crates/nexa-core/src/runtime/traits.rs crates/nexa-core/src/runtime/docker.rs crates/nexad/src/engine/orchestrator.rs
+  cd /Users/nassime/GitHub/Helyos
+  git add crates/helyos-core/src/models/pod.rs crates/helyos-core/src/runtime/traits.rs crates/helyos-core/src/runtime/docker.rs crates/helyosd/src/engine/orchestrator.rs
   git commit -m "feat(core): add container_ip to Pod model and ContainerRuntime trait"
   ```
 
@@ -176,17 +176,17 @@
 ### Task 2: Duration Parsing Utility
 
 **Files:**
-- Create: `crates/nexa-core/src/duration.rs`
-- Modify: `crates/nexa-core/src/lib.rs`
+- Create: `crates/helyos-core/src/duration.rs`
+- Modify: `crates/helyos-core/src/lib.rs`
 
 - [ ] **Step 1: Write failing tests for duration parsing**
 
-  Create `crates/nexa-core/src/duration.rs` with only tests:
+  Create `crates/helyos-core/src/duration.rs` with only tests:
 
   ```rust
   use std::time::Duration;
 
-  use crate::error::{NexaError, Result};
+  use crate::error::{HelyosError, Result};
 
   /// Parses a human-friendly duration string into `std::time::Duration`.
   ///
@@ -243,27 +243,27 @@
   }
   ```
 
-  Add `pub mod duration;` to `crates/nexa-core/src/lib.rs`.
+  Add `pub mod duration;` to `crates/helyos-core/src/lib.rs`.
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexa-core duration`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyos-core duration`
   Expected: **FAILS** — `todo!()` panics.
 
 - [ ] **Step 2: Implement `parse_duration`**
 
-  Replace the `todo!()` body of `parse_duration` in `crates/nexa-core/src/duration.rs`:
+  Replace the `todo!()` body of `parse_duration` in `crates/helyos-core/src/duration.rs`:
 
   ```rust
   pub fn parse_duration(s: &str) -> Result<Duration> {
       let s = s.trim();
       if s.is_empty() {
-          return Err(NexaError::InvalidSpec("empty duration string".into()));
+          return Err(HelyosError::InvalidSpec("empty duration string".into()));
       }
 
       // Try "ms" suffix first (before "m" and "s")
       if let Some(num) = s.strip_suffix("ms") {
           let millis: u64 = num
               .parse()
-              .map_err(|_| NexaError::InvalidSpec(format!("invalid duration: {s}")))?;
+              .map_err(|_| HelyosError::InvalidSpec(format!("invalid duration: {s}")))?;
           return Ok(Duration::from_millis(millis));
       }
 
@@ -280,20 +280,20 @@
 
       let value: u64 = num_str
           .parse()
-          .map_err(|_| NexaError::InvalidSpec(format!("invalid duration: {s}")))?;
+          .map_err(|_| HelyosError::InvalidSpec(format!("invalid duration: {s}")))?;
 
       Ok(Duration::from_secs(value * multiplier))
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexa-core duration`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyos-core duration`
   Expected: **PASSES** — all 7 tests green.
 
 - [ ] **Step 3: Commit**
 
   ```bash
-  cd /Users/nassime/GitHub/NexaNet
-  git add crates/nexa-core/src/duration.rs crates/nexa-core/src/lib.rs
+  cd /Users/nassime/GitHub/Helyos
+  git add crates/helyos-core/src/duration.rs crates/helyos-core/src/lib.rs
   git commit -m "feat(core): add duration parsing utility for healthcheck intervals"
   ```
 
@@ -302,21 +302,21 @@
 ### Task 3: Health State Machine + Domain Types
 
 **Files:**
-- Create: `crates/nexa-core/src/domain/health.rs`
-- Create: `crates/nexa-core/src/domain/mod.rs`
-- Modify: `crates/nexa-core/src/lib.rs`
+- Create: `crates/helyos-core/src/domain/health.rs`
+- Create: `crates/helyos-core/src/domain/mod.rs`
+- Modify: `crates/helyos-core/src/lib.rs`
 
 - [ ] **Step 1: Write failing tests for health state machine transitions**
 
-  Create directory: `mkdir -p crates/nexa-core/src/domain`
+  Create directory: `mkdir -p crates/helyos-core/src/domain`
 
-  Create `crates/nexa-core/src/domain/mod.rs`:
+  Create `crates/helyos-core/src/domain/mod.rs`:
 
   ```rust
   pub mod health;
   ```
 
-  Create `crates/nexa-core/src/domain/health.rs` with types and tests (impl bodies as `todo!()`):
+  Create `crates/helyos-core/src/domain/health.rs` with types and tests (impl bodies as `todo!()`):
 
   ```rust
   use std::collections::HashMap;
@@ -658,16 +658,16 @@
   }
   ```
 
-  Add `pub mod domain;` to `crates/nexa-core/src/lib.rs`.
+  Add `pub mod domain;` to `crates/helyos-core/src/lib.rs`.
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexa-core health`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyos-core health`
   Expected: **PASSES** — all 11 tests green (implementation is inline above since the state machine logic is the deliverable).
 
 - [ ] **Step 2: Commit**
 
   ```bash
-  cd /Users/nassime/GitHub/NexaNet
-  git add crates/nexa-core/src/domain/ crates/nexa-core/src/lib.rs
+  cd /Users/nassime/GitHub/Helyos
+  git add crates/helyos-core/src/domain/ crates/helyos-core/src/lib.rs
   git commit -m "feat(core): add HealthTracker with state machine for pod health"
   ```
 
@@ -676,24 +676,24 @@
 ### Task 4: HealthChecker Actor (Probes + Command Channel)
 
 **Files:**
-- Create: `crates/nexad/src/engine/health_checker.rs`
-- Modify: `crates/nexad/src/engine/mod.rs`
-- Modify: `crates/nexad/Cargo.toml`
+- Create: `crates/helyosd/src/engine/health_checker.rs`
+- Modify: `crates/helyosd/src/engine/mod.rs`
+- Modify: `crates/helyosd/Cargo.toml`
 
-- [ ] **Step 1: Add `reqwest` dependency to nexad**
+- [ ] **Step 1: Add `reqwest` dependency to helyosd**
 
-  In `crates/nexad/Cargo.toml`, add under `[dependencies]`:
+  In `crates/helyosd/Cargo.toml`, add under `[dependencies]`:
 
   ```toml
   reqwest = { workspace = true }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo check -p nexad`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo check -p helyosd`
   Expected: **PASSES** — reqwest resolves from workspace.
 
 - [ ] **Step 2: Define the Command enum for orchestrator communication**
 
-  Before creating the health checker, we need a `Command` type. In `crates/nexad/src/engine/orchestrator.rs`, add above the `Orchestrator` struct:
+  Before creating the health checker, we need a `Command` type. In `crates/helyosd/src/engine/orchestrator.rs`, add above the `Orchestrator` struct:
 
   ```rust
   use tokio::sync::mpsc;
@@ -747,20 +747,20 @@
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo check -p nexad`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo check -p helyosd`
   Expected: **PASSES**.
 
 - [ ] **Step 3: Create the HealthChecker actor**
 
-  Create `crates/nexad/src/engine/health_checker.rs`:
+  Create `crates/helyosd/src/engine/health_checker.rs`:
 
   ```rust
   use std::sync::Arc;
   use std::time::Duration;
 
-  use nexa_core::domain::health::{HealthTracker, PodHealthConfig};
-  use nexa_core::duration::parse_duration;
-  use nexa_core::models::{DeploymentSpec, Pod, PodStatus};
+  use helyos_core::domain::health::{HealthTracker, PodHealthConfig};
+  use helyos_core::duration::parse_duration;
+  use helyos_core::models::{DeploymentSpec, Pod, PodStatus};
   use reqwest::Client;
   use tokio::sync::{mpsc, Mutex};
   use tracing::{debug, error, info, warn};
@@ -920,7 +920,7 @@
   }
   ```
 
-  Update `crates/nexad/src/engine/mod.rs`:
+  Update `crates/helyosd/src/engine/mod.rs`:
 
   ```rust
   mod health_checker;
@@ -930,12 +930,12 @@
   pub use orchestrator::{Command, Orchestrator};
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo check -p nexad`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo check -p helyosd`
   Expected: **PASSES**.
 
 - [ ] **Step 4: Write a unit test for the HTTP probe logic**
 
-  Add to the bottom of `crates/nexad/src/engine/health_checker.rs`:
+  Add to the bottom of `crates/helyosd/src/engine/health_checker.rs`:
 
   ```rust
   #[cfg(test)]
@@ -985,15 +985,15 @@
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexad probe_reports`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyosd probe_reports`
   Expected: **PASSES** — the probe hits `127.0.0.1:1` which refuses connection, reports unhealthy.
 
 - [ ] **Step 5: Commit**
 
   ```bash
-  cd /Users/nassime/GitHub/NexaNet
-  git add crates/nexad/src/engine/health_checker.rs crates/nexad/src/engine/mod.rs crates/nexad/src/engine/orchestrator.rs crates/nexad/Cargo.toml
-  git commit -m "feat(nexad): add HealthChecker actor with HTTP probing and command reporting"
+  cd /Users/nassime/GitHub/Helyos
+  git add crates/helyosd/src/engine/health_checker.rs crates/helyosd/src/engine/mod.rs crates/helyosd/src/engine/orchestrator.rs crates/helyosd/Cargo.toml
+  git commit -m "feat(helyosd): add HealthChecker actor with HTTP probing and command reporting"
   ```
 
 ---
@@ -1001,11 +1001,11 @@
 ### Task 5: Handle HealthReport in Orchestrator Command Loop
 
 **Files:**
-- Modify: `crates/nexad/src/engine/orchestrator.rs`
+- Modify: `crates/helyosd/src/engine/orchestrator.rs`
 
 - [ ] **Step 1: Write failing test — orchestrator processes health reports**
 
-  Add test module to `crates/nexad/src/engine/orchestrator.rs`:
+  Add test module to `crates/helyosd/src/engine/orchestrator.rs`:
 
   ```rust
   #[cfg(test)]
@@ -1024,7 +1024,7 @@
           // Register a pod in the tracker
           {
               let mut tracker = orch.health_tracker.lock().await;
-              tracker.register(nexa_core::domain::health::PodHealthConfig {
+              tracker.register(helyos_core::domain::health::PodHealthConfig {
                   pod_id,
                   container_ip: "172.17.0.2".into(),
                   port: 3000,
@@ -1040,7 +1040,7 @@
           let tracker = orch.health_tracker.lock().await;
           assert_eq!(
               tracker.state(&pod_id),
-              Some(&nexa_core::domain::health::HealthState::Failing {
+              Some(&helyos_core::domain::health::HealthState::Failing {
                   consecutive_failures: 1
               })
           );
@@ -1048,22 +1048,22 @@
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexad health_report`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyosd health_report`
   Expected: **FAILS** — `health_tracker` field and `handle_health_report` method don't exist yet.
 
 - [ ] **Step 2: Add health tracker to Orchestrator and implement health report handling**
 
-  In `crates/nexad/src/engine/orchestrator.rs`, add the tracker field and imports:
+  In `crates/helyosd/src/engine/orchestrator.rs`, add the tracker field and imports:
 
   ```rust
   use std::sync::Arc;
   use std::time::Duration;
 
   use dashmap::DashMap;
-  use nexa_core::domain::health::{HealthState, HealthTracker};
-  use nexa_core::error::{NexaError, Result};
-  use nexa_core::models::*;
-  use nexa_core::runtime::*;
+  use helyos_core::domain::health::{HealthState, HealthTracker};
+  use helyos_core::error::{HelyosError, Result};
+  use helyos_core::models::*;
+  use helyos_core::runtime::*;
   use tokio::sync::{mpsc, Mutex, RwLock};
   use tracing::{error, info, warn};
   use uuid::Uuid;
@@ -1114,7 +1114,7 @@
           cmd_tx: mpsc::Sender<Command>,
           cmd_rx: mpsc::Receiver<Command>,
       ) -> Self {
-          use nexa_core::runtime::DockerRuntime;
+          use helyos_core::runtime::DockerRuntime;
           Self {
               // For tests that don't touch Docker, we still need a runtime.
               // This will fail if Docker isn't available, which is fine for CI.
@@ -1167,7 +1167,7 @@
           let entry = self
               .pods
               .get(&pod_id)
-              .ok_or_else(|| NexaError::PodNotFound(pod_id.to_string()))?;
+              .ok_or_else(|| HelyosError::PodNotFound(pod_id.to_string()))?;
           let pod = entry.value().read().await;
           (pod.deployment_id, pod.container_id.clone())
       };
@@ -1191,7 +1191,7 @@
           let entry = self
               .deployments
               .get(&deployment_id)
-              .ok_or_else(|| NexaError::DeploymentNotFound(deployment_id.to_string()))?;
+              .ok_or_else(|| HelyosError::DeploymentNotFound(deployment_id.to_string()))?;
           let d = entry.value().read().await;
           d.spec.clone()
       };
@@ -1201,7 +1201,7 @@
           let entry = self
               .pods
               .get(&pod_id)
-              .ok_or_else(|| NexaError::PodNotFound(pod_id.to_string()))?;
+              .ok_or_else(|| HelyosError::PodNotFound(pod_id.to_string()))?;
           entry.value().read().await.replica_index
       };
 
@@ -1262,28 +1262,28 @@
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexad health_report`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyosd health_report`
   Expected: **PASSES**.
 
 - [ ] **Step 3: Commit**
 
   ```bash
-  cd /Users/nassime/GitHub/NexaNet
-  git add crates/nexad/src/engine/orchestrator.rs
-  git commit -m "feat(nexad): handle HealthReport in orchestrator with restart logic"
+  cd /Users/nassime/GitHub/Helyos
+  git add crates/helyosd/src/engine/orchestrator.rs
+  git commit -m "feat(helyosd): handle HealthReport in orchestrator with restart logic"
   ```
 
 ---
 
-### Task 6: Wire Health Checker into nexad Startup
+### Task 6: Wire Health Checker into helyosd Startup
 
 **Files:**
-- Modify: `crates/nexad/src/main.rs`
-- Modify: `crates/nexad/src/engine/orchestrator.rs` (minor: expose `health_tracker` getter)
+- Modify: `crates/helyosd/src/main.rs`
+- Modify: `crates/helyosd/src/engine/orchestrator.rs` (minor: expose `health_tracker` getter)
 
-- [ ] **Step 1: Update nexad main.rs to spawn the health checker and command loop**
+- [ ] **Step 1: Update helyosd main.rs to spawn the health checker and command loop**
 
-  Replace the contents of `crates/nexad/src/main.rs`:
+  Replace the contents of `crates/helyosd/src/main.rs`:
 
   ```rust
   mod api;
@@ -1298,7 +1298,7 @@
   use engine::{HealthChecker, Orchestrator};
 
   #[derive(Parser)]
-  #[command(name = "nexad", about = "NexaNet daemon", version)]
+  #[command(name = "helyosd", about = "Helyos daemon", version)]
   struct Cli {
       #[arg(long, default_value = "0.0.0.0")]
       host: String,
@@ -1306,7 +1306,7 @@
       #[arg(long, default_value = "6443")]
       port: u16,
 
-      #[arg(long, default_value = "/var/lib/nexa")]
+      #[arg(long, default_value = "/var/lib/helyos")]
       data_dir: String,
   }
 
@@ -1320,7 +1320,7 @@
 
       let cli = Cli::parse();
 
-      info!("starting nexad on {}:{}", cli.host, cli.port);
+      info!("starting helyosd on {}:{}", cli.host, cli.port);
 
       let orchestrator = Orchestrator::new().await?;
 
@@ -1346,12 +1346,12 @@
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo build`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo build`
   Expected: **PASSES** — full binary compiles.
 
 - [ ] **Step 2: Register pods for health checking after creation**
 
-  In `crates/nexad/src/engine/orchestrator.rs`, we need a way for the create_pod path to register with the health checker. Since the orchestrator doesn't own the HealthChecker directly, we store the tracker reference.
+  In `crates/helyosd/src/engine/orchestrator.rs`, we need a way for the create_pod path to register with the health checker. Since the orchestrator doesn't own the HealthChecker directly, we store the tracker reference.
 
   The `health_tracker` is already on the Orchestrator. In `create_pod()`, after populating `container_ip`, add registration:
 
@@ -1360,12 +1360,12 @@
   // Register for health checking if spec has a healthcheck
   if let (Some(hc), Some(ip)) = (&spec.healthcheck, &pod.container_ip) {
       if let Some(&port) = spec.ports.first() {
-          let interval = nexa_core::duration::parse_duration(&hc.interval)
+          let interval = helyos_core::duration::parse_duration(&hc.interval)
               .unwrap_or(std::time::Duration::from_secs(10));
-          let timeout = nexa_core::duration::parse_duration(&hc.timeout)
+          let timeout = helyos_core::duration::parse_duration(&hc.timeout)
               .unwrap_or(std::time::Duration::from_secs(5));
 
-          let config = nexa_core::domain::health::PodHealthConfig {
+          let config = helyos_core::domain::health::PodHealthConfig {
               pod_id: pod.id,
               container_ip: ip.clone(),
               port,
@@ -1390,15 +1390,15 @@
 
   In `remove_deployment()`, the stop is already handled by `stop_deployment`.
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo build`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo build`
   Expected: **PASSES**.
 
 - [ ] **Step 3: Commit**
 
   ```bash
-  cd /Users/nassime/GitHub/NexaNet
-  git add crates/nexad/src/main.rs crates/nexad/src/engine/orchestrator.rs
-  git commit -m "feat(nexad): wire health checker into daemon startup and pod lifecycle"
+  cd /Users/nassime/GitHub/Helyos
+  git add crates/helyosd/src/main.rs crates/helyosd/src/engine/orchestrator.rs
+  git commit -m "feat(helyosd): wire health checker into daemon startup and pod lifecycle"
   ```
 
 ---
@@ -1406,13 +1406,13 @@
 ### Task 7: Docker Adapter — `container_ip()` Implementation Verification
 
 **Files:**
-- Modify: `crates/nexa-core/src/runtime/docker.rs` (already done in Task 1 Step 4)
+- Modify: `crates/helyos-core/src/runtime/docker.rs` (already done in Task 1 Step 4)
 
 This task is a verification-only task since `container_ip()` was implemented in Task 1.
 
 - [ ] **Step 1: Write an integration test for container_ip (manual/Docker-required)**
 
-  Add to `crates/nexa-core/src/runtime/docker.rs`:
+  Add to `crates/helyos-core/src/runtime/docker.rs`:
 
   ```rust
   #[cfg(test)]
@@ -1420,7 +1420,7 @@ This task is a verification-only task since `container_ip()` was implemented in 
       use super::*;
 
       /// This test requires a running Docker daemon.
-      /// Run with: cargo test -p nexa-core -- --ignored docker_container_ip
+      /// Run with: cargo test -p helyos-core -- --ignored docker_container_ip
       #[tokio::test]
       #[ignore]
       async fn docker_container_ip_returns_valid_ip() {
@@ -1428,7 +1428,7 @@ This task is a verification-only task since `container_ip()` was implemented in 
           runtime.ping().await.unwrap();
 
           // Create a test network
-          let network_name = "nexa-test-health";
+          let network_name = "helyos-test-health";
           let _ = runtime.remove_network(network_name).await;
           runtime.create_network(network_name).await.unwrap();
 
@@ -1436,7 +1436,7 @@ This task is a verification-only task since `container_ip()` was implemented in 
           let _ = runtime.pull_image("nginx:alpine").await;
 
           let config = ContainerConfig {
-              name: "nexa-health-test".into(),
+              name: "helyos-health-test".into(),
               image: "nginx:alpine".into(),
               env: std::collections::HashMap::new(),
               ports: vec![PortBinding {
@@ -1479,13 +1479,13 @@ This task is a verification-only task since `container_ip()` was implemented in 
   }
   ```
 
-  Run: `cd /Users/nassime/GitHub/NexaNet && cargo test -p nexa-core -- --ignored docker_container_ip`
+  Run: `cd /Users/nassime/GitHub/Helyos && cargo test -p helyos-core -- --ignored docker_container_ip`
   Expected: **PASSES** (when Docker is available).
 
 - [ ] **Step 2: Run full workspace build and test suite**
 
   ```bash
-  cd /Users/nassime/GitHub/NexaNet && cargo build && cargo test
+  cd /Users/nassime/GitHub/Helyos && cargo build && cargo test
   ```
 
   Expected: **PASSES** — all unit tests green, binary compiles.
@@ -1493,8 +1493,8 @@ This task is a verification-only task since `container_ip()` was implemented in 
 - [ ] **Step 3: Commit**
 
   ```bash
-  cd /Users/nassime/GitHub/NexaNet
-  git add crates/nexa-core/src/runtime/docker.rs
+  cd /Users/nassime/GitHub/Helyos
+  git add crates/helyos-core/src/runtime/docker.rs
   git commit -m "test(docker): add integration test for container_ip lookup"
   ```
 
@@ -1504,18 +1504,18 @@ This task is a verification-only task since `container_ip()` was implemented in 
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `crates/nexa-core/src/models/pod.rs` | Modify | Add `container_ip: Option<String>` field |
-| `crates/nexa-core/src/runtime/traits.rs` | Modify | Add `container_ip()` to `ContainerRuntime` trait |
-| `crates/nexa-core/src/runtime/docker.rs` | Modify | Implement `container_ip()` via bollard inspect |
-| `crates/nexa-core/src/duration.rs` | Create | `parse_duration("10s")` -> `Duration` utility |
-| `crates/nexa-core/src/domain/mod.rs` | Create | Domain module declaration |
-| `crates/nexa-core/src/domain/health.rs` | Create | `HealthTracker`, `HealthState`, `PodHealthConfig`, state machine |
-| `crates/nexa-core/src/lib.rs` | Modify | Add `pub mod duration;` and `pub mod domain;` |
-| `crates/nexad/Cargo.toml` | Modify | Add `reqwest` dependency |
-| `crates/nexad/src/engine/health_checker.rs` | Create | `HealthChecker` actor with HTTP probing loop |
-| `crates/nexad/src/engine/orchestrator.rs` | Modify | Add `Command` enum, command channel, health tracker, `handle_health_report()`, `restart_pod()`, `run_command_loop()` |
-| `crates/nexad/src/engine/mod.rs` | Modify | Export `HealthChecker` and `Command` |
-| `crates/nexad/src/main.rs` | Modify | Spawn health checker + command loop at startup |
+| `crates/helyos-core/src/models/pod.rs` | Modify | Add `container_ip: Option<String>` field |
+| `crates/helyos-core/src/runtime/traits.rs` | Modify | Add `container_ip()` to `ContainerRuntime` trait |
+| `crates/helyos-core/src/runtime/docker.rs` | Modify | Implement `container_ip()` via bollard inspect |
+| `crates/helyos-core/src/duration.rs` | Create | `parse_duration("10s")` -> `Duration` utility |
+| `crates/helyos-core/src/domain/mod.rs` | Create | Domain module declaration |
+| `crates/helyos-core/src/domain/health.rs` | Create | `HealthTracker`, `HealthState`, `PodHealthConfig`, state machine |
+| `crates/helyos-core/src/lib.rs` | Modify | Add `pub mod duration;` and `pub mod domain;` |
+| `crates/helyosd/Cargo.toml` | Modify | Add `reqwest` dependency |
+| `crates/helyosd/src/engine/health_checker.rs` | Create | `HealthChecker` actor with HTTP probing loop |
+| `crates/helyosd/src/engine/orchestrator.rs` | Modify | Add `Command` enum, command channel, health tracker, `handle_health_report()`, `restart_pod()`, `run_command_loop()` |
+| `crates/helyosd/src/engine/mod.rs` | Modify | Export `HealthChecker` and `Command` |
+| `crates/helyosd/src/main.rs` | Modify | Spawn health checker + command loop at startup |
 
 ## Test Coverage
 

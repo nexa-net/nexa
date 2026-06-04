@@ -5,11 +5,11 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
 **Goal:** Extend the YAML deployment spec with `secrets`, polymorphic `volumes` (named + bind mounts), `resources`, and strict DNS-safe validation rules for names and ports.
 
@@ -22,12 +22,12 @@
 ### Task 1: Add `secrets` field and `ResourceSpec` struct to deployment model
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/models/deployment.rs`
-- Test: `crates/nexa-core/src/config.rs` (inline tests)
+- Modify: `crates/helyos-core/src/domain/models/deployment.rs`
+- Test: `crates/helyos-core/src/config.rs` (inline tests)
 
 - [ ] **Step 1: Write failing tests for secrets and resources parsing**
 
-Add these tests to the `#[cfg(test)] mod tests` block in `crates/nexa-core/src/config.rs`:
+Add these tests to the `#[cfg(test)] mod tests` block in `crates/helyos-core/src/config.rs`:
 
 ```rust
     #[test]
@@ -89,12 +89,12 @@ image: nginx:latest
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cargo test -p nexa-core -- config::tests 2>&1`
+Run: `cargo test -p helyos-core -- config::tests 2>&1`
 Expected: FAIL — `DeploymentSpec` has no field `secrets` or `resources`
 
 - [ ] **Step 3: Add `secrets`, `ResourceSpec`, and update `DeploymentSpec`**
 
-Replace the full contents of `crates/nexa-core/src/domain/models/deployment.rs` with:
+Replace the full contents of `crates/helyos-core/src/domain/models/deployment.rs` with:
 
 ```rust
 use std::collections::HashMap;
@@ -230,13 +230,13 @@ impl Deployment {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cargo test -p nexa-core -- config::tests 2>&1`
+Run: `cargo test -p helyos-core -- config::tests 2>&1`
 Expected: all tests pass (existing + 4 new)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/models/deployment.rs crates/nexa-core/src/config.rs
+git add crates/helyos-core/src/domain/models/deployment.rs crates/helyos-core/src/config.rs
 git commit -m "feat: add secrets and resources fields to DeploymentSpec"
 ```
 
@@ -245,12 +245,12 @@ git commit -m "feat: add secrets and resources fields to DeploymentSpec"
 ### Task 2: Replace `VolumeMount` with polymorphic `VolumeSpec`
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/models/deployment.rs`
-- Test: `crates/nexa-core/src/config.rs` (inline tests)
+- Modify: `crates/helyos-core/src/domain/models/deployment.rs`
+- Test: `crates/helyos-core/src/config.rs` (inline tests)
 
 - [ ] **Step 1: Write failing tests for the new volume format**
 
-Add these tests to the `#[cfg(test)] mod tests` block in `crates/nexa-core/src/config.rs`:
+Add these tests to the `#[cfg(test)] mod tests` block in `crates/helyos-core/src/config.rs`:
 
 ```rust
     #[test]
@@ -328,12 +328,12 @@ volumes:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cargo test -p nexa-core -- config::tests 2>&1`
+Run: `cargo test -p helyos-core -- config::tests 2>&1`
 Expected: FAIL — `VolumeMount` does not have `mount_point()`, `source_name()`, `is_read_only()` methods, and YAML field `mount` does not match `mount_path`
 
 - [ ] **Step 3: Replace `VolumeMount` with `VolumeSpec` enum**
 
-In `crates/nexa-core/src/domain/models/deployment.rs`, remove the `VolumeMount` struct and replace it with the `VolumeSpec` enum. Replace these sections:
+In `crates/helyos-core/src/domain/models/deployment.rs`, remove the `VolumeMount` struct and replace it with the `VolumeSpec` enum. Replace these sections:
 
 Remove:
 ```rust
@@ -406,15 +406,15 @@ To:
 
 - [ ] **Step 4: Update the existing `parse_full_spec` test for new volume format**
 
-The existing `parse_full_spec` test in `crates/nexa-core/src/config.rs` does not use volumes, so it should still pass without changes. However, verify the existing test suite compiles.
+The existing `parse_full_spec` test in `crates/helyos-core/src/config.rs` does not use volumes, so it should still pass without changes. However, verify the existing test suite compiles.
 
-Run: `cargo test -p nexa-core -- config::tests 2>&1`
+Run: `cargo test -p helyos-core -- config::tests 2>&1`
 Expected: all tests pass (existing + 4 new volume tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/models/deployment.rs crates/nexa-core/src/config.rs
+git add crates/helyos-core/src/domain/models/deployment.rs crates/helyos-core/src/config.rs
 git commit -m "feat: replace VolumeMount with polymorphic VolumeSpec (named + bind mount)"
 ```
 
@@ -423,18 +423,18 @@ git commit -m "feat: replace VolumeMount with polymorphic VolumeSpec (named + bi
 ### Task 3: Add DNS-safe name validation and port range checks
 
 **Files:**
-- Modify: `crates/nexa-core/src/config.rs`
-- Modify: `crates/nexa-core/Cargo.toml`
-- Test: `crates/nexa-core/src/config.rs` (inline tests)
+- Modify: `crates/helyos-core/src/config.rs`
+- Modify: `crates/helyos-core/Cargo.toml`
+- Test: `crates/helyos-core/src/config.rs` (inline tests)
 
-- [ ] **Step 1: Add `regex` dependency to nexa-core**
+- [ ] **Step 1: Add `regex` dependency to helyos-core**
 
-In `crates/nexa-core/Cargo.toml`, add `regex` to `[dependencies]`:
+In `crates/helyos-core/Cargo.toml`, add `regex` to `[dependencies]`:
 
 ```toml
 [package]
-name = "nexa-core"
-description = "Core types, traits, and abstractions for NexaNet"
+name = "helyos-core"
+description = "Core types, traits, and abstractions for Helyos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -459,7 +459,7 @@ If `regex` is already a workspace dependency, use `regex = { workspace = true }`
 
 - [ ] **Step 2: Write failing tests for validation rules**
 
-Add these tests to the `#[cfg(test)] mod tests` block in `crates/nexa-core/src/config.rs`:
+Add these tests to the `#[cfg(test)] mod tests` block in `crates/helyos-core/src/config.rs`:
 
 ```rust
     #[test]
@@ -559,12 +559,12 @@ ports:
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `cargo test -p nexa-core -- config::tests 2>&1`
+Run: `cargo test -p helyos-core -- config::tests 2>&1`
 Expected: FAIL — uppercase names, hyphens, and port 0 are not rejected by current validation
 
 - [ ] **Step 4: Implement DNS-safe validation and port checks**
 
-Replace the full contents of `crates/nexa-core/src/config.rs` with:
+Replace the full contents of `crates/helyos-core/src/config.rs` with:
 
 ```rust
 use std::path::Path;
@@ -572,7 +572,7 @@ use std::path::Path;
 use regex::Regex;
 
 use crate::domain::models::DeploymentSpec;
-use crate::error::{NexaError, Result};
+use crate::error::{HelyosError, Result};
 
 pub fn parse_deployment_file(path: &Path) -> Result<DeploymentSpec> {
     let content = std::fs::read_to_string(path)?;
@@ -581,24 +581,24 @@ pub fn parse_deployment_file(path: &Path) -> Result<DeploymentSpec> {
 
 pub fn parse_deployment(yaml: &str) -> Result<DeploymentSpec> {
     let spec: DeploymentSpec =
-        serde_yaml::from_str(yaml).map_err(|e| NexaError::InvalidSpec(e.to_string()))?;
+        serde_yaml::from_str(yaml).map_err(|e| HelyosError::InvalidSpec(e.to_string()))?;
     validate_spec(&spec)?;
     Ok(spec)
 }
 
 fn validate_dns_name(value: &str, field: &str) -> Result<()> {
     if value.is_empty() {
-        return Err(NexaError::InvalidSpec(format!("{field} is required")));
+        return Err(HelyosError::InvalidSpec(format!("{field} is required")));
     }
     if value.len() > 63 {
-        return Err(NexaError::InvalidSpec(format!(
+        return Err(HelyosError::InvalidSpec(format!(
             "{field} must be at most 63 characters, got {}",
             value.len()
         )));
     }
     let dns_re = Regex::new(r"^[a-z0-9][a-z0-9-]*$").unwrap();
     if !dns_re.is_match(value) {
-        return Err(NexaError::InvalidSpec(format!(
+        return Err(HelyosError::InvalidSpec(format!(
             "{field} must be DNS-safe: start with [a-z0-9], then [a-z0-9-] only (got '{value}')"
         )));
     }
@@ -610,17 +610,17 @@ fn validate_spec(spec: &DeploymentSpec) -> Result<()> {
     validate_dns_name(&spec.deployment.name, "deployment name")?;
 
     if spec.image.is_empty() {
-        return Err(NexaError::InvalidSpec("image is required".into()));
+        return Err(HelyosError::InvalidSpec("image is required".into()));
     }
     if spec.replicas == 0 {
-        return Err(NexaError::InvalidSpec(
+        return Err(HelyosError::InvalidSpec(
             "replicas must be at least 1".into(),
         ));
     }
 
     for &port in &spec.ports {
         if port == 0 {
-            return Err(NexaError::InvalidSpec(
+            return Err(HelyosError::InvalidSpec(
                 "port must be between 1 and 65535, got 0".into(),
             ));
         }
@@ -629,7 +629,7 @@ fn validate_spec(spec: &DeploymentSpec) -> Result<()> {
     if let Some(ref res) = spec.resources {
         validate_resource_memory(&res.memory)?;
         if res.cpu <= 0.0 {
-            return Err(NexaError::InvalidSpec(
+            return Err(HelyosError::InvalidSpec(
                 "resources.cpu must be greater than 0".into(),
             ));
         }
@@ -640,13 +640,13 @@ fn validate_spec(spec: &DeploymentSpec) -> Result<()> {
 
 fn validate_resource_memory(memory: &str) -> Result<()> {
     if memory.is_empty() {
-        return Err(NexaError::InvalidSpec(
+        return Err(HelyosError::InvalidSpec(
             "resources.memory is required when resources is specified".into(),
         ));
     }
     let mem_re = Regex::new(r"^[0-9]+[kmgKMG]$").unwrap();
     if !mem_re.is_match(memory) {
-        return Err(NexaError::InvalidSpec(format!(
+        return Err(HelyosError::InvalidSpec(format!(
             "resources.memory must match format like '512m', '1g', '256k' (got '{memory}')"
         )));
     }
@@ -958,13 +958,13 @@ ports:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cargo test -p nexa-core -- config::tests 2>&1`
+Run: `cargo test -p helyos-core -- config::tests 2>&1`
 Expected: all 20 tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexa-core/Cargo.toml crates/nexa-core/src/config.rs
+git add crates/helyos-core/Cargo.toml crates/helyos-core/src/config.rs
 git commit -m "feat: add DNS-safe name validation and port range checks"
 ```
 
@@ -973,12 +973,12 @@ git commit -m "feat: add DNS-safe name validation and port range checks"
 ### Task 4: Add resource validation tests and edge cases
 
 **Files:**
-- Modify: `crates/nexa-core/src/config.rs`
-- Test: `crates/nexa-core/src/config.rs` (inline tests)
+- Modify: `crates/helyos-core/src/config.rs`
+- Test: `crates/helyos-core/src/config.rs` (inline tests)
 
 - [ ] **Step 1: Write failing tests for resource validation**
 
-Add these tests to the `#[cfg(test)] mod tests` block in `crates/nexa-core/src/config.rs`:
+Add these tests to the `#[cfg(test)] mod tests` block in `crates/helyos-core/src/config.rs`:
 
 ```rust
     #[test]
@@ -1063,13 +1063,13 @@ resources:
 
 - [ ] **Step 2: Run tests to verify they pass**
 
-Run: `cargo test -p nexa-core -- config::tests 2>&1`
+Run: `cargo test -p helyos-core -- config::tests 2>&1`
 Expected: all 25 tests pass (the validation logic from Task 3 already covers these cases)
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/nexa-core/src/config.rs
+git add crates/helyos-core/src/config.rs
 git commit -m "test: add resource validation edge case tests"
 ```
 
@@ -1078,12 +1078,12 @@ git commit -m "test: add resource validation edge case tests"
 ### Task 5: Update orchestrator volume mapping for new VolumeSpec API
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
-- Test: `crates/nexa-core/src/domain/orchestrator.rs` (inline tests)
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
+- Test: `crates/helyos-core/src/domain/orchestrator.rs` (inline tests)
 
 - [ ] **Step 1: Write failing test for volume mapping**
 
-Add this test to the `tests` module in `crates/nexa-core/src/domain/orchestrator.rs`:
+Add this test to the `tests` module in `crates/helyos-core/src/domain/orchestrator.rs`:
 
 ```rust
     #[tokio::test]
@@ -1171,12 +1171,12 @@ Add this test to the `tests` module in `crates/nexa-core/src/domain/orchestrator
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator::tests::deploy_maps_volume_spec 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator::tests::deploy_maps_volume_spec 2>&1`
 Expected: FAIL — the `create_pod` method references `v.name` and `v.mount_path` which no longer exist on `VolumeSpec`, and `DeploymentSpec` construction in test data is missing `secrets` and `resources` fields
 
 - [ ] **Step 3: Update the `create_pod` volume mapping in orchestrator.rs**
 
-In the `create_pod` method of the `Orchestrator` impl in `crates/nexa-core/src/domain/orchestrator.rs`, find the volume mapping block:
+In the `create_pod` method of the `Orchestrator` impl in `crates/helyos-core/src/domain/orchestrator.rs`, find the volume mapping block:
 
 ```rust
             volumes: spec
@@ -1206,7 +1206,7 @@ Replace it with:
 
 - [ ] **Step 4: Update all existing test DeploymentSpec constructions**
 
-In the `tests` module of `crates/nexa-core/src/domain/orchestrator.rs`, every `DeploymentSpec { ... }` construction must be updated to include the new `secrets` and `resources` fields. Update each instance to include:
+In the `tests` module of `crates/helyos-core/src/domain/orchestrator.rs`, every `DeploymentSpec { ... }` construction must be updated to include the new `secrets` and `resources` fields. Update each instance to include:
 
 ```rust
             secrets: vec![],
@@ -1289,26 +1289,26 @@ In `stop_removes_pods`:
 
 - [ ] **Step 5: Run all tests to verify they pass**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1`
 Expected: all 7 tests pass (6 existing + 1 new volume mapping test)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "feat: update orchestrator volume mapping to use VolumeSpec API"
 ```
 
 ---
 
-### Task 6: Update nexad orchestrator for new DeploymentSpec fields
+### Task 6: Update helyosd orchestrator for new DeploymentSpec fields
 
 **Files:**
-- Modify: `crates/nexad/src/engine/orchestrator.rs`
+- Modify: `crates/helyosd/src/engine/orchestrator.rs`
 
-- [ ] **Step 1: Update volume mapping in nexad orchestrator**
+- [ ] **Step 1: Update volume mapping in helyosd orchestrator**
 
-In `crates/nexad/src/engine/orchestrator.rs`, in the `create_pod` method, find the volume mapping block (around line 234):
+In `crates/helyosd/src/engine/orchestrator.rs`, in the `create_pod` method, find the volume mapping block (around line 234):
 
 ```rust
         let config = ContainerConfig {
@@ -1344,16 +1344,16 @@ Replace the `volumes:` block with:
                 .collect(),
 ```
 
-- [ ] **Step 2: Verify nexad compiles**
+- [ ] **Step 2: Verify helyosd compiles**
 
-Run: `cargo check -p nexad 2>&1`
+Run: `cargo check -p helyosd 2>&1`
 Expected: compiles (warnings OK)
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/nexad/src/engine/orchestrator.rs
-git commit -m "fix: update nexad orchestrator volume mapping for VolumeSpec API"
+git add crates/helyosd/src/engine/orchestrator.rs
+git commit -m "fix: update helyosd orchestrator volume mapping for VolumeSpec API"
 ```
 
 ---
@@ -1361,12 +1361,12 @@ git commit -m "fix: update nexad orchestrator volume mapping for VolumeSpec API"
 ### Task 7: Full-spec integration test and final verification
 
 **Files:**
-- Modify: `crates/nexa-core/src/config.rs`
-- Test: `crates/nexa-core/src/config.rs` (inline tests)
+- Modify: `crates/helyos-core/src/config.rs`
+- Test: `crates/helyos-core/src/config.rs` (inline tests)
 
 - [ ] **Step 1: Add the full target YAML integration test**
 
-Add this test to the `#[cfg(test)] mod tests` block in `crates/nexa-core/src/config.rs`:
+Add this test to the `#[cfg(test)] mod tests` block in `crates/helyos-core/src/config.rs`:
 
 ```rust
     #[test]
@@ -1441,7 +1441,7 @@ resources:
 
 - [ ] **Step 2: Run all config tests**
 
-Run: `cargo test -p nexa-core -- config::tests 2>&1`
+Run: `cargo test -p helyos-core -- config::tests 2>&1`
 Expected: all 26 tests pass
 
 - [ ] **Step 3: Run full workspace test suite**
@@ -1457,7 +1457,7 @@ Expected: compiles (warnings OK)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/config.rs
+git add crates/helyos-core/src/config.rs
 git commit -m "test: add full target YAML integration test for complete schema"
 ```
 

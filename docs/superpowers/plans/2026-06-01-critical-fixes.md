@@ -4,20 +4,20 @@
 
 **Goal:** Fix 8 remaining CRITICAL issues from the production-readiness audit — security, correctness, and supply chain.
 
-**Architecture:** Three blocs executed sequentially. Bloc 1 (security) adds Bearer token auth middleware to nexad's axum API, changes the default bind to 127.0.0.1, removes plaintext join token storage, and moves CLI secret input to stdin. Bloc 2 (correctness) implements the `stop_pod`/`remove_pod` no-ops in ClusterServer and adds graceful shutdown via `CancellationToken`. Bloc 3 (supply chain) adds SHA-256 checksums to release workflows and verifies them in install.sh.
+**Architecture:** Three blocs executed sequentially. Bloc 1 (security) adds Bearer token auth middleware to helyosd's axum API, changes the default bind to 127.0.0.1, removes plaintext join token storage, and moves CLI secret input to stdin. Bloc 2 (correctness) implements the `stop_pod`/`remove_pod` no-ops in ClusterServer and adds graceful shutdown via `CancellationToken`. Bloc 3 (supply chain) adds SHA-256 checksums to release workflows and verifies them in install.sh.
 
 **Tech Stack:** Rust (axum middleware, tokio-util CancellationToken, dialoguer Password), GitHub Actions (checksums), shell (install.sh)
 
 **Repos:**
-- `nexad`: `/Users/nassime/GitHub/NexaNet/nexad`
-- `nexa-cli`: `/Users/nassime/GitHub/NexaNet/nexa-cli`
-- `nexa` (infra): `/Users/nassime/GitHub/NexaNet`
+- `helyosd`: `/Users/nassime/GitHub/Helyos/helyosd`
+- `helyos-cli`: `/Users/nassime/GitHub/Helyos/helyos-cli`
+- `helyos` (infra): `/Users/nassime/GitHub/Helyos`
 
 ---
 
 ## File Structure
 
-### nexad changes
+### helyosd changes
 - Create: `src/api/auth.rs` — Bearer token auth middleware + token generation/hashing
 - Modify: `src/api/mod.rs` — add `pub mod auth;`, pass `api_token_hash` into `AppState`, accept shutdown signal in `serve`
 - Modify: `src/api/routes.rs` — apply auth middleware to `/api/v1/*` routes only
@@ -26,13 +26,13 @@
 - Modify: `src/cluster/server.rs` — implement `stop_pod` and `remove_pod`
 - Modify: `Cargo.toml` — add `argon2`, `tokio-util`
 
-### nexa-cli changes
+### helyos-cli changes
 - Modify: `src/main.rs` — change `value: String` to `value: Option<String>` in `SecretCommands::Set`
 - Modify: `src/commands/secret.rs` — read secret from stdin/prompt when value not provided
 
 ### infra changes
-- Modify: `nexad/.github/workflows/release.yml` — add SHA-256 checksums step, fix `if: always()`
-- Modify: `nexa-cli/.github/workflows/release.yml` — same
+- Modify: `helyosd/.github/workflows/release.yml` — add SHA-256 checksums step, fix `if: always()`
+- Modify: `helyos-cli/.github/workflows/release.yml` — same
 - Modify: `install.sh` — verify checksums after download
 
 ---
@@ -40,11 +40,11 @@
 ## Task 1: Default bind to 127.0.0.1 (CRITICAL 2)
 
 **Files:**
-- Modify: `nexad/src/main.rs:34,68`
+- Modify: `helyosd/src/main.rs:34,68`
 
 - [ ] **Step 1: Change default host from 0.0.0.0 to 127.0.0.1**
 
-In `nexad/src/main.rs`, change line 34:
+In `helyosd/src/main.rs`, change line 34:
 
 ```rust
     #[arg(long, default_value = "127.0.0.1")]
@@ -60,13 +60,13 @@ And line 68 (DNS listen):
 
 - [ ] **Step 2: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo check 2>&1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo check 2>&1`
 Expected: `Finished` with no errors
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/main.rs
 git commit -m "fix(security): default bind to 127.0.0.1 instead of 0.0.0.0
 
@@ -79,11 +79,11 @@ Use --host 0.0.0.0 to explicitly bind to all interfaces."
 ## Task 2: Hash join token — stop storing plaintext (CRITICAL 3)
 
 **Files:**
-- Modify: `nexad/src/api/handlers.rs:275-329`
+- Modify: `helyosd/src/api/handlers.rs:275-329`
 
 - [ ] **Step 1: Fix `cluster_init` — remove plaintext storage**
 
-In `nexad/src/api/handlers.rs`, replace the `cluster_init` function (lines 275-293):
+In `helyosd/src/api/handlers.rs`, replace the `cluster_init` function (lines 275-293):
 
 ```rust
 pub async fn cluster_init(State(state): AppStateExtractor) -> impl IntoResponse {
@@ -161,13 +161,13 @@ pub async fn cluster_token_rotate(State(state): AppStateExtractor) -> impl IntoR
 
 - [ ] **Step 4: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo check 2>&1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo check 2>&1`
 Expected: `Finished` with no errors
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/api/handlers.rs
 git commit -m "fix(security): only store hashed join token, never plaintext
 
@@ -181,15 +181,15 @@ cluster_token_show returns 410 Gone."
 ## Task 3: Bearer token auth middleware (CRITICAL 1)
 
 **Files:**
-- Modify: `nexad/Cargo.toml` — add `argon2`
-- Create: `nexad/src/api/auth.rs`
-- Modify: `nexad/src/api/mod.rs` — add module, add `api_token_hash` to `AppState`
-- Modify: `nexad/src/api/routes.rs` — apply auth layer
-- Modify: `nexad/src/main.rs` — add `--api-token` flag, generate/load token
+- Modify: `helyosd/Cargo.toml` — add `argon2`
+- Create: `helyosd/src/api/auth.rs`
+- Modify: `helyosd/src/api/mod.rs` — add module, add `api_token_hash` to `AppState`
+- Modify: `helyosd/src/api/routes.rs` — apply auth layer
+- Modify: `helyosd/src/main.rs` — add `--api-token` flag, generate/load token
 
 - [ ] **Step 1: Add argon2 dependency**
 
-In `nexad/Cargo.toml`, add to `[dependencies]`:
+In `helyosd/Cargo.toml`, add to `[dependencies]`:
 
 ```toml
 argon2 = "0.5"
@@ -197,7 +197,7 @@ argon2 = "0.5"
 
 - [ ] **Step 2: Create auth middleware**
 
-Create `nexad/src/api/auth.rs`:
+Create `helyosd/src/api/auth.rs`:
 
 ```rust
 use argon2::Argon2;
@@ -308,7 +308,7 @@ mod tests {
 
 - [ ] **Step 3: Update AppState to include api_token_hash**
 
-In `nexad/src/api/mod.rs`, add the module and update `AppState`:
+In `helyosd/src/api/mod.rs`, add the module and update `AppState`:
 
 ```rust
 pub mod auth;
@@ -317,9 +317,9 @@ pub mod routes;
 
 use std::sync::Arc;
 
-use nexa_core::domain::orchestrator::OrchestratorHandle;
-use nexa_core::ports::metrics::MetricsPort;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::orchestrator::OrchestratorHandle;
+use helyos_core::ports::metrics::MetricsPort;
+use helyos_core::ports::state::StateStore;
 use tokio::sync::broadcast;
 
 #[derive(Clone)]
@@ -358,7 +358,7 @@ pub async fn serve(
     let app = routes::build(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("nexad API listening on {addr}");
+    tracing::info!("helyosd API listening on {addr}");
 
     axum::serve(listener, app).await?;
     Ok(())
@@ -367,7 +367,7 @@ pub async fn serve(
 
 - [ ] **Step 4: Apply auth middleware to API routes**
 
-In `nexad/src/api/routes.rs`, split routes into public and protected:
+In `helyosd/src/api/routes.rs`, split routes into public and protected:
 
 ```rust
 use axum::Router;
@@ -476,11 +476,11 @@ pub fn build(state: AppState) -> Router {
 
 - [ ] **Step 5: Add --api-token flag and token generation in main.rs**
 
-In `nexad/src/main.rs`, add the CLI flag after the `overlay` field (line 97):
+In `helyosd/src/main.rs`, add the CLI flag after the `overlay` field (line 97):
 
 ```rust
     /// API authentication token (if not set, one is generated on first startup)
-    #[arg(long, env = "NEXA_API_TOKEN")]
+    #[arg(long, env = "HELYOS_API_TOKEN")]
     api_token: Option<String>,
 ```
 
@@ -493,7 +493,7 @@ async fn init_api_token(
     cli: &Cli,
     store: &Arc<dyn StateStore>,
 ) -> anyhow::Result<Option<String>> {
-    use nexad::api::auth;
+    use helyosd::api::auth;
 
     if let Some(ref token) = cli.api_token {
         let hash = auth::hash_api_token(token);
@@ -519,12 +519,12 @@ async fn init_api_token(
 }
 ```
 
-Update the three `nexad::api::serve` call sites in `start_single_node`, `start_master`, and the worker-mode function to pass the token hash. In `start_single_node` (around line 320-321):
+Update the three `helyosd::api::serve` call sites in `start_single_node`, `start_master`, and the worker-mode function to pass the token hash. In `start_single_node` (around line 320-321):
 
 ```rust
     let api_token_hash = init_api_token(cli, &store).await?;
     let addr = format!("{}:{}", cli.host, cli.port);
-    nexad::api::serve(handle, Arc::clone(&store), metrics, event_tx.clone(), &addr, api_token_hash).await
+    helyosd::api::serve(handle, Arc::clone(&store), metrics, event_tx.clone(), &addr, api_token_hash).await
 ```
 
 In `start_master` (around line 432-434):
@@ -532,31 +532,31 @@ In `start_master` (around line 432-434):
 ```rust
     let api_token_hash = init_api_token(cli, &store).await?;
     let addr = format!("{}:{}", cli.host, cli.port);
-    nexad::api::serve(handle, Arc::clone(&store), metrics, event_tx.clone(), &addr, api_token_hash).await
+    helyosd::api::serve(handle, Arc::clone(&store), metrics, event_tx.clone(), &addr, api_token_hash).await
 ```
 
 Worker mode does not run an HTTP API, so no change needed there.
 
 - [ ] **Step 6: Run tests**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test api::auth 2>&1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test api::auth 2>&1`
 Expected: 4 tests pass (generate_token_format, hash_and_verify_roundtrip, verify_rejects_wrong_token, verify_rejects_bad_hash)
 
 - [ ] **Step 7: Verify full compilation**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo check 2>&1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo check 2>&1`
 Expected: `Finished` with no errors
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add Cargo.toml Cargo.lock src/api/auth.rs src/api/mod.rs src/api/routes.rs src/main.rs
 git commit -m "feat(security): add Bearer token auth middleware on API
 
 CRITICAL-1: All /api/v1/* endpoints now require Authorization: Bearer <token>.
 /health and /metrics remain public. Token is auto-generated on first start
-and shown once. Use --api-token or NEXA_API_TOKEN env to set explicitly."
+and shown once. Use --api-token or HELYOS_API_TOKEN env to set explicitly."
 ```
 
 ---
@@ -564,12 +564,12 @@ and shown once. Use --api-token or NEXA_API_TOKEN env to set explicitly."
 ## Task 4: Read secrets from stdin (CRITICAL 4)
 
 **Files:**
-- Modify: `nexa-cli/src/main.rs:195-205,365-371`
-- Modify: `nexa-cli/src/commands/secret.rs:6`
+- Modify: `helyos-cli/src/main.rs:195-205,365-371`
+- Modify: `helyos-cli/src/commands/secret.rs:6`
 
 - [ ] **Step 1: Change CLI argument to optional --value**
 
-In `nexa-cli/src/main.rs`, replace the `SecretCommands::Set` variant (lines 196-205):
+In `helyos-cli/src/main.rs`, replace the `SecretCommands::Set` variant (lines 196-205):
 
 ```rust
     /// Set a secret value
@@ -587,7 +587,7 @@ In `nexa-cli/src/main.rs`, replace the `SecretCommands::Set` variant (lines 196-
 
 - [ ] **Step 2: Update the match arm to read from stdin**
 
-In `nexa-cli/src/main.rs`, replace the `SecretCommands::Set` match arm (lines 365-371):
+In `helyos-cli/src/main.rs`, replace the `SecretCommands::Set` match arm (lines 365-371):
 
 ```rust
             SecretCommands::Set {
@@ -615,7 +615,7 @@ In `nexa-cli/src/main.rs`, replace the `SecretCommands::Set` match arm (lines 36
 
 - [ ] **Step 3: Add atty dependency**
 
-In `nexa-cli/Cargo.toml`, add to `[dependencies]`:
+In `helyos-cli/Cargo.toml`, add to `[dependencies]`:
 
 ```toml
 atty = "0.2"
@@ -623,13 +623,13 @@ atty = "0.2"
 
 - [ ] **Step 4: Update the test for parse_secret_set**
 
-In `nexa-cli/src/main.rs`, find the test `parse_secret_set` (around line 491) and update it to use `--value`:
+In `helyos-cli/src/main.rs`, find the test `parse_secret_set` (around line 491) and update it to use `--value`:
 
 ```rust
     #[test]
     fn parse_secret_set() {
         let cli =
-            Cli::try_parse_from(["nexa", "secret", "set", "DB_PASS", "--value", "s3cret", "-p", "myapp"])
+            Cli::try_parse_from(["helyos", "secret", "set", "DB_PASS", "--value", "s3cret", "-p", "myapp"])
                 .unwrap();
         match cli.command {
             Commands::Secret { command } => match command {
@@ -651,22 +651,22 @@ In `nexa-cli/src/main.rs`, find the test `parse_secret_set` (around line 491) an
 
 - [ ] **Step 5: Verify it compiles and tests pass**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo test parse_secret 2>&1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo test parse_secret 2>&1`
 Expected: test passes
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo check 2>&1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo check 2>&1`
 Expected: `Finished` with no errors
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add Cargo.toml Cargo.lock src/main.rs
 git commit -m "fix(security): read secrets from stdin instead of CLI arguments
 
 CRITICAL-4: Secret value is no longer a positional argument visible in
 ps aux and shell history. Use --value flag, stdin pipe, or interactive
-prompt: echo \$SECRET | nexa secret set KEY -p app"
+prompt: echo \$SECRET | helyos secret set KEY -p app"
 ```
 
 ---
@@ -674,11 +674,11 @@ prompt: echo \$SECRET | nexa secret set KEY -p app"
 ## Task 5: Implement stop_pod and remove_pod (CRITICAL 5)
 
 **Files:**
-- Modify: `nexad/src/cluster/server.rs:251-273`
+- Modify: `helyosd/src/cluster/server.rs:251-273`
 
 - [ ] **Step 1: Implement stop_pod**
 
-In `nexad/src/cluster/server.rs`, replace the `stop_pod` method (lines 251-261):
+In `helyosd/src/cluster/server.rs`, replace the `stop_pod` method (lines 251-261):
 
 ```rust
     async fn stop_pod(
@@ -734,13 +734,13 @@ Replace the `remove_pod` method (lines 263-273):
 
 - [ ] **Step 3: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo check 2>&1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo check 2>&1`
 Expected: `Finished` with no errors
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/cluster/server.rs
 git commit -m "fix(cluster): implement stop_pod and remove_pod in ClusterServer
 
@@ -753,13 +753,13 @@ container runtime. Now they call stop_container/remove_container."
 ## Task 6: Graceful shutdown (CRITICAL 6)
 
 **Files:**
-- Modify: `nexad/Cargo.toml` — add `tokio-util`
-- Modify: `nexad/src/api/mod.rs` — accept shutdown signal in `serve`
-- Modify: `nexad/src/main.rs` — wire CancellationToken through all modes
+- Modify: `helyosd/Cargo.toml` — add `tokio-util`
+- Modify: `helyosd/src/api/mod.rs` — accept shutdown signal in `serve`
+- Modify: `helyosd/src/main.rs` — wire CancellationToken through all modes
 
 - [ ] **Step 1: Add tokio-util dependency**
 
-In `nexad/Cargo.toml`, add to `[dependencies]`:
+In `helyosd/Cargo.toml`, add to `[dependencies]`:
 
 ```toml
 tokio-util = "0.7"
@@ -767,7 +767,7 @@ tokio-util = "0.7"
 
 - [ ] **Step 2: Update api::serve to accept a shutdown signal**
 
-In `nexad/src/api/mod.rs`, update the `serve` function to accept a shutdown future:
+In `helyosd/src/api/mod.rs`, update the `serve` function to accept a shutdown future:
 
 ```rust
 pub async fn serve(
@@ -789,7 +789,7 @@ pub async fn serve(
     let app = routes::build(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("nexad API listening on {addr}");
+    tracing::info!("helyosd API listening on {addr}");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
@@ -804,12 +804,12 @@ pub async fn serve(
 
 - [ ] **Step 3: Wire shutdown into start_single_node**
 
-In `nexad/src/main.rs`, add at the top of `start_single_node` (after the log line):
+In `helyosd/src/main.rs`, add at the top of `start_single_node` (after the log line):
 
 ```rust
 async fn start_single_node(cli: &Cli) -> anyhow::Result<()> {
     info!(
-        "starting nexad in single-node mode on {}:{}",
+        "starting helyosd in single-node mode on {}:{}",
         cli.host, cli.port
     );
 
@@ -835,8 +835,8 @@ async fn start_single_node(cli: &Cli) -> anyhow::Result<()> {
     let (dns, master_ip) = init_dns(cli).await?;
     let (proxy, route_store) = init_proxy(cli)?;
     let metrics: Arc<dyn MetricsPort> =
-        Arc::new(nexad::adapters::metrics::PrometheusMetrics::new());
-    let (event_tx, _) = tokio::sync::broadcast::channel::<nexad::api::ClusterEvent>(256);
+        Arc::new(helyosd::adapters::metrics::PrometheusMetrics::new());
+    let (event_tx, _) = tokio::sync::broadcast::channel::<helyosd::api::ClusterEvent>(256);
     let handle = spawn_orchestrator(
         &runtime,
         &store,
@@ -850,12 +850,12 @@ async fn start_single_node(cli: &Cli) -> anyhow::Result<()> {
     );
 
     if let Some(ref email) = cli.acme_email {
-        let acme = Arc::new(nexad::adapters::tls::AcmeManager::new(
+        let acme = Arc::new(helyosd::adapters::tls::AcmeManager::new(
             email,
             Arc::clone(&route_store),
             false,
         ));
-        nexad::adapters::tls::spawn_renewal_task(
+        helyosd::adapters::tls::spawn_renewal_task(
             Arc::clone(&route_store),
             acme,
             std::time::Duration::from_secs(86400),
@@ -866,18 +866,18 @@ async fn start_single_node(cli: &Cli) -> anyhow::Result<()> {
 
     let api_token_hash = init_api_token(cli, &store).await?;
     let addr = format!("{}:{}", cli.host, cli.port);
-    nexad::api::serve(handle, Arc::clone(&store), metrics, event_tx.clone(), &addr, api_token_hash, shutdown_rx).await
+    helyosd::api::serve(handle, Arc::clone(&store), metrics, event_tx.clone(), &addr, api_token_hash, shutdown_rx).await
 }
 ```
 
 - [ ] **Step 4: Wire shutdown into start_master**
 
-Apply the same pattern to `start_master`. Add the `shutdown_tx`/`shutdown_rx` channel and signal handler at the top, pass `shutdown_rx` to `nexad::api::serve`. The gRPC server should also respect shutdown — update the gRPC spawn:
+Apply the same pattern to `start_master`. Add the `shutdown_tx`/`shutdown_rx` channel and signal handler at the top, pass `shutdown_rx` to `helyosd::api::serve`. The gRPC server should also respect shutdown — update the gRPC spawn:
 
 ```rust
     let grpc_shutdown_rx = shutdown_tx.subscribe();
     tokio::spawn(async move {
-        if let Err(e) = nexad::cluster::server::start_grpc_server(
+        if let Err(e) = helyosd::cluster::server::start_grpc_server(
             &grpc_addr,
             grpc_runtime,
             grpc_state,
@@ -897,22 +897,22 @@ Pass `shutdown_rx` to the final `serve` call:
 ```rust
     let api_token_hash = init_api_token(cli, &store).await?;
     let addr = format!("{}:{}", cli.host, cli.port);
-    nexad::api::serve(handle, Arc::clone(&store), metrics, event_tx.clone(), &addr, api_token_hash, shutdown_rx).await
+    helyosd::api::serve(handle, Arc::clone(&store), metrics, event_tx.clone(), &addr, api_token_hash, shutdown_rx).await
 ```
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo check 2>&1`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo check 2>&1`
 Expected: `Finished` with no errors
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add Cargo.toml Cargo.lock src/api/mod.rs src/main.rs
 git commit -m "feat(ops): add graceful shutdown via SIGINT/SIGTERM
 
-CRITICAL-6: nexad now handles SIGINT and SIGTERM, gracefully draining
+CRITICAL-6: helyosd now handles SIGINT and SIGTERM, gracefully draining
 HTTP connections before exiting. Prevents orphaned containers and
 inconsistent state on kill."
 ```
@@ -922,13 +922,13 @@ inconsistent state on kill."
 ## Task 7: SHA-256 checksums in release workflows (CRITICAL 7-8)
 
 **Files:**
-- Modify: `nexad/.github/workflows/release.yml`
-- Modify: `nexa-cli/.github/workflows/release.yml`
+- Modify: `helyosd/.github/workflows/release.yml`
+- Modify: `helyos-cli/.github/workflows/release.yml`
 - Modify: `install.sh`
 
-- [ ] **Step 1: Update nexad release workflow**
+- [ ] **Step 1: Update helyosd release workflow**
 
-Replace the full content of `nexad/.github/workflows/release.yml`:
+Replace the full content of `helyosd/.github/workflows/release.yml`:
 
 ```yaml
 name: Release
@@ -942,7 +942,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: nexad
+  BINARY_NAME: helyosd
 
 jobs:
   build:
@@ -1023,9 +1023,9 @@ jobs:
 
 Key changes: removed `if: always()` from release job (won't publish if build fails), added checksum generation step.
 
-- [ ] **Step 2: Update nexa-cli release workflow**
+- [ ] **Step 2: Update helyos-cli release workflow**
 
-Replace the full content of `nexa-cli/.github/workflows/release.yml`:
+Replace the full content of `helyos-cli/.github/workflows/release.yml`:
 
 ```yaml
 name: Release
@@ -1039,7 +1039,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: nexa
+  BINARY_NAME: helyos
 
 jobs:
   build:
@@ -1225,10 +1225,10 @@ download_and_install() {
 }
 ```
 
-- [ ] **Step 4: Commit nexad workflow**
+- [ ] **Step 4: Commit helyosd workflow**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add .github/workflows/release.yml
 git commit -m "fix(ci): add SHA-256 checksums to release, fix if:always
 
@@ -1236,10 +1236,10 @@ CRITICAL-7/8: Release artifacts now include sha256sums.txt.
 Release job no longer runs if build fails."
 ```
 
-- [ ] **Step 5: Commit nexa-cli workflow**
+- [ ] **Step 5: Commit helyos-cli workflow**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli
+cd /Users/nassime/GitHub/Helyos/helyos-cli
 git add .github/workflows/release.yml
 git commit -m "fix(ci): add SHA-256 checksums to release, fix if:always
 
@@ -1250,7 +1250,7 @@ Release job no longer runs if build fails."
 - [ ] **Step 6: Commit install.sh**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet
+cd /Users/nassime/GitHub/Helyos
 git add install.sh
 git commit -m "fix(security): verify SHA-256 checksums in install script
 
@@ -1263,22 +1263,22 @@ checksums are unavailable (pre-existing releases)."
 
 ## Task 8: Push all changes
 
-- [ ] **Step 1: Push nexad**
+- [ ] **Step 1: Push helyosd**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad && git push origin main
+cd /Users/nassime/GitHub/Helyos/helyosd && git push origin main
 ```
 
-- [ ] **Step 2: Push nexa-cli**
+- [ ] **Step 2: Push helyos-cli**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-cli && git push origin main
+cd /Users/nassime/GitHub/Helyos/helyos-cli && git push origin main
 ```
 
-- [ ] **Step 3: Push nexa (infra)**
+- [ ] **Step 3: Push helyos (infra)**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet && git push origin main
+cd /Users/nassime/GitHub/Helyos && git push origin main
 ```
 
 ---
@@ -1287,8 +1287,8 @@ cd /Users/nassime/GitHub/NexaNet && git push origin main
 
 After all tasks:
 
-- [ ] `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test 2>&1` — all tests pass
-- [ ] `cd /Users/nassime/GitHub/NexaNet/nexa-cli && cargo test 2>&1` — all tests pass
-- [ ] Verify `nexad --help` shows `--api-token`, `--host` defaults to `127.0.0.1`
-- [ ] Verify `nexa secret set --help` shows `--value` as optional
+- [ ] `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test 2>&1` — all tests pass
+- [ ] `cd /Users/nassime/GitHub/Helyos/helyos-cli && cargo test 2>&1` — all tests pass
+- [ ] Verify `helyosd --help` shows `--api-token`, `--host` defaults to `127.0.0.1`
+- [ ] Verify `helyos secret set --help` shows `--value` as optional
 - [ ] All 3 repos pushed with no uncommitted changes

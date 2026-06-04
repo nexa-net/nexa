@@ -5,15 +5,15 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
 **Goal:** Add containerd as a second container runtime backend alongside Docker. Introduce runtime auto-detection, a CNI networking manager for containerd, file-based log tailing, and a unified integration test suite that validates both runtimes against the same `ContainerRuntime` trait.
 
-**Architecture:** The existing `ContainerRuntime` trait in `nexa-core` gains four new methods (`container_ip`, `events`, `dns` fields on `ContainerConfig`) that were specified but not yet implemented. A `RuntimeDetector` checks socket availability and CLI flags to select the runtime. `ContainerdRuntime` lives in `nexad/src/adapters/runtime/containerd.rs` and delegates networking to a `CniManager`. All containerd containers run in the `nexa` namespace. Logs are written to `{data_dir}/logs/{container_id}/` and tailed via `tokio::fs` + `tokio::io::BufReader`. The `nexa setup cni` CLI command downloads standard CNI plugin binaries.
+**Architecture:** The existing `ContainerRuntime` trait in `helyos-core` gains four new methods (`container_ip`, `events`, `dns` fields on `ContainerConfig`) that were specified but not yet implemented. A `RuntimeDetector` checks socket availability and CLI flags to select the runtime. `ContainerdRuntime` lives in `helyosd/src/adapters/runtime/containerd.rs` and delegates networking to a `CniManager`. All containerd containers run in the `helyos` namespace. Logs are written to `{data_dir}/logs/{container_id}/` and tailed via `tokio::fs` + `tokio::io::BufReader`. The `helyos setup cni` CLI command downloads standard CNI plugin binaries.
 
 **Tech Stack:** containerd-client 0.5 (gRPC via tonic), tokio (fs, io, process), serde_json (CNI config), async-trait, futures, sha2 (image digest), bollard (existing Docker adapter)
 
@@ -22,12 +22,12 @@
 ### Task 1: Extend ContainerRuntime trait and ContainerConfig
 
 **Files:**
-- Modify: `crates/nexa-core/src/runtime/traits.rs`
-- Modify: `crates/nexa-core/src/runtime/docker.rs`
+- Modify: `crates/helyos-core/src/runtime/traits.rs`
+- Modify: `crates/helyos-core/src/runtime/docker.rs`
 
 - [ ] **Step 1: Write failing test for new trait methods**
 
-Add to the bottom of `crates/nexa-core/src/runtime/traits.rs`:
+Add to the bottom of `crates/helyos-core/src/runtime/traits.rs`:
 
 ```rust
 #[cfg(test)]
@@ -49,7 +49,7 @@ mod tests {
             labels: HashMap::new(),
             network: None,
             dns: vec!["8.8.8.8".into()],
-            dns_search: vec!["nexa.local".into()],
+            dns_search: vec!["helyos.local".into()],
         };
         assert_eq!(config.dns.len(), 1);
         assert_eq!(config.dns_search.len(), 1);
@@ -57,12 +57,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexa-core -- runtime::traits::tests 2>&1`
+Run: `cargo test -p helyos-core -- runtime::traits::tests 2>&1`
 Expected: FAIL -- `ContainerConfig` has no field `dns`, no method `container_ip`/`events`/`runtime_name` on trait
 
 - [ ] **Step 2: Add dns/dns_search fields to ContainerConfig**
 
-In `crates/nexa-core/src/runtime/traits.rs`, add to the `ContainerConfig` struct:
+In `crates/helyos-core/src/runtime/traits.rs`, add to the `ContainerConfig` struct:
 
 ```rust
 #[derive(Debug, Clone)]
@@ -81,7 +81,7 @@ pub struct ContainerConfig {
 
 - [ ] **Step 3: Add new methods to the ContainerRuntime trait**
 
-In `crates/nexa-core/src/runtime/traits.rs`, add these imports and types:
+In `crates/helyos-core/src/runtime/traits.rs`, add these imports and types:
 
 ```rust
 use std::net::IpAddr;
@@ -135,7 +135,7 @@ pub trait ContainerRuntime: Send + Sync {
 
 - [ ] **Step 4: Update DockerRuntime to implement the new methods**
 
-In `crates/nexa-core/src/runtime/docker.rs`, add these imports:
+In `crates/helyos-core/src/runtime/docker.rs`, add these imports:
 
 ```rust
 use std::net::IpAddr;
@@ -150,25 +150,25 @@ Add these method implementations inside `impl ContainerRuntime for DockerRuntime
             .client
             .inspect_container(id, None)
             .await
-            .map_err(|e| NexaError::Runtime(e.to_string()))?;
+            .map_err(|e| HelyosError::Runtime(e.to_string()))?;
 
         let networks = info
             .network_settings
             .and_then(|ns| ns.networks)
-            .ok_or_else(|| NexaError::Runtime("no network settings".into()))?;
+            .ok_or_else(|| HelyosError::Runtime("no network settings".into()))?;
 
         let endpoint = networks
             .get(network)
-            .ok_or_else(|| NexaError::Runtime(format!("container not on network '{network}'")))?;
+            .ok_or_else(|| HelyosError::Runtime(format!("container not on network '{network}'")))?;
 
         let ip_str = endpoint
             .ip_address
             .as_ref()
-            .ok_or_else(|| NexaError::Runtime("no IP address assigned".into()))?;
+            .ok_or_else(|| HelyosError::Runtime("no IP address assigned".into()))?;
 
         ip_str
             .parse::<IpAddr>()
-            .map_err(|e| NexaError::Runtime(format!("invalid IP: {e}")))
+            .map_err(|e| HelyosError::Runtime(format!("invalid IP: {e}")))
     }
 
     async fn events(&self) -> Result<EventStream> {
@@ -177,7 +177,7 @@ Add these method implementations inside `impl ContainerRuntime for DockerRuntime
 
         let filters: HashMap<String, Vec<String>> = HashMap::from([
             ("type".into(), vec!["container".into()]),
-            ("label".into(), vec!["managed-by=nexanet".into()]),
+            ("label".into(), vec!["managed-by=helyos".into()]),
         ]);
 
         let options = EventsOptions::<String> {
@@ -210,7 +210,7 @@ Add these method implementations inside `impl ContainerRuntime for DockerRuntime
                     timestamp: Utc::now(),
                 })
             }
-            Err(e) => Err(NexaError::Runtime(e.to_string())),
+            Err(e) => Err(HelyosError::Runtime(e.to_string())),
         });
 
         Ok(Box::pin(mapped))
@@ -223,7 +223,7 @@ Add these method implementations inside `impl ContainerRuntime for DockerRuntime
 
 - [ ] **Step 5: Fix ContainerConfig construction sites**
 
-In `crates/nexad/src/engine/orchestrator.rs`, update every `ContainerConfig { ... }` construction to include the new fields:
+In `crates/helyosd/src/engine/orchestrator.rs`, update every `ContainerConfig { ... }` construction to include the new fields:
 
 ```rust
             dns: vec![],
@@ -235,13 +235,13 @@ In `crates/nexad/src/engine/orchestrator.rs`, update every `ContainerConfig { ..
 Run: `cargo check 2>&1`
 Expected: compiles
 
-Run: `cargo test -p nexa-core -- runtime::traits::tests 2>&1`
+Run: `cargo test -p helyos-core -- runtime::traits::tests 2>&1`
 Expected: 1 test passes
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/nexa-core/src/runtime/ crates/nexad/src/engine/
+git add crates/helyos-core/src/runtime/ crates/helyosd/src/engine/
 git commit -m "feat: extend ContainerRuntime trait with container_ip, events, runtime_name, dns fields"
 ```
 
@@ -250,20 +250,20 @@ git commit -m "feat: extend ContainerRuntime trait with container_ip, events, ru
 ### Task 2: Runtime auto-detection and --runtime CLI flag
 
 **Files:**
-- Create: `crates/nexad/src/adapters/runtime/detect.rs`
-- Modify: `crates/nexad/src/adapters/runtime/mod.rs`
-- Modify: `crates/nexad/src/main.rs`
+- Create: `crates/helyosd/src/adapters/runtime/detect.rs`
+- Modify: `crates/helyosd/src/adapters/runtime/mod.rs`
+- Modify: `crates/helyosd/src/main.rs`
 
 - [ ] **Step 1: Write failing tests for runtime detection**
 
-Create `crates/nexad/src/adapters/runtime/detect.rs`:
+Create `crates/helyosd/src/adapters/runtime/detect.rs`:
 
 ```rust
 use std::path::Path;
 use std::sync::Arc;
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::runtime::ContainerRuntime;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::runtime::ContainerRuntime;
 use tracing::info;
 
 use super::DockerRuntime;
@@ -329,7 +329,7 @@ impl RuntimeDetector {
                 info!("auto-detected containerd runtime (no Docker socket)");
                 Ok(RuntimeKind::Containerd)
             }
-            (false, false) => Err(NexaError::Runtime(
+            (false, false) => Err(HelyosError::Runtime(
                 "no container runtime found. expected /var/run/docker.sock or \
                  /run/containerd/containerd.sock"
                     .into(),
@@ -343,7 +343,7 @@ impl RuntimeDetector {
             RuntimeKind::Auto => Self::auto_detect(),
             RuntimeKind::Docker => {
                 if !Path::new(Self::DOCKER_SOCK).exists() {
-                    return Err(NexaError::Runtime(
+                    return Err(HelyosError::Runtime(
                         "Docker runtime requested but /var/run/docker.sock not found".into(),
                     ));
                 }
@@ -351,7 +351,7 @@ impl RuntimeDetector {
             }
             RuntimeKind::Containerd => {
                 if !Path::new(Self::CONTAINERD_SOCK).exists() {
-                    return Err(NexaError::Runtime(
+                    return Err(HelyosError::Runtime(
                         "containerd runtime requested but /run/containerd/containerd.sock not found"
                             .into(),
                     ));
@@ -372,7 +372,7 @@ impl RuntimeDetector {
                 Ok(Arc::new(rt))
             }
             RuntimeKind::Containerd => {
-                Err(NexaError::Runtime("containerd runtime not yet implemented".into()))
+                Err(HelyosError::Runtime("containerd runtime not yet implemented".into()))
             }
             RuntimeKind::Auto => {
                 unreachable!("resolve() must be called before build()")
@@ -436,12 +436,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexad -- adapters::runtime::detect 2>&1`
+Run: `cargo test -p helyosd -- adapters::runtime::detect 2>&1`
 Expected: FAIL -- module `detect` does not exist
 
 - [ ] **Step 2: Wire the detect module into the runtime adapter**
 
-Update `crates/nexad/src/adapters/runtime/mod.rs`:
+Update `crates/helyosd/src/adapters/runtime/mod.rs`:
 
 ```rust
 mod detect;
@@ -453,12 +453,12 @@ pub use docker::DockerRuntime;
 
 - [ ] **Step 3: Run detection tests**
 
-Run: `cargo test -p nexad -- adapters::runtime::detect 2>&1`
+Run: `cargo test -p helyosd -- adapters::runtime::detect 2>&1`
 Expected: all 7 tests pass
 
-- [ ] **Step 4: Add --runtime flag to nexad main.rs**
+- [ ] **Step 4: Add --runtime flag to helyosd main.rs**
 
-In `crates/nexad/src/main.rs`, update the `Cli` struct:
+In `crates/helyosd/src/main.rs`, update the `Cli` struct:
 
 ```rust
 mod adapters;
@@ -474,7 +474,7 @@ use tracing_subscriber::EnvFilter;
 use adapters::runtime::{RuntimeDetector, RuntimeKind};
 
 #[derive(Parser)]
-#[command(name = "nexad", about = "NexaNet daemon", version)]
+#[command(name = "helyosd", about = "Helyos daemon", version)]
 struct Cli {
     #[arg(long, default_value = "0.0.0.0")]
     host: String,
@@ -482,7 +482,7 @@ struct Cli {
     #[arg(long, default_value = "6443")]
     port: u16,
 
-    #[arg(long, default_value = "/var/lib/nexa")]
+    #[arg(long, default_value = "/var/lib/helyos")]
     data_dir: String,
 
     /// Container runtime to use: docker, containerd, or auto (default)
@@ -500,7 +500,7 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    info!("starting nexad on {}:{}", cli.host, cli.port);
+    info!("starting helyosd on {}:{}", cli.host, cli.port);
 
     let resolved = RuntimeDetector::resolve(cli.runtime)?;
     let runtime = RuntimeDetector::build(resolved, &cli.data_dir).await?;
@@ -513,7 +513,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-Note: `Orchestrator::new_with_runtime` is a new constructor that accepts a pre-built `Arc<dyn ContainerRuntime>`. Add it in `crates/nexad/src/engine/orchestrator.rs`:
+Note: `Orchestrator::new_with_runtime` is a new constructor that accepts a pre-built `Arc<dyn ContainerRuntime>`. Add it in `crates/helyosd/src/engine/orchestrator.rs`:
 
 ```rust
     pub async fn new_with_runtime(runtime: Arc<dyn ContainerRuntime>) -> anyhow::Result<Arc<Self>> {
@@ -533,14 +533,14 @@ Expected: compiles
 
 - [ ] **Step 6: Verify --runtime help text appears**
 
-Run: `cargo run -p nexad -- --help 2>&1 | grep -A2 runtime`
+Run: `cargo run -p helyosd -- --help 2>&1 | grep -A2 runtime`
 Expected: shows `--runtime <RUNTIME>` with description
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/runtime/detect.rs crates/nexad/src/adapters/runtime/mod.rs crates/nexad/src/main.rs crates/nexad/src/engine/orchestrator.rs
-git commit -m "feat: add runtime auto-detection and --runtime CLI flag for nexad"
+git add crates/helyosd/src/adapters/runtime/detect.rs crates/helyosd/src/adapters/runtime/mod.rs crates/helyosd/src/main.rs crates/helyosd/src/engine/orchestrator.rs
+git commit -m "feat: add runtime auto-detection and --runtime CLI flag for helyosd"
 ```
 
 ---
@@ -548,25 +548,25 @@ git commit -m "feat: add runtime auto-detection and --runtime CLI flag for nexad
 ### Task 3: CniManager for containerd networking
 
 **Files:**
-- Create: `crates/nexad/src/adapters/runtime/cni.rs`
-- Modify: `crates/nexad/src/adapters/runtime/mod.rs`
+- Create: `crates/helyosd/src/adapters/runtime/cni.rs`
+- Modify: `crates/helyosd/src/adapters/runtime/mod.rs`
 
 - [ ] **Step 1: Write failing tests for CniManager**
 
-Create `crates/nexad/src/adapters/runtime/cni.rs`:
+Create `crates/helyosd/src/adapters/runtime/cni.rs`:
 
 ```rust
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
-use nexa_core::error::{NexaError, Result};
+use helyos_core::error::{HelyosError, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 /// Manages CNI network configurations and plugin invocations for containerd.
 ///
-/// containerd has no built-in networking. NexaNet manages CNI configs per project.
+/// containerd has no built-in networking. Helyos manages CNI configs per project.
 /// Each project gets a bridge network with host-local IPAM.
 pub struct CniManager {
     cni_bin_dir: PathBuf,
@@ -625,7 +625,7 @@ impl SubnetAllocator {
         }
 
         if self.next_third_octet == 255 {
-            return Err(NexaError::Runtime("subnet pool exhausted".into()));
+            return Err(HelyosError::Runtime("subnet pool exhausted".into()));
         }
 
         let subnet = format!("172.20.{}.0/24", self.next_third_octet);
@@ -665,8 +665,8 @@ impl CniManager {
         }
 
         if !missing.is_empty() {
-            return Err(NexaError::Runtime(format!(
-                "missing CNI plugins: {}. run 'nexa setup cni' to install them",
+            return Err(HelyosError::Runtime(format!(
+                "missing CNI plugins: {}. run 'helyos setup cni' to install them",
                 missing.join(", ")
             )));
         }
@@ -686,7 +686,7 @@ impl CniManager {
             // Read existing config to recover subnet
             let content = std::fs::read_to_string(&conf_path)?;
             let config: CniConfig = serde_json::from_str(&content)
-                .map_err(|e| NexaError::Runtime(format!("corrupt CNI config: {e}")))?;
+                .map_err(|e| HelyosError::Runtime(format!("corrupt CNI config: {e}")))?;
             for plugin in &config.plugins {
                 if let CniPlugin::Bridge { ipam, .. } = plugin {
                     self.subnet_allocator
@@ -695,7 +695,7 @@ impl CniManager {
                     return Ok(ipam.subnet.clone());
                 }
             }
-            return Err(NexaError::Runtime("CNI config has no bridge plugin".into()));
+            return Err(HelyosError::Runtime("CNI config has no bridge plugin".into()));
         }
 
         let subnet = self.subnet_allocator.allocate(name)?;
@@ -740,7 +740,7 @@ impl CniManager {
     pub async fn attach(&self, container_id: &str, network: &str, netns_path: &str) -> Result<IpAddr> {
         let conf_path = self.cni_conf_dir.join(format!("{network}.conflist"));
         if !conf_path.exists() {
-            return Err(NexaError::Runtime(format!(
+            return Err(HelyosError::Runtime(format!(
                 "CNI network '{network}' not configured"
             )));
         }
@@ -757,25 +757,25 @@ impl CniManager {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| NexaError::Runtime(format!("failed to invoke CNI bridge plugin: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("failed to invoke CNI bridge plugin: {e}")))?;
 
         // Write config to stdin
         let output = output.wait_with_output().await
-            .map_err(|e| NexaError::Runtime(format!("CNI bridge plugin failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("CNI bridge plugin failed: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(NexaError::Runtime(format!("CNI ADD failed: {stderr}")));
+            return Err(HelyosError::Runtime(format!("CNI ADD failed: {stderr}")));
         }
 
         // Parse the CNI result JSON to extract the IP
         let result_str = String::from_utf8_lossy(&output.stdout);
         let result: serde_json::Value = serde_json::from_str(&result_str)
-            .map_err(|e| NexaError::Runtime(format!("invalid CNI result: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("invalid CNI result: {e}")))?;
 
         let ip_str = result["ips"][0]["address"]
             .as_str()
-            .ok_or_else(|| NexaError::Runtime("CNI result missing IP address".into()))?;
+            .ok_or_else(|| HelyosError::Runtime("CNI result missing IP address".into()))?;
 
         // CNI returns CIDR notation like "172.20.0.2/24", strip the prefix length
         let ip_only = ip_str
@@ -785,7 +785,7 @@ impl CniManager {
 
         let ip: IpAddr = ip_only
             .parse()
-            .map_err(|e| NexaError::Runtime(format!("invalid IP from CNI: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("invalid IP from CNI: {e}")))?;
 
         info!(container_id, network, ip = %ip, "attached container to CNI network");
         Ok(ip)
@@ -808,10 +808,10 @@ impl CniManager {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| NexaError::Runtime(format!("failed to invoke CNI DEL: {e}")))?
+            .map_err(|e| HelyosError::Runtime(format!("failed to invoke CNI DEL: {e}")))?
             .wait_with_output()
             .await
-            .map_err(|e| NexaError::Runtime(format!("CNI DEL failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("CNI DEL failed: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -872,22 +872,22 @@ mod tests {
     #[test]
     fn ensure_network_creates_conflist() {
         let (mut mgr, tmp) = test_manager();
-        let subnet = mgr.ensure_network("nexa-ecommerce").unwrap();
+        let subnet = mgr.ensure_network("helyos-ecommerce").unwrap();
         assert_eq!(subnet, "172.20.0.0/24");
 
         let conf_path = tmp
             .path()
             .join("cni")
             .join("conf")
-            .join("nexa-ecommerce.conflist");
+            .join("helyos-ecommerce.conflist");
         assert!(conf_path.exists());
 
         let content = std::fs::read_to_string(&conf_path).unwrap();
         let config: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(config["cniVersion"], "1.0.0");
-        assert_eq!(config["name"], "nexa-ecommerce");
+        assert_eq!(config["name"], "helyos-ecommerce");
         assert_eq!(config["plugins"][0]["type"], "bridge");
-        assert_eq!(config["plugins"][0]["bridge"], "nexa-ecommerce");
+        assert_eq!(config["plugins"][0]["bridge"], "helyos-ecommerce");
         assert_eq!(config["plugins"][0]["isGateway"], true);
         assert_eq!(config["plugins"][0]["ipam"]["type"], "host-local");
         assert_eq!(config["plugins"][0]["ipam"]["subnet"], "172.20.0.0/24");
@@ -897,24 +897,24 @@ mod tests {
     #[test]
     fn ensure_network_idempotent() {
         let (mut mgr, _tmp) = test_manager();
-        let s1 = mgr.ensure_network("nexa-test").unwrap();
-        let s2 = mgr.ensure_network("nexa-test").unwrap();
+        let s1 = mgr.ensure_network("helyos-test").unwrap();
+        let s2 = mgr.ensure_network("helyos-test").unwrap();
         assert_eq!(s1, s2);
     }
 
     #[test]
     fn remove_network_deletes_conflist() {
         let (mut mgr, tmp) = test_manager();
-        mgr.ensure_network("nexa-test").unwrap();
+        mgr.ensure_network("helyos-test").unwrap();
 
         let conf_path = tmp
             .path()
             .join("cni")
             .join("conf")
-            .join("nexa-test.conflist");
+            .join("helyos-test.conflist");
         assert!(conf_path.exists());
 
-        mgr.remove_network("nexa-test").unwrap();
+        mgr.remove_network("helyos-test").unwrap();
         assert!(!conf_path.exists());
     }
 
@@ -932,7 +932,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("bridge"));
-        assert!(err.contains("nexa setup cni"));
+        assert!(err.contains("helyos setup cni"));
     }
 
     #[test]
@@ -952,9 +952,9 @@ mod tests {
     #[test]
     fn multiple_networks_get_different_subnets() {
         let (mut mgr, _tmp) = test_manager();
-        let s1 = mgr.ensure_network("nexa-project-a").unwrap();
-        let s2 = mgr.ensure_network("nexa-project-b").unwrap();
-        let s3 = mgr.ensure_network("nexa-project-c").unwrap();
+        let s1 = mgr.ensure_network("helyos-project-a").unwrap();
+        let s2 = mgr.ensure_network("helyos-project-b").unwrap();
+        let s3 = mgr.ensure_network("helyos-project-c").unwrap();
         assert_ne!(s1, s2);
         assert_ne!(s2, s3);
         assert_ne!(s1, s3);
@@ -962,12 +962,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexad -- adapters::runtime::cni 2>&1`
+Run: `cargo test -p helyosd -- adapters::runtime::cni 2>&1`
 Expected: FAIL -- module not found
 
 - [ ] **Step 2: Wire CniManager into the runtime module**
 
-Update `crates/nexad/src/adapters/runtime/mod.rs`:
+Update `crates/helyosd/src/adapters/runtime/mod.rs`:
 
 ```rust
 pub mod cni;
@@ -979,9 +979,9 @@ pub use detect::{RuntimeDetector, RuntimeKind};
 pub use docker::DockerRuntime;
 ```
 
-- [ ] **Step 3: Add tempfile dev-dependency to nexad**
+- [ ] **Step 3: Add tempfile dev-dependency to helyosd**
 
-In `crates/nexad/Cargo.toml`, add:
+In `crates/helyosd/Cargo.toml`, add:
 
 ```toml
 [dev-dependencies]
@@ -990,13 +990,13 @@ tempfile = "3"
 
 - [ ] **Step 4: Run CniManager tests**
 
-Run: `cargo test -p nexad -- adapters::runtime::cni 2>&1`
+Run: `cargo test -p helyosd -- adapters::runtime::cni 2>&1`
 Expected: all 9 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/runtime/cni.rs crates/nexad/src/adapters/runtime/mod.rs crates/nexad/Cargo.toml
+git add crates/helyosd/src/adapters/runtime/cni.rs crates/helyosd/src/adapters/runtime/mod.rs crates/helyosd/Cargo.toml
 git commit -m "feat: add CniManager for containerd CNI network config generation and plugin invocation"
 ```
 
@@ -1005,10 +1005,10 @@ git commit -m "feat: add CniManager for containerd CNI network config generation
 ### Task 4: ContainerdRuntime adapter -- image pull + create/start container
 
 **Files:**
-- Create: `crates/nexad/src/adapters/runtime/containerd.rs`
-- Modify: `crates/nexad/src/adapters/runtime/mod.rs`
-- Modify: `crates/nexad/src/adapters/runtime/detect.rs`
-- Modify: `crates/nexad/Cargo.toml`
+- Create: `crates/helyosd/src/adapters/runtime/containerd.rs`
+- Modify: `crates/helyosd/src/adapters/runtime/mod.rs`
+- Modify: `crates/helyosd/src/adapters/runtime/detect.rs`
+- Modify: `crates/helyosd/Cargo.toml`
 
 - [ ] **Step 1: Add containerd-client workspace dependency**
 
@@ -1018,7 +1018,7 @@ In the root `Cargo.toml`, add to `[workspace.dependencies]`:
 containerd-client = "0.5"
 ```
 
-In `crates/nexad/Cargo.toml`, add to `[dependencies]`:
+In `crates/helyosd/Cargo.toml`, add to `[dependencies]`:
 
 ```toml
 containerd-client = { workspace = true }
@@ -1026,7 +1026,7 @@ containerd-client = { workspace = true }
 
 - [ ] **Step 2: Create the ContainerdRuntime struct with image pull and create/start**
 
-Create `crates/nexad/src/adapters/runtime/containerd.rs`:
+Create `crates/helyosd/src/adapters/runtime/containerd.rs`:
 
 ```rust
 use std::collections::HashMap;
@@ -1050,12 +1050,12 @@ use futures::StreamExt;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::runtime::*;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::runtime::*;
 
 use super::cni::CniManager;
 
-const NEXA_NAMESPACE: &str = "nexa";
+const HELYOS_NAMESPACE: &str = "helyos";
 
 pub struct ContainerdRuntime {
     channel: containerd_client::tonic::transport::Channel,
@@ -1072,14 +1072,14 @@ impl ContainerdRuntime {
     pub async fn new(data_dir: &str) -> Result<Self> {
         let channel = containerd_client::connect("/run/containerd/containerd.sock")
             .await
-            .map_err(|e| NexaError::Runtime(format!("failed to connect to containerd: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("failed to connect to containerd: {e}")))?;
 
         let cni = CniManager::new(Path::new(data_dir));
 
         Ok(Self {
             channel,
             cni: Mutex::new(cni),
-            namespace: NEXA_NAMESPACE.to_string(),
+            namespace: HELYOS_NAMESPACE.to_string(),
             data_dir: PathBuf::from(data_dir),
             netns_map: Mutex::new(HashMap::new()),
             network_map: Mutex::new(HashMap::new()),
@@ -1093,7 +1093,7 @@ impl ContainerdRuntime {
         client
             .version(req)
             .await
-            .map_err(|e| NexaError::Runtime(format!("containerd unreachable: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("containerd unreachable: {e}")))?;
         Ok(())
     }
 
@@ -1155,11 +1155,11 @@ impl ContainerRuntime for ContainerdRuntime {
             .stderr(std::process::Stdio::piped())
             .output()
             .await
-            .map_err(|e| NexaError::ImagePull(format!("failed to run ctr: {e}")))?;
+            .map_err(|e| HelyosError::ImagePull(format!("failed to run ctr: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(NexaError::ImagePull(format!(
+            return Err(HelyosError::ImagePull(format!(
                 "ctr image pull failed for '{normalized}': {stderr}"
             )));
         }
@@ -1202,8 +1202,8 @@ impl ContainerRuntime for ContainerdRuntime {
 
         // Build labels
         let mut labels = config.labels.clone();
-        labels.insert("managed-by".into(), "nexanet".into());
-        labels.insert("nexa.image".into(), normalized_image.clone());
+        labels.insert("managed-by".into(), "helyos".into());
+        labels.insert("helyos.image".into(), normalized_image.clone());
 
         // Create the container via gRPC
         let mut client = ContainersClient::new(self.channel.clone());
@@ -1224,7 +1224,7 @@ impl ContainerRuntime for ContainerdRuntime {
         client
             .create(req)
             .await
-            .map_err(|e| NexaError::Runtime(format!("containerd create failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("containerd create failed: {e}")))?;
 
         info!(id = container_id, "containerd container created");
         Ok(container_id)
@@ -1251,7 +1251,7 @@ impl ContainerRuntime for ContainerdRuntime {
         let resp = client
             .create(req)
             .await
-            .map_err(|e| NexaError::Runtime(format!("containerd task create failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("containerd task create failed: {e}")))?;
 
         let pid = resp.into_inner().pid;
 
@@ -1267,7 +1267,7 @@ impl ContainerRuntime for ContainerdRuntime {
         client
             .start(req)
             .await
-            .map_err(|e| NexaError::Runtime(format!("containerd task start failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("containerd task start failed: {e}")))?;
 
         // Record the network namespace path for CNI
         let netns_path = format!("/proc/{pid}/ns/net");
@@ -1377,7 +1377,7 @@ impl ContainerRuntime for ContainerdRuntime {
         client
             .delete(req)
             .await
-            .map_err(|e| NexaError::Runtime(format!("containerd delete failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("containerd delete failed: {e}")))?;
 
         // Clean up log directory
         let log_dir = self.log_dir(id);
@@ -1405,12 +1405,12 @@ impl ContainerRuntime for ContainerdRuntime {
         let resp = containers_client
             .get(req)
             .await
-            .map_err(|e| NexaError::Runtime(format!("containerd inspect failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("containerd inspect failed: {e}")))?;
 
         let container = resp
             .into_inner()
             .container
-            .ok_or_else(|| NexaError::Runtime("container not found in response".into()))?;
+            .ok_or_else(|| HelyosError::Runtime("container not found in response".into()))?;
 
         // Check if a task exists to determine state
         let mut tasks_client = TasksClient::new(self.channel.clone());
@@ -1439,7 +1439,7 @@ impl ContainerRuntime for ContainerdRuntime {
 
         let image = container
             .labels
-            .get("nexa.image")
+            .get("helyos.image")
             .cloned()
             .unwrap_or(container.image);
 
@@ -1455,7 +1455,7 @@ impl ContainerRuntime for ContainerdRuntime {
         let stdout_path = self.log_dir(id).join("stdout.log");
 
         if !stdout_path.exists() {
-            return Err(NexaError::Runtime(format!(
+            return Err(HelyosError::Runtime(format!(
                 "no log file for container '{id}'"
             )));
         }
@@ -1465,14 +1465,14 @@ impl ContainerRuntime for ContainerdRuntime {
         // Read the last N lines and then tail for new output
         let file = tokio::fs::File::open(&stdout_path)
             .await
-            .map_err(|e| NexaError::Runtime(format!("failed to open log file: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("failed to open log file: {e}")))?;
 
         let reader = tokio::io::BufReader::new(file);
         let lines = tokio::io::AsyncBufReadExt::lines(reader);
 
         let stream = tokio_stream::wrappers::LinesStream::new(lines).map(|result| match result {
             Ok(line) => Ok(line),
-            Err(e) => Err(NexaError::Runtime(format!("log read error: {e}"))),
+            Err(e) => Err(HelyosError::Runtime(format!("log read error: {e}"))),
         });
 
         Ok(Box::pin(stream))
@@ -1490,7 +1490,7 @@ impl ContainerRuntime for ContainerdRuntime {
         match client.get(req).await {
             Ok(_) => Ok(true),
             Err(status) if status.code() == containerd_client::tonic::Code::NotFound => Ok(false),
-            Err(e) => Err(NexaError::Runtime(format!("containerd query failed: {e}"))),
+            Err(e) => Err(HelyosError::Runtime(format!("containerd query failed: {e}"))),
         }
     }
 
@@ -1510,7 +1510,7 @@ impl ContainerRuntime for ContainerdRuntime {
             let map = self.netns_map.lock().await;
             map.get(container_id)
                 .cloned()
-                .ok_or_else(|| NexaError::Runtime(format!(
+                .ok_or_else(|| HelyosError::Runtime(format!(
                     "no netns for container '{container_id}' -- is the task started?"
                 )))?
         };
@@ -1530,7 +1530,7 @@ impl ContainerRuntime for ContainerdRuntime {
         let map = self.network_map.lock().await;
         let (_net, ip) = map
             .get(id)
-            .ok_or_else(|| NexaError::Runtime(format!(
+            .ok_or_else(|| HelyosError::Runtime(format!(
                 "container '{id}' has no assigned IP (not attached to a network)"
             )))?;
         Ok(*ip)
@@ -1551,7 +1551,7 @@ impl ContainerRuntime for ContainerdRuntime {
         let stream = client
             .subscribe(req)
             .await
-            .map_err(|e| NexaError::Runtime(format!("containerd events subscribe failed: {e}")))?
+            .map_err(|e| HelyosError::Runtime(format!("containerd events subscribe failed: {e}")))?
             .into_inner();
 
         let mapped = stream.map(|result| match result {
@@ -1570,7 +1570,7 @@ impl ContainerRuntime for ContainerdRuntime {
                     timestamp: chrono::Utc::now(),
                 })
             }
-            Err(e) => Err(NexaError::Runtime(format!("containerd event error: {e}"))),
+            Err(e) => Err(HelyosError::Runtime(format!("containerd event error: {e}"))),
         });
 
         Ok(Box::pin(mapped))
@@ -1629,7 +1629,7 @@ mod tests {
 
 - [ ] **Step 3: Wire ContainerdRuntime into the module and detector**
 
-Update `crates/nexad/src/adapters/runtime/mod.rs`:
+Update `crates/helyosd/src/adapters/runtime/mod.rs`:
 
 ```rust
 pub mod cni;
@@ -1643,7 +1643,7 @@ pub use detect::{RuntimeDetector, RuntimeKind};
 pub use docker::DockerRuntime;
 ```
 
-Update the `RuntimeDetector::build` method in `crates/nexad/src/adapters/runtime/detect.rs` to wire in containerd:
+Update the `RuntimeDetector::build` method in `crates/helyosd/src/adapters/runtime/detect.rs` to wire in containerd:
 
 ```rust
     pub async fn build(kind: RuntimeKind, data_dir: &str) -> Result<Arc<dyn ContainerRuntime>> {
@@ -1674,13 +1674,13 @@ Expected: compiles (may have warnings about unused variables in containerd.rs)
 
 - [ ] **Step 5: Run unit tests**
 
-Run: `cargo test -p nexad -- adapters::runtime::containerd 2>&1`
+Run: `cargo test -p helyosd -- adapters::runtime::containerd 2>&1`
 Expected: 5 image normalization tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/runtime/containerd.rs crates/nexad/src/adapters/runtime/mod.rs crates/nexad/src/adapters/runtime/detect.rs crates/nexad/Cargo.toml Cargo.toml
+git add crates/helyosd/src/adapters/runtime/containerd.rs crates/helyosd/src/adapters/runtime/mod.rs crates/helyosd/src/adapters/runtime/detect.rs crates/helyosd/Cargo.toml Cargo.toml
 git commit -m "feat: add ContainerdRuntime adapter with image pull, create, start, stop, remove, inspect"
 ```
 
@@ -1689,13 +1689,13 @@ git commit -m "feat: add ContainerdRuntime adapter with image pull, create, star
 ### Task 5: ContainerdRuntime adapter -- file-based log tailing
 
 **Files:**
-- Create: `crates/nexad/src/adapters/runtime/log_tailer.rs`
-- Modify: `crates/nexad/src/adapters/runtime/containerd.rs`
-- Modify: `crates/nexad/src/adapters/runtime/mod.rs`
+- Create: `crates/helyosd/src/adapters/runtime/log_tailer.rs`
+- Modify: `crates/helyosd/src/adapters/runtime/containerd.rs`
+- Modify: `crates/helyosd/src/adapters/runtime/mod.rs`
 
 - [ ] **Step 1: Write failing tests for log tailing**
 
-Create `crates/nexad/src/adapters/runtime/log_tailer.rs`:
+Create `crates/helyosd/src/adapters/runtime/log_tailer.rs`:
 
 ```rust
 use std::path::{Path, PathBuf};
@@ -1704,7 +1704,7 @@ use futures::Stream;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader, SeekFrom};
 use tracing::debug;
 
-use nexa_core::error::{NexaError, Result};
+use helyos_core::error::{HelyosError, Result};
 
 /// Tails a log file, returning the last N lines and then streaming new lines.
 pub struct LogTailer;
@@ -1716,7 +1716,7 @@ impl LogTailer {
         tail: Option<u64>,
     ) -> Result<impl Stream<Item = Result<String>>> {
         if !path.exists() {
-            return Err(NexaError::Runtime(format!(
+            return Err(HelyosError::Runtime(format!(
                 "log file not found: {}",
                 path.display()
             )));
@@ -1728,7 +1728,7 @@ impl LogTailer {
         // First, read the last N lines from the existing file content
         let existing = tokio::fs::read_to_string(&path)
             .await
-            .map_err(|e| NexaError::Runtime(format!("failed to read log: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("failed to read log: {e}")))?;
 
         let lines: Vec<String> = existing.lines().map(String::from).collect();
         let start = if lines.len() > tail_count {
@@ -1750,13 +1750,13 @@ impl LogTailer {
             let mut file = match tokio::fs::File::open(&path).await {
                 Ok(f) => f,
                 Err(e) => {
-                    yield Err(NexaError::Runtime(format!("failed to reopen log: {e}")));
+                    yield Err(HelyosError::Runtime(format!("failed to reopen log: {e}")));
                     return;
                 }
             };
 
             if let Err(e) = file.seek(SeekFrom::Start(file_len)).await {
-                yield Err(NexaError::Runtime(format!("failed to seek: {e}")));
+                yield Err(HelyosError::Runtime(format!("failed to seek: {e}")));
                 return;
             }
 
@@ -1777,7 +1777,7 @@ impl LogTailer {
                         }
                     }
                     Err(e) => {
-                        yield Err(NexaError::Runtime(format!("log read error: {e}")));
+                        yield Err(HelyosError::Runtime(format!("log read error: {e}")));
                         return;
                     }
                 }
@@ -1791,7 +1791,7 @@ impl LogTailer {
     pub async fn read_all(path: &Path) -> Result<Vec<String>> {
         let content = tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| NexaError::Runtime(format!("failed to read log: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("failed to read log: {e}")))?;
         Ok(content.lines().map(String::from).collect())
     }
 }
@@ -1915,14 +1915,14 @@ In the root `Cargo.toml`, add to `[workspace.dependencies]`:
 async-stream = "0.3"
 ```
 
-In `crates/nexad/Cargo.toml`, add to `[dependencies]`:
+In `crates/helyosd/Cargo.toml`, add to `[dependencies]`:
 
 ```toml
 async-stream = { workspace = true }
 tokio-stream = { workspace = true }
 ```
 
-Update `crates/nexad/src/adapters/runtime/mod.rs`:
+Update `crates/helyosd/src/adapters/runtime/mod.rs`:
 
 ```rust
 pub mod cni;
@@ -1939,7 +1939,7 @@ pub use docker::DockerRuntime;
 
 - [ ] **Step 3: Update ContainerdRuntime::logs to use LogTailer**
 
-In `crates/nexad/src/adapters/runtime/containerd.rs`, replace the `logs` method:
+In `crates/helyosd/src/adapters/runtime/containerd.rs`, replace the `logs` method:
 
 ```rust
     async fn logs(&self, id: &str, tail: Option<u64>) -> Result<LogStream> {
@@ -1951,28 +1951,28 @@ In `crates/nexad/src/adapters/runtime/containerd.rs`, replace the `logs` method:
 
 - [ ] **Step 4: Run log tailer tests**
 
-Run: `cargo test -p nexad -- adapters::runtime::log_tailer 2>&1`
+Run: `cargo test -p helyosd -- adapters::runtime::log_tailer 2>&1`
 Expected: all 5 tests pass
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/runtime/log_tailer.rs crates/nexad/src/adapters/runtime/mod.rs crates/nexad/src/adapters/runtime/containerd.rs crates/nexad/Cargo.toml Cargo.toml
+git add crates/helyosd/src/adapters/runtime/log_tailer.rs crates/helyosd/src/adapters/runtime/mod.rs crates/helyosd/src/adapters/runtime/containerd.rs crates/helyosd/Cargo.toml Cargo.toml
 git commit -m "feat: add file-based LogTailer for containerd log streaming"
 ```
 
 ---
 
-### Task 6: `nexa setup cni` command to download standard CNI plugins
+### Task 6: `helyos setup cni` command to download standard CNI plugins
 
 **Files:**
-- Modify: `crates/nexa-cli/src/main.rs`
-- Modify: `crates/nexa-cli/src/commands.rs`
-- Modify: `crates/nexa-cli/Cargo.toml`
+- Modify: `crates/helyos-cli/src/main.rs`
+- Modify: `crates/helyos-cli/src/commands.rs`
+- Modify: `crates/helyos-cli/Cargo.toml`
 
 - [ ] **Step 1: Add the setup cni subcommand to CLI**
 
-In `crates/nexa-cli/src/main.rs`, add a `Setup` subcommand to the existing `Cli` enum. The exact shape depends on the current CLI structure. Add to the `Commands` enum:
+In `crates/helyos-cli/src/main.rs`, add a `Setup` subcommand to the existing `Cli` enum. The exact shape depends on the current CLI structure. Add to the `Commands` enum:
 
 ```rust
     /// Setup system components
@@ -1990,7 +1990,7 @@ enum SetupComponent {
     /// Download and install standard CNI plugins
     Cni {
         /// Directory to install CNI plugin binaries
-        #[arg(long, default_value = "/var/lib/nexa/cni/bin")]
+        #[arg(long, default_value = "/var/lib/helyos/cni/bin")]
         bin_dir: String,
 
         /// CNI plugins version to download
@@ -2012,7 +2012,7 @@ Wire the command handler in the match block:
 
 - [ ] **Step 2: Implement setup_cni in commands.rs**
 
-Add to `crates/nexa-cli/src/commands.rs`:
+Add to `crates/helyos-cli/src/commands.rs`:
 
 ```rust
 use std::os::unix::fs::PermissionsExt;
@@ -2130,7 +2130,7 @@ flate2 = "1"
 tar = "0.4"
 ```
 
-In `crates/nexa-cli/Cargo.toml`, add to `[dependencies]`:
+In `crates/helyos-cli/Cargo.toml`, add to `[dependencies]`:
 
 ```toml
 flate2 = { workspace = true }
@@ -2139,17 +2139,17 @@ tar = { workspace = true }
 
 - [ ] **Step 4: Verify CLI compiles and shows help**
 
-Run: `cargo check -p nexa-cli 2>&1`
+Run: `cargo check -p helyos-cli 2>&1`
 Expected: compiles
 
-Run: `cargo run -p nexa-cli -- setup cni --help 2>&1`
+Run: `cargo run -p helyos-cli -- setup cni --help 2>&1`
 Expected: shows help text with --bin-dir and --version flags
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-cli/src/main.rs crates/nexa-cli/src/commands.rs crates/nexa-cli/Cargo.toml Cargo.toml
-git commit -m "feat: add 'nexa setup cni' command to download standard CNI plugins"
+git add crates/helyos-cli/src/main.rs crates/helyos-cli/src/commands.rs crates/helyos-cli/Cargo.toml Cargo.toml
+git commit -m "feat: add 'helyos setup cni' command to download standard CNI plugins"
 ```
 
 ---
@@ -2157,38 +2157,38 @@ git commit -m "feat: add 'nexa setup cni' command to download standard CNI plugi
 ### Task 7: Integration test suite for both runtimes
 
 **Files:**
-- Create: `crates/nexad/tests/runtime_integration.rs`
+- Create: `crates/helyosd/tests/runtime_integration.rs`
 
 - [ ] **Step 1: Write the shared integration test suite**
 
-Create `crates/nexad/tests/runtime_integration.rs`:
+Create `crates/helyosd/tests/runtime_integration.rs`:
 
 ```rust
 //! Integration tests that run the same ContainerRuntime test suite against
 //! both Docker and containerd backends.
 //!
 //! These tests require actual runtimes running on the host.
-//! Skip with: `cargo test -p nexad --test runtime_integration -- --ignored`
+//! Skip with: `cargo test -p helyosd --test runtime_integration -- --ignored`
 //!
 //! To run:
-//!   NEXA_TEST_RUNTIME=docker cargo test -p nexad --test runtime_integration
-//!   NEXA_TEST_RUNTIME=containerd cargo test -p nexad --test runtime_integration
+//!   HELYOS_TEST_RUNTIME=docker cargo test -p helyosd --test runtime_integration
+//!   HELYOS_TEST_RUNTIME=containerd cargo test -p helyosd --test runtime_integration
 
 use std::sync::Arc;
 
-use nexa_core::error::Result;
-use nexa_core::runtime::*;
+use helyos_core::error::Result;
+use helyos_core::runtime::*;
 
 /// The test image -- must be small and widely available
 const TEST_IMAGE: &str = "busybox:latest";
 const TEST_TIMEOUT: u64 = 30;
 
 async fn get_runtime() -> Option<Arc<dyn ContainerRuntime>> {
-    let runtime_name = std::env::var("NEXA_TEST_RUNTIME").unwrap_or("docker".into());
+    let runtime_name = std::env::var("HELYOS_TEST_RUNTIME").unwrap_or("docker".into());
 
     match runtime_name.as_str() {
         "docker" => {
-            use nexad::adapters::runtime::DockerRuntime;
+            use helyosd::adapters::runtime::DockerRuntime;
             match DockerRuntime::new() {
                 Ok(rt) => {
                     if rt.ping().await.is_ok() {
@@ -2205,8 +2205,8 @@ async fn get_runtime() -> Option<Arc<dyn ContainerRuntime>> {
             }
         }
         "containerd" => {
-            use nexad::adapters::runtime::ContainerdRuntime;
-            match ContainerdRuntime::new("/tmp/nexa-test").await {
+            use helyosd::adapters::runtime::ContainerdRuntime;
+            match ContainerdRuntime::new("/tmp/helyos-test").await {
                 Ok(rt) => {
                     if rt.ping().await.is_ok() {
                         Some(Arc::new(rt))
@@ -2222,14 +2222,14 @@ async fn get_runtime() -> Option<Arc<dyn ContainerRuntime>> {
             }
         }
         other => {
-            panic!("Unknown NEXA_TEST_RUNTIME: {other}");
+            panic!("Unknown HELYOS_TEST_RUNTIME: {other}");
         }
     }
 }
 
 fn unique_name(prefix: &str) -> String {
     let id = uuid::Uuid::new_v4().to_string()[..8].to_string();
-    format!("nexa-test-{prefix}-{id}")
+    format!("helyos-test-{prefix}-{id}")
 }
 
 #[tokio::test]
@@ -2252,7 +2252,7 @@ async fn test_create_start_stop_remove() {
         env: std::collections::HashMap::from([("TEST_VAR".into(), "hello".into())]),
         ports: vec![],
         volumes: vec![],
-        labels: std::collections::HashMap::from([("managed-by".into(), "nexanet-test".into())]),
+        labels: std::collections::HashMap::from([("managed-by".into(), "helyos-test".into())]),
         network: None,
         dns: vec![],
         dns_search: vec![],
@@ -2359,9 +2359,9 @@ async fn test_runtime_name() {
 }
 ```
 
-- [ ] **Step 2: Add uuid dev-dependency to nexad and make adapters public for integration tests**
+- [ ] **Step 2: Add uuid dev-dependency to helyosd and make adapters public for integration tests**
 
-In `crates/nexad/Cargo.toml`, add:
+In `crates/helyosd/Cargo.toml`, add:
 
 ```toml
 [dev-dependencies]
@@ -2369,48 +2369,48 @@ tempfile = "3"
 uuid = { workspace = true }
 ```
 
-In `crates/nexad/src/main.rs` (or `lib.rs` if you have one), add to make the adapters module accessible from integration tests:
+In `crates/helyosd/src/main.rs` (or `lib.rs` if you have one), add to make the adapters module accessible from integration tests:
 
-Create `crates/nexad/src/lib.rs`:
+Create `crates/helyosd/src/lib.rs`:
 
 ```rust
 pub mod adapters;
 ```
 
-Ensure `crates/nexad/src/main.rs` does not re-declare `mod adapters;` as private if `lib.rs` exports it. Update `main.rs` to use:
+Ensure `crates/helyosd/src/main.rs` does not re-declare `mod adapters;` as private if `lib.rs` exports it. Update `main.rs` to use:
 
 ```rust
-use nexad::adapters;
+use helyosd::adapters;
 ```
 
 - [ ] **Step 3: Verify integration tests compile (but skip execution)**
 
-Run: `cargo test -p nexad --test runtime_integration --no-run 2>&1`
+Run: `cargo test -p helyosd --test runtime_integration --no-run 2>&1`
 Expected: compiles
 
 - [ ] **Step 4: Run integration tests against Docker (if available)**
 
-Run: `NEXA_TEST_RUNTIME=docker cargo test -p nexad --test runtime_integration -- --ignored 2>&1`
+Run: `HELYOS_TEST_RUNTIME=docker cargo test -p helyosd --test runtime_integration -- --ignored 2>&1`
 Expected: all tests pass (or skip gracefully if Docker is not running)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/tests/runtime_integration.rs crates/nexad/src/lib.rs crates/nexad/src/main.rs crates/nexad/Cargo.toml
+git add crates/helyosd/tests/runtime_integration.rs crates/helyosd/src/lib.rs crates/helyosd/src/main.rs crates/helyosd/Cargo.toml
 git commit -m "feat: add integration test suite for ContainerRuntime (Docker + containerd)"
 ```
 
 ---
 
-### Task 8: Wire runtime selection into nexad composition root
+### Task 8: Wire runtime selection into helyosd composition root
 
 **Files:**
-- Modify: `crates/nexad/src/main.rs`
-- Modify: `crates/nexad/src/engine/orchestrator.rs`
+- Modify: `crates/helyosd/src/main.rs`
+- Modify: `crates/helyosd/src/engine/orchestrator.rs`
 
 - [ ] **Step 1: Write a test that Orchestrator accepts any ContainerRuntime**
 
-In `crates/nexad/src/engine/orchestrator.rs`, add at the bottom:
+In `crates/helyosd/src/engine/orchestrator.rs`, add at the bottom:
 
 ```rust
 #[cfg(test)]
@@ -2421,20 +2421,20 @@ mod tests {
     use std::pin::Pin;
 
     use futures::Stream;
-    use nexa_core::runtime::*;
+    use helyos_core::runtime::*;
 
     struct MockRuntime;
 
     #[async_trait::async_trait]
     impl ContainerRuntime for MockRuntime {
-        async fn pull_image(&self, _image: &str) -> nexa_core::error::Result<()> { Ok(()) }
-        async fn create_container(&self, config: &ContainerConfig) -> nexa_core::error::Result<String> {
+        async fn pull_image(&self, _image: &str) -> helyos_core::error::Result<()> { Ok(()) }
+        async fn create_container(&self, config: &ContainerConfig) -> helyos_core::error::Result<String> {
             Ok(format!("mock-{}", config.name))
         }
-        async fn start_container(&self, _id: &str) -> nexa_core::error::Result<()> { Ok(()) }
-        async fn stop_container(&self, _id: &str, _t: u64) -> nexa_core::error::Result<()> { Ok(()) }
-        async fn remove_container(&self, _id: &str, _f: bool) -> nexa_core::error::Result<()> { Ok(()) }
-        async fn inspect_container(&self, _id: &str) -> nexa_core::error::Result<ContainerInfo> {
+        async fn start_container(&self, _id: &str) -> helyos_core::error::Result<()> { Ok(()) }
+        async fn stop_container(&self, _id: &str, _t: u64) -> helyos_core::error::Result<()> { Ok(()) }
+        async fn remove_container(&self, _id: &str, _f: bool) -> helyos_core::error::Result<()> { Ok(()) }
+        async fn inspect_container(&self, _id: &str) -> helyos_core::error::Result<ContainerInfo> {
             Ok(ContainerInfo {
                 id: "mock".into(),
                 name: "mock".into(),
@@ -2442,17 +2442,17 @@ mod tests {
                 state: ContainerState::Running,
             })
         }
-        async fn logs(&self, _id: &str, _tail: Option<u64>) -> nexa_core::error::Result<LogStream> {
+        async fn logs(&self, _id: &str, _tail: Option<u64>) -> helyos_core::error::Result<LogStream> {
             Ok(Box::pin(futures::stream::empty()))
         }
-        async fn container_exists(&self, _name: &str) -> nexa_core::error::Result<bool> { Ok(false) }
-        async fn create_network(&self, _name: &str) -> nexa_core::error::Result<String> { Ok("net-id".into()) }
-        async fn remove_network(&self, _name: &str) -> nexa_core::error::Result<()> { Ok(()) }
-        async fn connect_to_network(&self, _id: &str, _net: &str) -> nexa_core::error::Result<()> { Ok(()) }
-        async fn container_ip(&self, _id: &str, _net: &str) -> nexa_core::error::Result<IpAddr> {
+        async fn container_exists(&self, _name: &str) -> helyos_core::error::Result<bool> { Ok(false) }
+        async fn create_network(&self, _name: &str) -> helyos_core::error::Result<String> { Ok("net-id".into()) }
+        async fn remove_network(&self, _name: &str) -> helyos_core::error::Result<()> { Ok(()) }
+        async fn connect_to_network(&self, _id: &str, _net: &str) -> helyos_core::error::Result<()> { Ok(()) }
+        async fn container_ip(&self, _id: &str, _net: &str) -> helyos_core::error::Result<IpAddr> {
             Ok(IpAddr::V4(Ipv4Addr::new(172, 20, 0, 2)))
         }
-        async fn events(&self) -> nexa_core::error::Result<EventStream> {
+        async fn events(&self) -> helyos_core::error::Result<EventStream> {
             Ok(Box::pin(futures::stream::empty()))
         }
         fn runtime_name(&self) -> &'static str { "mock" }
@@ -2471,9 +2471,9 @@ mod tests {
         let runtime: Arc<dyn ContainerRuntime> = Arc::new(MockRuntime);
         let orch = Orchestrator::new_with_runtime(runtime).await.unwrap();
 
-        let spec = nexa_core::models::DeploymentSpec {
+        let spec = helyos_core::models::DeploymentSpec {
             project: "test".into(),
-            deployment: nexa_core::models::DeploymentMeta { name: "api".into() },
+            deployment: helyos_core::models::DeploymentMeta { name: "api".into() },
             replicas: 1,
             image: "nginx:latest".into(),
             ports: vec![8080],
@@ -2481,7 +2481,7 @@ mod tests {
             volumes: vec![],
             network: None,
             healthcheck: None,
-            restart: nexa_core::models::RestartPolicy::default(),
+            restart: helyos_core::models::RestartPolicy::default(),
         };
 
         let deployment = orch.deploy(spec).await.unwrap();
@@ -2496,17 +2496,17 @@ mod tests {
 
 - [ ] **Step 2: Run tests**
 
-Run: `cargo test -p nexad -- engine::orchestrator::tests 2>&1`
+Run: `cargo test -p helyosd -- engine::orchestrator::tests 2>&1`
 Expected: 2 tests pass
 
-- [ ] **Step 3: Verify the full nexad binary compiles with runtime selection**
+- [ ] **Step 3: Verify the full helyosd binary compiles with runtime selection**
 
-Run: `cargo build -p nexad 2>&1`
+Run: `cargo build -p helyosd 2>&1`
 Expected: builds successfully
 
 - [ ] **Step 4: Verify end-to-end help output**
 
-Run: `cargo run -p nexad -- --help 2>&1`
+Run: `cargo run -p helyosd -- --help 2>&1`
 Expected output includes:
 ```
 --runtime <RUNTIME>  Container runtime to use: docker, containerd, or auto (default) [default: auto]
@@ -2515,20 +2515,20 @@ Expected output includes:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/engine/orchestrator.rs crates/nexad/src/main.rs
-git commit -m "feat: wire runtime selection into nexad composition root with MockRuntime tests"
+git add crates/helyosd/src/engine/orchestrator.rs crates/helyosd/src/main.rs
+git commit -m "feat: wire runtime selection into helyosd composition root with MockRuntime tests"
 ```
 
 ---
 
-### Task 9: Add NexaError variants for containerd-specific errors
+### Task 9: Add HelyosError variants for containerd-specific errors
 
 **Files:**
-- Modify: `crates/nexa-core/src/error.rs`
+- Modify: `crates/helyos-core/src/error.rs`
 
 - [ ] **Step 1: Add new error variants**
 
-In `crates/nexa-core/src/error.rs`, add to the `NexaError` enum:
+In `crates/helyos-core/src/error.rs`, add to the `HelyosError` enum:
 
 ```rust
     #[error("CNI error: {0}")]
@@ -2546,8 +2546,8 @@ Expected: compiles
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/nexa-core/src/error.rs
-git commit -m "feat: add Cni and RuntimeNotAvailable error variants to NexaError"
+git add crates/helyos-core/src/error.rs
+git commit -m "feat: add Cni and RuntimeNotAvailable error variants to HelyosError"
 ```
 
 ---
@@ -2569,12 +2569,12 @@ Expected: no errors (warnings acceptable for now)
 
 - [ ] **Step 3: Verify Docker runtime still works end-to-end**
 
-Run: `cargo run -p nexad -- --runtime docker --help 2>&1`
+Run: `cargo run -p helyosd -- --runtime docker --help 2>&1`
 Expected: shows full help output
 
 - [ ] **Step 4: Check that --runtime containerd is accepted**
 
-Run: `cargo run -p nexad -- --runtime containerd --help 2>&1`
+Run: `cargo run -p helyosd -- --runtime containerd --help 2>&1`
 Expected: shows full help output (actual startup would fail without containerd socket, but the flag is parsed)
 
 - [ ] **Step 5: Verify file structure**
@@ -2582,15 +2582,15 @@ Expected: shows full help output (actual startup would fail without containerd s
 Run: `find crates -name "*.rs" -path "*/runtime/*" | sort`
 Expected output:
 ```
-crates/nexa-core/src/runtime/docker.rs
-crates/nexa-core/src/runtime/mod.rs
-crates/nexa-core/src/runtime/traits.rs
-crates/nexad/src/adapters/runtime/cni.rs
-crates/nexad/src/adapters/runtime/containerd.rs
-crates/nexad/src/adapters/runtime/detect.rs
-crates/nexad/src/adapters/runtime/docker.rs
-crates/nexad/src/adapters/runtime/log_tailer.rs
-crates/nexad/src/adapters/runtime/mod.rs
+crates/helyos-core/src/runtime/docker.rs
+crates/helyos-core/src/runtime/mod.rs
+crates/helyos-core/src/runtime/traits.rs
+crates/helyosd/src/adapters/runtime/cni.rs
+crates/helyosd/src/adapters/runtime/containerd.rs
+crates/helyosd/src/adapters/runtime/detect.rs
+crates/helyosd/src/adapters/runtime/docker.rs
+crates/helyosd/src/adapters/runtime/log_tailer.rs
+crates/helyosd/src/adapters/runtime/mod.rs
 ```
 
 - [ ] **Step 6: Final commit**

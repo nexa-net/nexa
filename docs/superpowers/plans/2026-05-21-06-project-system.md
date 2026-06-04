@@ -5,15 +5,15 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
-**Goal:** Make projects the universal isolation boundary for all NexaNet resources, add encrypted secrets management per project, and implement project lifecycle commands (suspend/resume/delete).
+**Goal:** Make projects the universal isolation boundary for all Helyos resources, add encrypted secrets management per project, and implement project lifecycle commands (suspend/resume/delete).
 
-**Architecture:** Every resource (deployments, pods, secrets, networks, volumes) is scoped to exactly one project. A `SecretStore` port trait in nexa-core defines encrypted secret CRUD. The `EncryptedSqliteSecretStore` adapter in nexad uses AES-256-GCM with a file-based master key. The orchestrator resolves and injects secrets into container env vars at deploy time, and gains three new commands for project lifecycle management (suspend stops all pods and blocks deploys, resume re-enables and reconciles, delete requires empty project).
+**Architecture:** Every resource (deployments, pods, secrets, networks, volumes) is scoped to exactly one project. A `SecretStore` port trait in helyos-core defines encrypted secret CRUD. The `EncryptedSqliteSecretStore` adapter in helyosd uses AES-256-GCM with a file-based master key. The orchestrator resolves and injects secrets into container env vars at deploy time, and gains three new commands for project lifecycle management (suspend stops all pods and blocks deploys, resume re-enables and reconciles, delete requires empty project).
 
 **Tech Stack:** aes-gcm 0.10, rand 0.8, rusqlite (existing via SQLite schema), async-trait, tokio, tempfile (dev)
 
@@ -22,12 +22,12 @@
 ### Task 1: Define SecretStore trait in ports/secrets.rs
 
 **Files:**
-- Create: `crates/nexa-core/src/ports/secrets.rs`
-- Modify: `crates/nexa-core/src/ports/mod.rs` (add `pub mod secrets;`)
+- Create: `crates/helyos-core/src/ports/secrets.rs`
+- Modify: `crates/helyos-core/src/ports/mod.rs` (add `pub mod secrets;`)
 
 - [ ] **Step 1: Write the SecretStore trait**
 
-Create `crates/nexa-core/src/ports/secrets.rs`:
+Create `crates/helyos-core/src/ports/secrets.rs`:
 
 ```rust
 use async_trait::async_trait;
@@ -57,34 +57,34 @@ pub trait SecretStore: Send + Sync {
 
 - [ ] **Step 2: Register the module in ports/mod.rs**
 
-In `crates/nexa-core/src/ports/mod.rs`, add:
+In `crates/helyos-core/src/ports/mod.rs`, add:
 
 ```rust
 pub mod secrets;
 ```
 
-The file was created in Plan #1 with `pub mod runtime;`. If the hexagonal restructure from Plan #1 has not been applied yet (codebase still uses `nexa-core/src/runtime/`), create `crates/nexa-core/src/ports/mod.rs`:
+The file was created in Plan #1 with `pub mod runtime;`. If the hexagonal restructure from Plan #1 has not been applied yet (codebase still uses `helyos-core/src/runtime/`), create `crates/helyos-core/src/ports/mod.rs`:
 
 ```rust
 pub mod runtime;
 pub mod secrets;
 ```
 
-And add `pub mod ports;` to `crates/nexa-core/src/lib.rs`.
+And add `pub mod ports;` to `crates/helyos-core/src/lib.rs`.
 
-- [ ] **Step 3: Add NexaError variant for secrets**
+- [ ] **Step 3: Add HelyosError variant for secrets**
 
-In `crates/nexa-core/src/error.rs`, add a new variant to `NexaError`:
+In `crates/helyos-core/src/error.rs`, add a new variant to `HelyosError`:
 
 ```rust
     #[error("secret error: {0}")]
     Secret(String),
 ```
 
-- [ ] **Step 4: Verify nexa-core compiles**
+- [ ] **Step 4: Verify helyos-core compiles**
 
 ```bash
-cargo check -p nexa-core 2>&1
+cargo check -p helyos-core 2>&1
 ```
 
 Expected: compiles with no errors.
@@ -92,7 +92,7 @@ Expected: compiles with no errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/ crates/nexa-core/src/lib.rs crates/nexa-core/src/error.rs
+git add crates/helyos-core/src/ports/ crates/helyos-core/src/lib.rs crates/helyos-core/src/error.rs
 git commit -m "feat: define SecretStore port trait for project-scoped secrets"
 ```
 
@@ -101,9 +101,9 @@ git commit -m "feat: define SecretStore port trait for project-scoped secrets"
 ### Task 2: Implement master key generation utility
 
 **Files:**
-- Create: `crates/nexad/src/crypto/mod.rs`
-- Create: `crates/nexad/src/crypto/master_key.rs`
-- Modify: `crates/nexad/Cargo.toml` (add `aes-gcm`, `rand`)
+- Create: `crates/helyosd/src/crypto/mod.rs`
+- Create: `crates/helyosd/src/crypto/master_key.rs`
+- Modify: `crates/helyosd/Cargo.toml` (add `aes-gcm`, `rand`)
 - Modify: `Cargo.toml` (add workspace deps `aes-gcm`, `rand`)
 
 - [ ] **Step 1: Add workspace dependencies**
@@ -115,7 +115,7 @@ aes-gcm = "0.10"
 rand = "0.8"
 ```
 
-In `crates/nexad/Cargo.toml` `[dependencies]`, add:
+In `crates/helyosd/Cargo.toml` `[dependencies]`, add:
 
 ```toml
 aes-gcm = { workspace = true }
@@ -124,13 +124,13 @@ rand = { workspace = true }
 
 - [ ] **Step 2: Write failing test for master key load-or-generate**
 
-Create `crates/nexad/src/crypto/master_key.rs`:
+Create `crates/helyosd/src/crypto/master_key.rs`:
 
 ```rust
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use nexa_core::error::{NexaError, Result};
+use helyos_core::error::{HelyosError, Result};
 
 const KEY_LEN: usize = 32; // AES-256
 
@@ -149,11 +149,11 @@ pub fn load_or_generate(data_dir: &Path) -> Result<[u8; KEY_LEN]> {
 
 fn load_key(path: &PathBuf) -> Result<[u8; KEY_LEN]> {
     let bytes = fs::read(path).map_err(|e| {
-        NexaError::Secret(format!("failed to read master key at {}: {e}", path.display()))
+        HelyosError::Secret(format!("failed to read master key at {}: {e}", path.display()))
     })?;
 
     if bytes.len() != KEY_LEN {
-        return Err(NexaError::Secret(format!(
+        return Err(HelyosError::Secret(format!(
             "master key has invalid length: expected {KEY_LEN}, got {}",
             bytes.len()
         )));
@@ -170,7 +170,7 @@ fn generate_key(path: &PathBuf) -> Result<[u8; KEY_LEN]> {
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
-            NexaError::Secret(format!(
+            HelyosError::Secret(format!(
                 "failed to create data dir {}: {e}",
                 parent.display()
             ))
@@ -181,7 +181,7 @@ fn generate_key(path: &PathBuf) -> Result<[u8; KEY_LEN]> {
     rand::thread_rng().fill_bytes(&mut key);
 
     fs::write(path, &key).map_err(|e| {
-        NexaError::Secret(format!(
+        HelyosError::Secret(format!(
             "failed to write master key to {}: {e}",
             path.display()
         ))
@@ -193,7 +193,7 @@ fn generate_key(path: &PathBuf) -> Result<[u8; KEY_LEN]> {
         use std::os::unix::fs::PermissionsExt;
         let perms = fs::Permissions::from_mode(0o600);
         fs::set_permissions(path, perms).map_err(|e| {
-            NexaError::Secret(format!("failed to set permissions on master key: {e}"))
+            HelyosError::Secret(format!("failed to set permissions on master key: {e}"))
         })?;
     }
 
@@ -257,19 +257,19 @@ mod tests {
 
 - [ ] **Step 3: Create crypto/mod.rs**
 
-Create `crates/nexad/src/crypto/mod.rs`:
+Create `crates/helyosd/src/crypto/mod.rs`:
 
 ```rust
 pub mod master_key;
 ```
 
-- [ ] **Step 4: Register crypto module in nexad**
+- [ ] **Step 4: Register crypto module in helyosd**
 
-In `crates/nexad/src/main.rs`, add `mod crypto;` alongside the existing module declarations.
+In `crates/helyosd/src/main.rs`, add `mod crypto;` alongside the existing module declarations.
 
-- [ ] **Step 5: Add tempfile dev-dependency to nexad**
+- [ ] **Step 5: Add tempfile dev-dependency to helyosd**
 
-In `crates/nexad/Cargo.toml`, add:
+In `crates/helyosd/Cargo.toml`, add:
 
 ```toml
 [dev-dependencies]
@@ -279,7 +279,7 @@ tempfile = "3"
 - [ ] **Step 6: Run tests**
 
 ```bash
-cargo test -p nexad -- crypto::master_key 2>&1
+cargo test -p helyosd -- crypto::master_key 2>&1
 ```
 
 Expected: all 4 tests pass (3 on non-Unix, 4 on Unix/macOS).
@@ -287,7 +287,7 @@ Expected: all 4 tests pass (3 on non-Unix, 4 on Unix/macOS).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Cargo.toml crates/nexad/Cargo.toml crates/nexad/src/crypto/ crates/nexad/src/main.rs
+git add Cargo.toml crates/helyosd/Cargo.toml crates/helyosd/src/crypto/ crates/helyosd/src/main.rs
 git commit -m "feat: add master key generation with AES-256 (32-byte random, 0600 perms)"
 ```
 
@@ -296,10 +296,10 @@ git commit -m "feat: add master key generation with AES-256 (32-byte random, 060
 ### Task 3: Implement EncryptedSqliteSecretStore adapter
 
 **Files:**
-- Create: `crates/nexad/src/adapters/secrets/mod.rs`
-- Create: `crates/nexad/src/adapters/secrets/encrypted.rs`
-- Modify: `crates/nexad/src/adapters/mod.rs` (add `pub mod secrets;`)
-- Modify: `crates/nexad/Cargo.toml` (add `rusqlite`)
+- Create: `crates/helyosd/src/adapters/secrets/mod.rs`
+- Create: `crates/helyosd/src/adapters/secrets/encrypted.rs`
+- Modify: `crates/helyosd/src/adapters/mod.rs` (add `pub mod secrets;`)
+- Modify: `crates/helyosd/Cargo.toml` (add `rusqlite`)
 
 - [ ] **Step 1: Add rusqlite dependency**
 
@@ -309,7 +309,7 @@ In root `Cargo.toml` `[workspace.dependencies]`, add:
 rusqlite = { version = "0.31", features = ["bundled"] }
 ```
 
-In `crates/nexad/Cargo.toml` `[dependencies]`, add:
+In `crates/helyosd/Cargo.toml` `[dependencies]`, add:
 
 ```toml
 rusqlite = { workspace = true }
@@ -317,7 +317,7 @@ rusqlite = { workspace = true }
 
 - [ ] **Step 2: Write the EncryptedSqliteSecretStore with tests**
 
-Create `crates/nexad/src/adapters/secrets/encrypted.rs`:
+Create `crates/helyosd/src/adapters/secrets/encrypted.rs`:
 
 ```rust
 use std::sync::Arc;
@@ -328,8 +328,8 @@ use async_trait::async_trait;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
 
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::secrets::SecretStore;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::secrets::SecretStore;
 
 /// Encrypted secret store backed by SQLite.
 ///
@@ -344,7 +344,7 @@ impl EncryptedSqliteSecretStore {
     /// Create a new store. `master_key` must be exactly 32 bytes.
     pub fn new(conn: Connection, master_key: &[u8; 32]) -> Result<Self> {
         let cipher = Aes256Gcm::new_from_slice(master_key)
-            .map_err(|e| NexaError::Secret(format!("invalid master key: {e}")))?;
+            .map_err(|e| HelyosError::Secret(format!("invalid master key: {e}")))?;
 
         let store = Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -359,7 +359,7 @@ impl EncryptedSqliteSecretStore {
         // We need to block on the mutex since this is called from new()
         // which is not async. Use try_lock since we just created the mutex.
         let conn = self.conn.try_lock().map_err(|_| {
-            NexaError::Secret("failed to lock connection during init".into())
+            HelyosError::Secret("failed to lock connection during init".into())
         })?;
 
         conn.execute_batch(
@@ -372,7 +372,7 @@ impl EncryptedSqliteSecretStore {
                 PRIMARY KEY (project, name)
             );",
         )
-        .map_err(|e| NexaError::Secret(format!("failed to create secrets table: {e}")))?;
+        .map_err(|e| HelyosError::Secret(format!("failed to create secrets table: {e}")))?;
 
         Ok(())
     }
@@ -382,7 +382,7 @@ impl EncryptedSqliteSecretStore {
         let ciphertext = self
             .cipher
             .encrypt(&nonce, plaintext)
-            .map_err(|e| NexaError::Secret(format!("encryption failed: {e}")))?;
+            .map_err(|e| HelyosError::Secret(format!("encryption failed: {e}")))?;
 
         // nonce (12 bytes) || ciphertext
         let mut blob = nonce.to_vec();
@@ -392,7 +392,7 @@ impl EncryptedSqliteSecretStore {
 
     fn decrypt(&self, blob: &[u8]) -> Result<Vec<u8>> {
         if blob.len() < 12 {
-            return Err(NexaError::Secret("ciphertext too short".into()));
+            return Err(HelyosError::Secret("ciphertext too short".into()));
         }
 
         let (nonce_bytes, ciphertext) = blob.split_at(12);
@@ -400,7 +400,7 @@ impl EncryptedSqliteSecretStore {
 
         self.cipher
             .decrypt(nonce, ciphertext)
-            .map_err(|e| NexaError::Secret(format!("decryption failed: {e}")))
+            .map_err(|e| HelyosError::Secret(format!("decryption failed: {e}")))
     }
 }
 
@@ -417,7 +417,7 @@ impl SecretStore for EncryptedSqliteSecretStore {
              DO UPDATE SET value = ?3, updated_at = datetime('now')",
             rusqlite::params![project, name, encrypted],
         )
-        .map_err(|e| NexaError::Secret(format!("failed to set secret: {e}")))?;
+        .map_err(|e| HelyosError::Secret(format!("failed to set secret: {e}")))?;
 
         Ok(())
     }
@@ -427,7 +427,7 @@ impl SecretStore for EncryptedSqliteSecretStore {
 
         let mut stmt = conn
             .prepare("SELECT value FROM secrets WHERE project = ?1 AND name = ?2")
-            .map_err(|e| NexaError::Secret(format!("query failed: {e}")))?;
+            .map_err(|e| HelyosError::Secret(format!("query failed: {e}")))?;
 
         let result: std::result::Result<Vec<u8>, _> =
             stmt.query_row(rusqlite::params![project, name], |row| row.get(0));
@@ -438,7 +438,7 @@ impl SecretStore for EncryptedSqliteSecretStore {
                 Ok(Some(plaintext))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(NexaError::Secret(format!("failed to get secret: {e}"))),
+            Err(e) => Err(HelyosError::Secret(format!("failed to get secret: {e}"))),
         }
     }
 
@@ -447,14 +447,14 @@ impl SecretStore for EncryptedSqliteSecretStore {
 
         let mut stmt = conn
             .prepare("SELECT name FROM secrets WHERE project = ?1 ORDER BY name")
-            .map_err(|e| NexaError::Secret(format!("query failed: {e}")))?;
+            .map_err(|e| HelyosError::Secret(format!("query failed: {e}")))?;
 
         let names: std::result::Result<Vec<String>, _> = stmt
             .query_map(rusqlite::params![project], |row| row.get(0))
-            .map_err(|e| NexaError::Secret(format!("failed to list secrets: {e}")))?
+            .map_err(|e| HelyosError::Secret(format!("failed to list secrets: {e}")))?
             .collect();
 
-        names.map_err(|e| NexaError::Secret(format!("failed to collect secret names: {e}")))
+        names.map_err(|e| HelyosError::Secret(format!("failed to collect secret names: {e}")))
     }
 
     async fn delete(&self, project: &str, name: &str) -> Result<()> {
@@ -464,7 +464,7 @@ impl SecretStore for EncryptedSqliteSecretStore {
             "DELETE FROM secrets WHERE project = ?1 AND name = ?2",
             rusqlite::params![project, name],
         )
-        .map_err(|e| NexaError::Secret(format!("failed to delete secret: {e}")))?;
+        .map_err(|e| HelyosError::Secret(format!("failed to delete secret: {e}")))?;
 
         Ok(())
     }
@@ -618,7 +618,7 @@ mod tests {
 
 - [ ] **Step 3: Create adapters/secrets/mod.rs**
 
-Create `crates/nexad/src/adapters/secrets/mod.rs`:
+Create `crates/helyosd/src/adapters/secrets/mod.rs`:
 
 ```rust
 mod encrypted;
@@ -628,24 +628,24 @@ pub use encrypted::EncryptedSqliteSecretStore;
 
 - [ ] **Step 4: Register secrets adapter module**
 
-In `crates/nexad/src/adapters/mod.rs`, add:
+In `crates/helyosd/src/adapters/mod.rs`, add:
 
 ```rust
 pub mod secrets;
 ```
 
-If the adapters module does not exist yet (Plan #1 not applied), create `crates/nexad/src/adapters/mod.rs`:
+If the adapters module does not exist yet (Plan #1 not applied), create `crates/helyosd/src/adapters/mod.rs`:
 
 ```rust
 pub mod secrets;
 ```
 
-And add `mod adapters;` to `crates/nexad/src/main.rs`.
+And add `mod adapters;` to `crates/helyosd/src/main.rs`.
 
 - [ ] **Step 5: Run tests**
 
 ```bash
-cargo test -p nexad -- adapters::secrets 2>&1
+cargo test -p helyosd -- adapters::secrets 2>&1
 ```
 
 Expected: all 10 tests pass.
@@ -653,7 +653,7 @@ Expected: all 10 tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Cargo.toml crates/nexad/Cargo.toml crates/nexad/src/adapters/secrets/
+git add Cargo.toml crates/helyosd/Cargo.toml crates/helyosd/src/adapters/secrets/
 git commit -m "feat: implement EncryptedSqliteSecretStore with AES-256-GCM encryption"
 ```
 
@@ -662,13 +662,13 @@ git commit -m "feat: implement EncryptedSqliteSecretStore with AES-256-GCM encry
 ### Task 4: Add PlaintextSecretStore for tests
 
 **Files:**
-- Create: `crates/nexa-core/src/ports/secrets_test.rs`
+- Create: `crates/helyos-core/src/ports/secrets_test.rs`
 
 This is a HashMap-backed in-memory store with no encryption, used in orchestrator unit tests.
 
 - [ ] **Step 1: Write PlaintextSecretStore**
 
-Create `crates/nexa-core/src/ports/secrets_test.rs`:
+Create `crates/helyos-core/src/ports/secrets_test.rs`:
 
 ```rust
 use std::collections::HashMap;
@@ -777,30 +777,30 @@ mod tests {
 
 - [ ] **Step 2: Register the test module conditionally**
 
-In `crates/nexa-core/src/ports/mod.rs`, add:
+In `crates/helyos-core/src/ports/mod.rs`, add:
 
 ```rust
 #[cfg(any(test, feature = "test-utils"))]
 pub mod secrets_test;
 ```
 
-In `crates/nexa-core/Cargo.toml`, add a feature:
+In `crates/helyos-core/Cargo.toml`, add a feature:
 
 ```toml
 [features]
 test-utils = []
 ```
 
-In `crates/nexad/Cargo.toml` under `[dev-dependencies]`, add:
+In `crates/helyosd/Cargo.toml` under `[dev-dependencies]`, add:
 
 ```toml
-nexa-core = { workspace = true, features = ["test-utils"] }
+helyos-core = { workspace = true, features = ["test-utils"] }
 ```
 
 - [ ] **Step 3: Run tests**
 
 ```bash
-cargo test -p nexa-core -- ports::secrets_test 2>&1
+cargo test -p helyos-core -- ports::secrets_test 2>&1
 ```
 
 Expected: 3 tests pass.
@@ -808,7 +808,7 @@ Expected: 3 tests pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/secrets_test.rs crates/nexa-core/src/ports/mod.rs crates/nexa-core/Cargo.toml crates/nexad/Cargo.toml
+git add crates/helyos-core/src/ports/secrets_test.rs crates/helyos-core/src/ports/mod.rs crates/helyos-core/Cargo.toml crates/helyosd/Cargo.toml
 git commit -m "feat: add PlaintextSecretStore test double for orchestrator tests"
 ```
 
@@ -817,12 +817,12 @@ git commit -m "feat: add PlaintextSecretStore test double for orchestrator tests
 ### Task 5: Add project lifecycle commands to Command enum and Project model
 
 **Files:**
-- Modify: `crates/nexa-core/src/models/project.rs` (add `ProjectStatus`, `status` field)
-- Modify: engine orchestrator or `crates/nexa-core/src/domain/orchestrator.rs` (add `SuspendProject`, `ResumeProject`, `DeleteProject` commands)
+- Modify: `crates/helyos-core/src/models/project.rs` (add `ProjectStatus`, `status` field)
+- Modify: engine orchestrator or `crates/helyos-core/src/domain/orchestrator.rs` (add `SuspendProject`, `ResumeProject`, `DeleteProject` commands)
 
 - [ ] **Step 1: Add ProjectStatus to Project model**
 
-In `crates/nexa-core/src/models/project.rs`, replace the entire file:
+In `crates/helyos-core/src/models/project.rs`, replace the entire file:
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -869,7 +869,7 @@ impl Project {
 
 - [ ] **Step 2: Add ProjectSuspended error variant**
 
-In `crates/nexa-core/src/error.rs`, add:
+In `crates/helyos-core/src/error.rs`, add:
 
 ```rust
     #[error("project is suspended: {0}")]
@@ -881,7 +881,7 @@ In `crates/nexa-core/src/error.rs`, add:
 
 - [ ] **Step 3: Add lifecycle commands to orchestrator Command enum**
 
-In the file containing the `Command` enum (either `crates/nexad/src/engine/orchestrator.rs` or `crates/nexa-core/src/domain/orchestrator.rs` depending on which plans are applied), add three new variants:
+In the file containing the `Command` enum (either `crates/helyosd/src/engine/orchestrator.rs` or `crates/helyos-core/src/domain/orchestrator.rs` depending on which plans are applied), add three new variants:
 
 ```rust
     SuspendProject {
@@ -906,9 +906,9 @@ If using `OrchestratorHandle`, add corresponding methods:
         self.tx
             .send(Command::SuspendProject { name, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn resume_project(&self, name: String) -> Result<()> {
@@ -916,9 +916,9 @@ If using `OrchestratorHandle`, add corresponding methods:
         self.tx
             .send(Command::ResumeProject { name, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn delete_project(&self, name: String) -> Result<()> {
@@ -926,9 +926,9 @@ If using `OrchestratorHandle`, add corresponding methods:
         self.tx
             .send(Command::DeleteProject { name, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 ```
 
@@ -943,8 +943,8 @@ Expected: compiles (there will be unused variant warnings until Task 6 handles t
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/models/project.rs crates/nexa-core/src/error.rs
-git add -A crates/nexad/src/engine/ crates/nexa-core/src/domain/  # whichever exists
+git add crates/helyos-core/src/models/project.rs crates/helyos-core/src/error.rs
+git add -A crates/helyosd/src/engine/ crates/helyos-core/src/domain/  # whichever exists
 git commit -m "feat: add ProjectStatus (Active/Suspended) and lifecycle commands to Command enum"
 ```
 
@@ -953,7 +953,7 @@ git commit -m "feat: add ProjectStatus (Active/Suspended) and lifecycle commands
 ### Task 6: Handle project commands in orchestrator
 
 **Files:**
-- Modify: orchestrator implementation (either `crates/nexad/src/engine/orchestrator.rs` or `crates/nexa-core/src/domain/orchestrator.rs`)
+- Modify: orchestrator implementation (either `crates/helyosd/src/engine/orchestrator.rs` or `crates/helyos-core/src/domain/orchestrator.rs`)
 
 - [ ] **Step 1: Write failing tests for project lifecycle**
 
@@ -1094,9 +1094,9 @@ Add these tests to the orchestrator test module:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cargo test -p nexa-core -- domain::orchestrator 2>&1
+cargo test -p helyos-core -- domain::orchestrator 2>&1
 # or for the DashMap-based engine:
-cargo test -p nexad -- engine 2>&1
+cargo test -p helyosd -- engine 2>&1
 ```
 
 Expected: FAIL -- `suspend_project`, `resume_project`, `delete_project` methods do not exist or command match arms are missing.
@@ -1125,7 +1125,7 @@ Add the handler methods:
 ```rust
     async fn handle_suspend_project(&mut self, name: &str) -> Result<()> {
         let project = self.projects.get_mut(name).ok_or_else(|| {
-            NexaError::ProjectNotFound(name.to_string())
+            HelyosError::ProjectNotFound(name.to_string())
         })?;
 
         project.status = ProjectStatus::Suspended;
@@ -1166,7 +1166,7 @@ Add the handler methods:
 
     async fn handle_resume_project(&mut self, name: &str) -> Result<()> {
         let project = self.projects.get_mut(name).ok_or_else(|| {
-            NexaError::ProjectNotFound(name.to_string())
+            HelyosError::ProjectNotFound(name.to_string())
         })?;
 
         project.status = ProjectStatus::Active;
@@ -1188,7 +1188,7 @@ Add the handler methods:
 
     fn handle_delete_project(&mut self, name: &str) -> Result<()> {
         if !self.projects.contains_key(name) {
-            return Err(NexaError::ProjectNotFound(name.to_string()));
+            return Err(HelyosError::ProjectNotFound(name.to_string()));
         }
 
         // Check for existing deployments
@@ -1198,7 +1198,7 @@ Add the handler methods:
             .any(|d| d.project() == name);
 
         if has_deployments {
-            return Err(NexaError::ProjectNotEmpty(format!(
+            return Err(HelyosError::ProjectNotEmpty(format!(
                 "project '{}' still has deployments — remove them first",
                 name
             )));
@@ -1216,7 +1216,7 @@ Also, add a suspended check to `handle_deploy`:
         // Check if project is suspended
         if let Some(project) = self.projects.get(&spec.project) {
             if project.is_suspended() {
-                return Err(NexaError::ProjectSuspended(spec.project.clone()));
+                return Err(HelyosError::ProjectSuspended(spec.project.clone()));
             }
         }
 
@@ -1228,9 +1228,9 @@ Also, add a suspended check to `handle_deploy`:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cargo test -p nexa-core -- domain::orchestrator 2>&1
+cargo test -p helyos-core -- domain::orchestrator 2>&1
 # or:
-cargo test -p nexad -- engine 2>&1
+cargo test -p helyosd -- engine 2>&1
 ```
 
 Expected: all lifecycle tests pass (6 new + existing tests).
@@ -1238,7 +1238,7 @@ Expected: all lifecycle tests pass (6 new + existing tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A crates/nexa-core/ crates/nexad/src/engine/
+git add -A crates/helyos-core/ crates/helyosd/src/engine/
 git commit -m "feat: implement project suspend/resume/delete with pod lifecycle management"
 ```
 
@@ -1248,11 +1248,11 @@ git commit -m "feat: implement project suspend/resume/delete with pod lifecycle 
 
 **Files:**
 - Modify: orchestrator (add `SecretStore` dependency, inject secrets before container creation)
-- Modify: `crates/nexa-core/src/models/deployment.rs` (add `secrets` field to `DeploymentSpec`)
+- Modify: `crates/helyos-core/src/models/deployment.rs` (add `secrets` field to `DeploymentSpec`)
 
 - [ ] **Step 1: Add `secrets` field to DeploymentSpec**
 
-In `crates/nexa-core/src/models/deployment.rs`, add to `DeploymentSpec`:
+In `crates/helyos-core/src/models/deployment.rs`, add to `DeploymentSpec`:
 
 ```rust
     /// Secret names to inject as environment variables.
@@ -1268,7 +1268,7 @@ In `crates/nexa-core/src/models/deployment.rs`, add to `DeploymentSpec`:
 Add to orchestrator tests. First, update the test orchestrator factory to accept a `SecretStore`:
 
 ```rust
-    use nexa_core::ports::secrets::SecretStore;
+    use helyos_core::ports::secrets::SecretStore;
 
     // For the actor model (OrchestratorHandle):
     fn spawn_test_orchestrator() -> OrchestratorHandle {
@@ -1344,7 +1344,7 @@ Then the test:
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-cargo test -p nexa-core -- domain::orchestrator 2>&1
+cargo test -p helyos-core -- domain::orchestrator 2>&1
 ```
 
 Expected: FAIL -- `Orchestrator::spawn` does not accept `secrets` parameter yet.
@@ -1402,14 +1402,14 @@ Add a `resolve_secrets` method:
                 .get(project, secret_name)
                 .await?
                 .ok_or_else(|| {
-                    NexaError::Secret(format!(
+                    HelyosError::Secret(format!(
                         "secret '{}' not found in project '{}'",
                         secret_name, project
                     ))
                 })?;
 
             let value_str = String::from_utf8(value).map_err(|_| {
-                NexaError::Secret(format!(
+                HelyosError::Secret(format!(
                     "secret '{}' contains invalid UTF-8",
                     secret_name
                 ))
@@ -1429,7 +1429,7 @@ In `handle_deploy`, resolve secrets before proceeding, then in `create_pod`, mer
         // Check if project is suspended
         if let Some(project) = self.projects.get(&spec.project) {
             if project.is_suspended() {
-                return Err(NexaError::ProjectSuspended(spec.project.clone()));
+                return Err(HelyosError::ProjectSuspended(spec.project.clone()));
             }
         }
 
@@ -1477,7 +1477,7 @@ In `create_pod`, merge resolved secrets into the env map (secrets override `env`
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cargo test -p nexa-core -- domain::orchestrator 2>&1
+cargo test -p helyos-core -- domain::orchestrator 2>&1
 ```
 
 Expected: all tests pass including the 2 new secret injection tests.
@@ -1485,8 +1485,8 @@ Expected: all tests pass including the 2 new secret injection tests.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexa-core/src/models/deployment.rs
-git add -A crates/nexa-core/src/domain/ crates/nexad/src/engine/
+git add crates/helyos-core/src/models/deployment.rs
+git add -A crates/helyos-core/src/domain/ crates/helyosd/src/engine/
 git commit -m "feat: inject secrets into container env vars at deploy time, fail on missing"
 ```
 
@@ -1495,12 +1495,12 @@ git commit -m "feat: inject secrets into container env vars at deploy time, fail
 ### Task 8: Add API routes for project lifecycle and secrets
 
 **Files:**
-- Modify: `crates/nexad/src/api/routes.rs` (add 6 new routes)
-- Modify: `crates/nexad/src/api/handlers.rs` (add 6 new handlers)
+- Modify: `crates/helyosd/src/api/routes.rs` (add 6 new routes)
+- Modify: `crates/helyosd/src/api/handlers.rs` (add 6 new handlers)
 
 - [ ] **Step 1: Add secret-related handler types and project lifecycle handlers**
 
-In `crates/nexad/src/api/handlers.rs`, add:
+In `crates/helyosd/src/api/handlers.rs`, add:
 
 ```rust
 // --- Project Lifecycle ---
@@ -1604,7 +1604,7 @@ pub async fn delete_secret(
 
 - [ ] **Step 2: Register new routes**
 
-In `crates/nexad/src/api/routes.rs`, add these routes to the `build` function:
+In `crates/helyosd/src/api/routes.rs`, add these routes to the `build` function:
 
 ```rust
         // Project lifecycle
@@ -1667,9 +1667,9 @@ And `OrchestratorHandle` methods:
         self.tx
             .send(Command::ListSecrets { project, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn set_secret(&self, project: String, name: String, value: Vec<u8>) -> Result<()> {
@@ -1677,9 +1677,9 @@ And `OrchestratorHandle` methods:
         self.tx
             .send(Command::SetSecret { project, name, value, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 
     pub async fn delete_secret(&self, project: String, name: String) -> Result<()> {
@@ -1687,9 +1687,9 @@ And `OrchestratorHandle` methods:
         self.tx
             .send(Command::DeleteSecret { project, name, reply })
             .await
-            .map_err(|_| NexaError::Runtime("orchestrator stopped".into()))?;
+            .map_err(|_| HelyosError::Runtime("orchestrator stopped".into()))?;
         rx.await
-            .map_err(|_| NexaError::Runtime("orchestrator dropped reply".into()))?
+            .map_err(|_| HelyosError::Runtime("orchestrator dropped reply".into()))?
     }
 ```
 
@@ -1737,20 +1737,20 @@ Expected: compiles.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/api/ crates/nexa-core/src/domain/ crates/nexad/src/engine/
+git add crates/helyosd/src/api/ crates/helyos-core/src/domain/ crates/helyosd/src/engine/
 git commit -m "feat: add API routes for project suspend/resume/delete and secrets CRUD"
 ```
 
 ---
 
-### Task 9: Wire SecretStore into nexad main.rs
+### Task 9: Wire SecretStore into helyosd main.rs
 
 **Files:**
-- Modify: `crates/nexad/src/main.rs`
+- Modify: `crates/helyosd/src/main.rs`
 
 - [ ] **Step 1: Wire everything together in main.rs**
 
-Update `crates/nexad/src/main.rs` to load/generate the master key and create the `EncryptedSqliteSecretStore`:
+Update `crates/helyosd/src/main.rs` to load/generate the master key and create the `EncryptedSqliteSecretStore`:
 
 ```rust
 mod adapters;
@@ -1770,7 +1770,7 @@ use crate::adapters::secrets::EncryptedSqliteSecretStore;
 use crate::crypto::master_key;
 
 #[derive(Parser)]
-#[command(name = "nexad", about = "NexaNet daemon", version)]
+#[command(name = "helyosd", about = "Helyos daemon", version)]
 struct Cli {
     #[arg(long, default_value = "0.0.0.0")]
     host: String,
@@ -1778,7 +1778,7 @@ struct Cli {
     #[arg(long, default_value = "6443")]
     port: u16,
 
-    #[arg(long, default_value = "/var/lib/nexa")]
+    #[arg(long, default_value = "/var/lib/helyos")]
     data_dir: String,
 }
 
@@ -1792,7 +1792,7 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    info!("starting nexad on {}:{}", cli.host, cli.port);
+    info!("starting helyosd on {}:{}", cli.host, cli.port);
 
     let data_dir = PathBuf::from(&cli.data_dir);
 
@@ -1801,7 +1801,7 @@ async fn main() -> anyhow::Result<()> {
     info!("master key loaded from {}", data_dir.join("master.key").display());
 
     // Open SQLite database for secrets
-    let db_path = data_dir.join("nexa.db");
+    let db_path = data_dir.join("helyos.db");
     std::fs::create_dir_all(&data_dir)?;
     let conn = Connection::open(&db_path)
         .map_err(|e| anyhow::anyhow!("failed to open database at {}: {e}", db_path.display()))?;
@@ -1860,8 +1860,8 @@ Expected: all tests pass (config tests, orchestrator tests, crypto tests, secret
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/main.rs crates/nexad/src/engine/
-git commit -m "feat: wire EncryptedSqliteSecretStore and master key into nexad startup"
+git add crates/helyosd/src/main.rs crates/helyosd/src/engine/
+git commit -m "feat: wire EncryptedSqliteSecretStore and master key into helyosd startup"
 ```
 
 - [ ] **Step 5: Final verification -- full workspace build**

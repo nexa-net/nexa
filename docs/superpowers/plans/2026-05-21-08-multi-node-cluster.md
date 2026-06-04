@@ -5,15 +5,15 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
-**Goal:** Transform NexaNet from a single-node container orchestrator into a multi-node cluster with master/worker topology, gRPC transport, join-token authentication, heartbeat-based failure detection, and node-aware pod scheduling.
+**Goal:** Transform Helyos from a single-node container orchestrator into a multi-node cluster with master/worker topology, gRPC transport, join-token authentication, heartbeat-based failure detection, and node-aware pod scheduling.
 
-**Architecture:** A new `ClusterTransport` port trait abstracts single-node vs. multi-node communication. `LocalTransport` wraps `ContainerRuntime` for single-node mode. `GrpcTransport` uses tonic gRPC for multi-node. The master runs a gRPC server (port 6444) accepting worker registrations, streaming heartbeats, and dispatching pod operations. Workers connect via `nexad --mode worker --join <ip>:6444 --token <token>`. A heartbeat monitor detects dead nodes and reschedules pods. Join tokens are random 32-byte hex strings (prefixed `nxa_`), stored SHA-256 hashed in SQLite. The orchestrator routes all pod lifecycle operations through `ClusterTransport` instead of calling `ContainerRuntime` directly.
+**Architecture:** A new `ClusterTransport` port trait abstracts single-node vs. multi-node communication. `LocalTransport` wraps `ContainerRuntime` for single-node mode. `GrpcTransport` uses tonic gRPC for multi-node. The master runs a gRPC server (port 6444) accepting worker registrations, streaming heartbeats, and dispatching pod operations. Workers connect via `helyosd --mode worker --join <ip>:6444 --token <token>`. A heartbeat monitor detects dead nodes and reschedules pods. Join tokens are random 32-byte hex strings (prefixed `nxa_`), stored SHA-256 hashed in SQLite. The orchestrator routes all pod lifecycle operations through `ClusterTransport` instead of calling `ContainerRuntime` directly.
 
 **Tech Stack:** tonic 0.12 (gRPC server + client), prost 0.13 (protobuf codegen), tonic-build 0.12 (build.rs), sha2 0.10 (token hashing), hex 0.4 (hex encoding), sysinfo 0.32 (node resource reporting), tokio (mpsc, spawn, interval), async-trait
 
@@ -22,12 +22,12 @@
 ### Task 1: Add Node model to domain
 
 **Files:**
-- Create: `crates/nexa-core/src/domain/models/node.rs`
-- Modify: `crates/nexa-core/src/domain/models/mod.rs`
+- Create: `crates/helyos-core/src/domain/models/node.rs`
+- Modify: `crates/helyos-core/src/domain/models/mod.rs`
 
 - [ ] **Step 1: Write failing test for Node model**
 
-Create `crates/nexa-core/src/domain/models/node.rs`:
+Create `crates/helyos-core/src/domain/models/node.rs`:
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -200,7 +200,7 @@ mod tests {
 
 - [ ] **Step 2: Register the module in models/mod.rs**
 
-In `crates/nexa-core/src/domain/models/mod.rs`, add:
+In `crates/helyos-core/src/domain/models/mod.rs`, add:
 
 ```rust
 mod node;
@@ -212,7 +212,7 @@ pub use node::*;
 
 - [ ] **Step 3: Add `node_id` field to Pod**
 
-In `crates/nexa-core/src/domain/models/pod.rs`, add a field to the `Pod` struct:
+In `crates/helyos-core/src/domain/models/pod.rs`, add a field to the `Pod` struct:
 
 ```rust
 pub node_id: Option<Uuid>,
@@ -227,7 +227,7 @@ node_id: None,
 - [ ] **Step 4: Verify compilation and run tests**
 
 ```bash
-cargo test -p nexa-core -- node 2>&1
+cargo test -p helyos-core -- node 2>&1
 ```
 
 Expected: all 5 node tests pass.
@@ -235,7 +235,7 @@ Expected: all 5 node tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/models/node.rs crates/nexa-core/src/domain/models/mod.rs crates/nexa-core/src/domain/models/pod.rs
+git add crates/helyos-core/src/domain/models/node.rs crates/helyos-core/src/domain/models/mod.rs crates/helyos-core/src/domain/models/pod.rs
 git commit -m "feat: add Node domain model with role, status, and resources"
 ```
 
@@ -244,12 +244,12 @@ git commit -m "feat: add Node domain model with role, status, and resources"
 ### Task 2: Define ClusterTransport port trait
 
 **Files:**
-- Create: `crates/nexa-core/src/ports/cluster.rs`
-- Modify: `crates/nexa-core/src/ports/mod.rs`
+- Create: `crates/helyos-core/src/ports/cluster.rs`
+- Modify: `crates/helyos-core/src/ports/mod.rs`
 
 - [ ] **Step 1: Create the ClusterTransport trait**
 
-Create `crates/nexa-core/src/ports/cluster.rs`:
+Create `crates/helyos-core/src/ports/cluster.rs`:
 
 ```rust
 use async_trait::async_trait;
@@ -298,7 +298,7 @@ pub trait ClusterTransport: Send + Sync {
 
 - [ ] **Step 2: Register in ports/mod.rs**
 
-In `crates/nexa-core/src/ports/mod.rs`, add:
+In `crates/helyos-core/src/ports/mod.rs`, add:
 
 ```rust
 pub mod cluster;
@@ -309,7 +309,7 @@ pub mod cluster;
 - [ ] **Step 3: Verify compilation**
 
 ```bash
-cargo check -p nexa-core 2>&1
+cargo check -p helyos-core 2>&1
 ```
 
 Expected: compiles with no errors.
@@ -317,7 +317,7 @@ Expected: compiles with no errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/cluster.rs crates/nexa-core/src/ports/mod.rs
+git add crates/helyos-core/src/ports/cluster.rs crates/helyos-core/src/ports/mod.rs
 git commit -m "feat: define ClusterTransport port trait for multi-node communication"
 ```
 
@@ -326,7 +326,7 @@ git commit -m "feat: define ClusterTransport port trait for multi-node communica
 ### Task 3: Add node methods to StateStore trait + InMemoryStore + SqliteStore
 
 **Files:**
-- Modify: `crates/nexa-core/src/ports/state.rs` (or wherever StateStore trait lives)
+- Modify: `crates/helyos-core/src/ports/state.rs` (or wherever StateStore trait lives)
 - Modify: in-memory store adapter
 - Modify: SQLite store adapter
 
@@ -334,7 +334,7 @@ git commit -m "feat: define ClusterTransport port trait for multi-node communica
 
 - [ ] **Step 1: Create StateStore port trait with node methods**
 
-Create `crates/nexa-core/src/ports/state.rs`:
+Create `crates/helyos-core/src/ports/state.rs`:
 
 ```rust
 use async_trait::async_trait;
@@ -365,7 +365,7 @@ pub trait StateStore: Send + Sync {
 
 - [ ] **Step 2: Register in ports/mod.rs**
 
-In `crates/nexa-core/src/ports/mod.rs`, add:
+In `crates/helyos-core/src/ports/mod.rs`, add:
 
 ```rust
 pub mod state;
@@ -373,7 +373,7 @@ pub mod state;
 
 - [ ] **Step 3: Create InMemoryStateStore adapter**
 
-Create `crates/nexad/src/adapters/state/mod.rs`:
+Create `crates/helyosd/src/adapters/state/mod.rs`:
 
 ```rust
 mod memory;
@@ -381,7 +381,7 @@ mod memory;
 pub use memory::InMemoryStateStore;
 ```
 
-Create `crates/nexad/src/adapters/state/memory.rs`:
+Create `crates/helyosd/src/adapters/state/memory.rs`:
 
 ```rust
 use std::sync::Arc;
@@ -391,9 +391,9 @@ use dashmap::DashMap;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use nexa_core::domain::models::*;
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::models::*;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::state::StateStore;
 
 pub struct InMemoryStateStore {
     nodes: DashMap<Uuid, Node>,
@@ -437,7 +437,7 @@ impl StateStore for InMemoryStateStore {
             self.nodes.insert(node.id, node.clone());
             Ok(())
         } else {
-            Err(NexaError::Runtime(format!("node {} not found", node.id)))
+            Err(HelyosError::Runtime(format!("node {} not found", node.id)))
         }
     }
 
@@ -567,7 +567,7 @@ mod tests {
 
 - [ ] **Step 4: Register state adapter in adapters/mod.rs**
 
-In `crates/nexad/src/adapters/mod.rs`, add:
+In `crates/helyosd/src/adapters/mod.rs`, add:
 
 ```rust
 pub mod state;
@@ -576,7 +576,7 @@ pub mod state;
 - [ ] **Step 5: Verify compilation and run tests**
 
 ```bash
-cargo test -p nexad -- memory 2>&1
+cargo test -p helyosd -- memory 2>&1
 ```
 
 Expected: all 6 InMemoryStateStore tests pass.
@@ -584,7 +584,7 @@ Expected: all 6 InMemoryStateStore tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/state.rs crates/nexa-core/src/ports/mod.rs crates/nexad/src/adapters/state/
+git add crates/helyos-core/src/ports/state.rs crates/helyos-core/src/ports/mod.rs crates/helyosd/src/adapters/state/
 git commit -m "feat: add StateStore port trait with InMemoryStateStore adapter for node management"
 ```
 
@@ -594,9 +594,9 @@ git commit -m "feat: add StateStore port trait with InMemoryStateStore adapter f
 
 **Files:**
 - Create: `proto/cluster.proto`
-- Create: `crates/nexad/build.rs`
+- Create: `crates/helyosd/build.rs`
 - Modify: `Cargo.toml` (workspace deps)
-- Modify: `crates/nexad/Cargo.toml`
+- Modify: `crates/helyosd/Cargo.toml`
 
 - [ ] **Step 1: Add workspace dependencies for tonic-build, sha2, hex, sysinfo**
 
@@ -609,9 +609,9 @@ hex = "0.4"
 sysinfo = "0.32"
 ```
 
-- [ ] **Step 2: Add build dependencies to nexad**
+- [ ] **Step 2: Add build dependencies to helyosd**
 
-In `crates/nexad/Cargo.toml`, add:
+In `crates/helyosd/Cargo.toml`, add:
 
 Under `[dependencies]`:
 ```toml
@@ -636,7 +636,7 @@ Create `proto/cluster.proto`:
 ```protobuf
 syntax = "proto3";
 
-package nexa.cluster;
+package helyos.cluster;
 
 service ClusterService {
     // Worker registers with master on join
@@ -760,7 +760,7 @@ message LogChunk {
 
 - [ ] **Step 4: Create build.rs for tonic codegen**
 
-Create `crates/nexad/build.rs`:
+Create `crates/helyosd/build.rs`:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -775,27 +775,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [ ] **Step 5: Verify proto compilation**
 
 ```bash
-cargo check -p nexad 2>&1
+cargo check -p helyosd 2>&1
 ```
 
-Expected: compiles. The generated code will be available as `tonic::include_proto!("nexa.cluster")`.
+Expected: compiles. The generated code will be available as `tonic::include_proto!("helyos.cluster")`.
 
 - [ ] **Step 6: Create a module to re-export generated types**
 
-Create `crates/nexad/src/cluster/mod.rs`:
+Create `crates/helyosd/src/cluster/mod.rs`:
 
 ```rust
 pub mod proto {
-    tonic::include_proto!("nexa.cluster");
+    tonic::include_proto!("helyos.cluster");
 }
 ```
 
-Add `mod cluster;` to `crates/nexad/src/main.rs` (after existing mods).
+Add `mod cluster;` to `crates/helyosd/src/main.rs` (after existing mods).
 
 - [ ] **Step 7: Verify compilation with module**
 
 ```bash
-cargo check -p nexad 2>&1
+cargo check -p helyosd 2>&1
 ```
 
 Expected: compiles with no errors.
@@ -803,7 +803,7 @@ Expected: compiles with no errors.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add proto/cluster.proto crates/nexad/build.rs crates/nexad/Cargo.toml crates/nexad/src/cluster/ Cargo.toml
+git add proto/cluster.proto crates/helyosd/build.rs crates/helyosd/Cargo.toml crates/helyosd/src/cluster/ Cargo.toml
 git commit -m "feat: add gRPC proto definition and tonic codegen for cluster service"
 ```
 
@@ -812,13 +812,13 @@ git commit -m "feat: add gRPC proto definition and tonic codegen for cluster ser
 ### Task 5: Implement LocalTransport adapter (single-node)
 
 **Files:**
-- Create: `crates/nexad/src/adapters/transport/mod.rs`
-- Create: `crates/nexad/src/adapters/transport/local.rs`
-- Modify: `crates/nexad/src/adapters/mod.rs`
+- Create: `crates/helyosd/src/adapters/transport/mod.rs`
+- Create: `crates/helyosd/src/adapters/transport/local.rs`
+- Modify: `crates/helyosd/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write failing tests for LocalTransport**
 
-Create `crates/nexad/src/adapters/transport/local.rs`:
+Create `crates/helyosd/src/adapters/transport/local.rs`:
 
 ```rust
 use std::sync::Arc;
@@ -827,10 +827,10 @@ use async_trait::async_trait;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use nexa_core::domain::models::*;
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::cluster::ClusterTransport;
-use nexa_core::ports::runtime::*;
+use helyos_core::domain::models::*;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::cluster::ClusterTransport;
+use helyos_core::ports::runtime::*;
 
 /// LocalTransport handles pod operations in-process by delegating directly
 /// to the ContainerRuntime. Used for single-node mode.
@@ -869,7 +869,7 @@ impl ClusterTransport for LocalTransport {
         spec: &DeploymentSpec,
     ) -> Result<()> {
         let container_name = pod.container_name();
-        let network_name = format!("nexa-{}", spec.project);
+        let network_name = format!("helyos-{}", spec.project);
 
         info!(name = container_name, image = spec.image, "local: creating pod");
 
@@ -899,10 +899,10 @@ impl ClusterTransport for LocalTransport {
             .collect();
 
         let mut labels = std::collections::HashMap::new();
-        labels.insert("managed-by".to_string(), "nexanet".to_string());
-        labels.insert("nexa.project".to_string(), spec.project.clone());
-        labels.insert("nexa.deployment".to_string(), spec.deployment.name.clone());
-        labels.insert("nexa.pod-id".to_string(), pod.id.to_string());
+        labels.insert("managed-by".to_string(), "helyos".to_string());
+        labels.insert("helyos.project".to_string(), spec.project.clone());
+        labels.insert("helyos.deployment".to_string(), spec.deployment.name.clone());
+        labels.insert("helyos.pod-id".to_string(), pod.id.to_string());
 
         let config = ContainerConfig {
             name: container_name.clone(),
@@ -950,7 +950,7 @@ impl ClusterTransport for LocalTransport {
     ) -> Result<LogStream> {
         // In local mode, the orchestrator resolves the container_id and calls
         // runtime.logs() directly. This is a fallback.
-        Err(NexaError::Runtime(
+        Err(HelyosError::Runtime(
             "local transport: use runtime.logs() directly".into(),
         ))
     }
@@ -1079,7 +1079,7 @@ mod tests {
 
 - [ ] **Step 2: Create transport module files**
 
-Create `crates/nexad/src/adapters/transport/mod.rs`:
+Create `crates/helyosd/src/adapters/transport/mod.rs`:
 
 ```rust
 mod local;
@@ -1089,7 +1089,7 @@ pub use local::LocalTransport;
 
 - [ ] **Step 3: Register in adapters/mod.rs**
 
-In `crates/nexad/src/adapters/mod.rs`, add:
+In `crates/helyosd/src/adapters/mod.rs`, add:
 
 ```rust
 pub mod transport;
@@ -1098,7 +1098,7 @@ pub mod transport;
 - [ ] **Step 4: Verify compilation and run tests**
 
 ```bash
-cargo test -p nexad -- local 2>&1
+cargo test -p helyosd -- local 2>&1
 ```
 
 Expected: all 3 LocalTransport tests pass.
@@ -1106,7 +1106,7 @@ Expected: all 3 LocalTransport tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/transport/
+git add crates/helyosd/src/adapters/transport/
 git commit -m "feat: implement LocalTransport adapter for single-node pod operations"
 ```
 
@@ -1115,12 +1115,12 @@ git commit -m "feat: implement LocalTransport adapter for single-node pod operat
 ### Task 6: Implement GrpcTransport adapter (tonic client-side)
 
 **Files:**
-- Create: `crates/nexad/src/adapters/transport/grpc.rs`
-- Modify: `crates/nexad/src/adapters/transport/mod.rs`
+- Create: `crates/helyosd/src/adapters/transport/grpc.rs`
+- Modify: `crates/helyosd/src/adapters/transport/mod.rs`
 
 - [ ] **Step 1: Implement GrpcTransport client**
 
-Create `crates/nexad/src/adapters/transport/grpc.rs`:
+Create `crates/helyosd/src/adapters/transport/grpc.rs`:
 
 ```rust
 use std::sync::Arc;
@@ -1131,10 +1131,10 @@ use tonic::transport::Channel;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
-use nexa_core::domain::models::*;
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::cluster::ClusterTransport;
-use nexa_core::ports::runtime::LogStream;
+use helyos_core::domain::models::*;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::cluster::ClusterTransport;
+use helyos_core::ports::runtime::LogStream;
 
 use crate::cluster::proto;
 use crate::cluster::proto::cluster_service_client::ClusterServiceClient;
@@ -1161,10 +1161,10 @@ impl GrpcTransport {
     pub async fn add_client(&self, node_id: Uuid, address: &str) -> Result<()> {
         let endpoint = format!("http://{address}");
         let channel = Channel::from_shared(endpoint)
-            .map_err(|e| NexaError::Runtime(format!("invalid endpoint: {e}")))?
+            .map_err(|e| HelyosError::Runtime(format!("invalid endpoint: {e}")))?
             .connect()
             .await
-            .map_err(|e| NexaError::Runtime(format!("gRPC connect failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("gRPC connect failed: {e}")))?;
 
         let client = ClusterServiceClient::new(channel);
         self.clients.write().await.insert(node_id, client);
@@ -1183,7 +1183,7 @@ impl GrpcTransport {
             .await
             .get(node_id)
             .cloned()
-            .ok_or_else(|| NexaError::Runtime(format!("no gRPC client for node {node_id}")))
+            .ok_or_else(|| HelyosError::Runtime(format!("no gRPC client for node {node_id}")))
     }
 }
 
@@ -1193,10 +1193,10 @@ impl ClusterTransport for GrpcTransport {
         // Worker-side: connect to master and register.
         let endpoint = format!("http://{}", self.master_addr);
         let channel = Channel::from_shared(endpoint)
-            .map_err(|e| NexaError::Runtime(format!("invalid master endpoint: {e}")))?
+            .map_err(|e| HelyosError::Runtime(format!("invalid master endpoint: {e}")))?
             .connect()
             .await
-            .map_err(|e| NexaError::Runtime(format!("cannot reach master: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("cannot reach master: {e}")))?;
 
         let mut client = ClusterServiceClient::new(channel);
 
@@ -1216,11 +1216,11 @@ impl ClusterTransport for GrpcTransport {
         let response = client
             .register(request)
             .await
-            .map_err(|e| NexaError::Runtime(format!("register RPC failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("register RPC failed: {e}")))?;
 
         let resp = response.into_inner();
         if !resp.accepted {
-            return Err(NexaError::Runtime(format!(
+            return Err(HelyosError::Runtime(format!(
                 "registration rejected: {}",
                 resp.message
             )));
@@ -1251,9 +1251,9 @@ impl ClusterTransport for GrpcTransport {
         let mut client = self.get_client(node_id).await?;
 
         let pod_data = serde_json::to_vec(pod)
-            .map_err(|e| NexaError::Runtime(format!("serialize pod: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("serialize pod: {e}")))?;
         let spec_data = serde_json::to_vec(spec)
-            .map_err(|e| NexaError::Runtime(format!("serialize spec: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("serialize spec: {e}")))?;
 
         let request = tonic::Request::new(proto::AssignPodRequest {
             node_id: node_id.to_string(),
@@ -1265,11 +1265,11 @@ impl ClusterTransport for GrpcTransport {
         let response = client
             .assign_pod(request)
             .await
-            .map_err(|e| NexaError::Runtime(format!("assign_pod RPC failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("assign_pod RPC failed: {e}")))?;
 
         let resp = response.into_inner();
         if !resp.success {
-            return Err(NexaError::Runtime(format!(
+            return Err(HelyosError::Runtime(format!(
                 "assign_pod rejected: {}",
                 resp.message
             )));
@@ -1290,10 +1290,10 @@ impl ClusterTransport for GrpcTransport {
         let response = client
             .stop_pod(request)
             .await
-            .map_err(|e| NexaError::Runtime(format!("stop_pod RPC failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("stop_pod RPC failed: {e}")))?;
 
         if !response.into_inner().success {
-            return Err(NexaError::Runtime("stop_pod rejected by worker".into()));
+            return Err(HelyosError::Runtime("stop_pod rejected by worker".into()));
         }
 
         Ok(())
@@ -1310,10 +1310,10 @@ impl ClusterTransport for GrpcTransport {
         let response = client
             .remove_pod(request)
             .await
-            .map_err(|e| NexaError::Runtime(format!("remove_pod RPC failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("remove_pod RPC failed: {e}")))?;
 
         if !response.into_inner().success {
-            return Err(NexaError::Runtime("remove_pod rejected by worker".into()));
+            return Err(HelyosError::Runtime("remove_pod rejected by worker".into()));
         }
 
         Ok(())
@@ -1336,14 +1336,14 @@ impl ClusterTransport for GrpcTransport {
         let response = client
             .stream_logs(request)
             .await
-            .map_err(|e| NexaError::Runtime(format!("stream_logs RPC failed: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("stream_logs RPC failed: {e}")))?;
 
         let stream = response.into_inner();
 
         use futures::StreamExt;
         let mapped = stream.map(|result| match result {
             Ok(chunk) => Ok(chunk.line),
-            Err(e) => Err(NexaError::Runtime(format!("log stream error: {e}"))),
+            Err(e) => Err(HelyosError::Runtime(format!("log stream error: {e}"))),
         });
 
         Ok(Box::pin(mapped))
@@ -1353,7 +1353,7 @@ impl ClusterTransport for GrpcTransport {
 
 - [ ] **Step 2: Register GrpcTransport in transport/mod.rs**
 
-Update `crates/nexad/src/adapters/transport/mod.rs`:
+Update `crates/helyosd/src/adapters/transport/mod.rs`:
 
 ```rust
 mod grpc;
@@ -1366,7 +1366,7 @@ pub use local::LocalTransport;
 - [ ] **Step 3: Verify compilation**
 
 ```bash
-cargo check -p nexad 2>&1
+cargo check -p helyosd 2>&1
 ```
 
 Expected: compiles with no errors (gRPC integration tests require a running server, so unit tests are deferred to Task 7).
@@ -1374,7 +1374,7 @@ Expected: compiles with no errors (gRPC integration tests require a running serv
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/transport/grpc.rs crates/nexad/src/adapters/transport/mod.rs
+git add crates/helyosd/src/adapters/transport/grpc.rs crates/helyosd/src/adapters/transport/mod.rs
 git commit -m "feat: implement GrpcTransport adapter for multi-node pod operations"
 ```
 
@@ -1383,12 +1383,12 @@ git commit -m "feat: implement GrpcTransport adapter for multi-node pod operatio
 ### Task 7: Implement gRPC server (tonic server-side, runs on master)
 
 **Files:**
-- Create: `crates/nexad/src/cluster/server.rs`
-- Modify: `crates/nexad/src/cluster/mod.rs`
+- Create: `crates/helyosd/src/cluster/server.rs`
+- Modify: `crates/helyosd/src/cluster/mod.rs`
 
 - [ ] **Step 1: Implement the ClusterService gRPC server**
 
-Create `crates/nexad/src/cluster/server.rs`:
+Create `crates/helyosd/src/cluster/server.rs`:
 
 ```rust
 use std::pin::Pin;
@@ -1401,9 +1401,9 @@ use tonic::{Request, Response, Status, Streaming};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use nexa_core::domain::models::*;
-use nexa_core::ports::runtime::ContainerRuntime;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::models::*;
+use helyos_core::ports::runtime::ContainerRuntime;
+use helyos_core::ports::state::StateStore;
 
 use super::proto;
 use super::proto::cluster_service_server::ClusterService;
@@ -1564,7 +1564,7 @@ impl ClusterService for ClusterServer {
             .map_err(|e| Status::invalid_argument(format!("bad spec: {e}")))?;
 
         let container_name = pod.container_name();
-        let network_name = format!("nexa-{}", spec.project);
+        let network_name = format!("helyos-{}", spec.project);
 
         info!(name = container_name, "worker: creating pod");
 
@@ -1584,7 +1584,7 @@ impl ClusterService for ClusterServer {
             let _ = self.runtime.create_network(&network_name).await;
         }
 
-        use nexa_core::ports::runtime::*;
+        use helyos_core::ports::runtime::*;
         let ports: Vec<PortBinding> = spec
             .ports
             .iter()
@@ -1595,10 +1595,10 @@ impl ClusterService for ClusterServer {
             .collect();
 
         let mut labels = std::collections::HashMap::new();
-        labels.insert("managed-by".to_string(), "nexanet".to_string());
-        labels.insert("nexa.project".to_string(), spec.project.clone());
-        labels.insert("nexa.deployment".to_string(), spec.deployment.name.clone());
-        labels.insert("nexa.pod-id".to_string(), pod.id.to_string());
+        labels.insert("managed-by".to_string(), "helyos".to_string());
+        labels.insert("helyos.project".to_string(), spec.project.clone());
+        labels.insert("helyos.deployment".to_string(), spec.deployment.name.clone());
+        labels.insert("helyos.pod-id".to_string(), pod.id.to_string());
 
         let config = ContainerConfig {
             name: container_name.clone(),
@@ -1649,12 +1649,12 @@ impl ClusterService for ClusterServer {
         let req = request.into_inner();
         let pod_id = &req.pod_id;
 
-        // Find the container by label "nexa.pod-id"
+        // Find the container by label "helyos.pod-id"
         // For simplicity, we use the pod_id label to find the container name.
         // The worker tracks its own containers. We stop by pod label convention.
         info!(pod_id, "worker: stopping pod");
 
-        // Container name convention: nexa-{project}-{deployment}-{replica}
+        // Container name convention: helyos-{project}-{deployment}-{replica}
         // We don't have enough info here, so the master should send container_id.
         // For now, return success — the master tracks container IDs.
         Ok(Response::new(proto::StopPodResponse {
@@ -1747,11 +1747,11 @@ pub async fn start_grpc_server(
 
 - [ ] **Step 2: Update cluster/mod.rs**
 
-Replace `crates/nexad/src/cluster/mod.rs`:
+Replace `crates/helyosd/src/cluster/mod.rs`:
 
 ```rust
 pub mod proto {
-    tonic::include_proto!("nexa.cluster");
+    tonic::include_proto!("helyos.cluster");
 }
 
 pub mod server;
@@ -1760,7 +1760,7 @@ pub mod server;
 - [ ] **Step 3: Verify compilation**
 
 ```bash
-cargo check -p nexad 2>&1
+cargo check -p helyosd 2>&1
 ```
 
 Expected: compiles with no errors.
@@ -1768,7 +1768,7 @@ Expected: compiles with no errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/cluster/server.rs crates/nexad/src/cluster/mod.rs
+git add crates/helyosd/src/cluster/server.rs crates/helyosd/src/cluster/mod.rs
 git commit -m "feat: implement gRPC cluster server for worker registration and pod dispatch"
 ```
 
@@ -1777,17 +1777,17 @@ git commit -m "feat: implement gRPC cluster server for worker registration and p
 ### Task 8: Join token generation, hashing, validation
 
 **Files:**
-- Create: `crates/nexad/src/cluster/token.rs`
-- Modify: `crates/nexad/src/cluster/mod.rs`
+- Create: `crates/helyosd/src/cluster/token.rs`
+- Modify: `crates/helyosd/src/cluster/mod.rs`
 
 - [ ] **Step 1: Implement token module with tests**
 
-Create `crates/nexad/src/cluster/token.rs`:
+Create `crates/helyosd/src/cluster/token.rs`:
 
 ```rust
 use sha2::{Digest, Sha256};
 
-use nexa_core::error::{NexaError, Result};
+use helyos_core::error::{HelyosError, Result};
 
 const TOKEN_PREFIX: &str = "nxa_";
 const TOKEN_RANDOM_BYTES: usize = 32;
@@ -1814,20 +1814,20 @@ pub fn verify_token(token: &str, stored_hash: &str) -> bool {
 /// Validate token format: must start with "nxa_" and have 64 hex chars after prefix.
 pub fn validate_token_format(token: &str) -> Result<()> {
     if !token.starts_with(TOKEN_PREFIX) {
-        return Err(NexaError::Runtime(
+        return Err(HelyosError::Runtime(
             "token must start with 'nxa_'".into(),
         ));
     }
     let hex_part = &token[TOKEN_PREFIX.len()..];
     if hex_part.len() != TOKEN_RANDOM_BYTES * 2 {
-        return Err(NexaError::Runtime(format!(
+        return Err(HelyosError::Runtime(format!(
             "token hex part must be {} characters, got {}",
             TOKEN_RANDOM_BYTES * 2,
             hex_part.len()
         )));
     }
     if hex::decode(hex_part).is_err() {
-        return Err(NexaError::Runtime("token contains invalid hex".into()));
+        return Err(HelyosError::Runtime("token contains invalid hex".into()));
     }
     Ok(())
 }
@@ -1915,7 +1915,7 @@ mod tests {
 
 - [ ] **Step 2: Register in cluster/mod.rs**
 
-In `crates/nexad/src/cluster/mod.rs`, add:
+In `crates/helyosd/src/cluster/mod.rs`, add:
 
 ```rust
 pub mod token;
@@ -1924,7 +1924,7 @@ pub mod token;
 - [ ] **Step 3: Verify compilation and run tests**
 
 ```bash
-cargo test -p nexad -- token 2>&1
+cargo test -p helyosd -- token 2>&1
 ```
 
 Expected: all 7 token tests pass.
@@ -1932,7 +1932,7 @@ Expected: all 7 token tests pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/cluster/token.rs crates/nexad/src/cluster/mod.rs
+git add crates/helyosd/src/cluster/token.rs crates/helyosd/src/cluster/mod.rs
 git commit -m "feat: implement join token generation, hashing, and validation"
 ```
 
@@ -1941,12 +1941,12 @@ git commit -m "feat: implement join token generation, hashing, and validation"
 ### Task 9: Heartbeat monitoring task (detect dead nodes, reschedule pods)
 
 **Files:**
-- Create: `crates/nexad/src/cluster/heartbeat.rs`
-- Modify: `crates/nexad/src/cluster/mod.rs`
+- Create: `crates/helyosd/src/cluster/heartbeat.rs`
+- Modify: `crates/helyosd/src/cluster/mod.rs`
 
 - [ ] **Step 1: Implement heartbeat monitor**
 
-Create `crates/nexad/src/cluster/heartbeat.rs`:
+Create `crates/helyosd/src/cluster/heartbeat.rs`:
 
 ```rust
 use std::sync::Arc;
@@ -1957,8 +1957,8 @@ use tokio::time::interval;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use nexa_core::domain::models::*;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::models::*;
+use helyos_core::ports::state::StateStore;
 
 const HEARTBEAT_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 const NOT_READY_THRESHOLD: Duration = Duration::from_secs(30);
@@ -2219,7 +2219,7 @@ mod tests {
 
 - [ ] **Step 2: Register in cluster/mod.rs**
 
-In `crates/nexad/src/cluster/mod.rs`, add:
+In `crates/helyosd/src/cluster/mod.rs`, add:
 
 ```rust
 pub mod heartbeat;
@@ -2228,8 +2228,8 @@ pub mod heartbeat;
 - [ ] **Step 3: Verify compilation and run tests**
 
 ```bash
-cargo test -p nexad -- heartbeat 2>&1
-cargo test -p nexad -- collect_resources 2>&1
+cargo test -p helyosd -- heartbeat 2>&1
+cargo test -p helyosd -- collect_resources 2>&1
 ```
 
 Expected: all 3 heartbeat tests pass.
@@ -2237,22 +2237,22 @@ Expected: all 3 heartbeat tests pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/cluster/heartbeat.rs crates/nexad/src/cluster/mod.rs
+git add crates/helyosd/src/cluster/heartbeat.rs crates/helyosd/src/cluster/mod.rs
 git commit -m "feat: implement heartbeat monitor for dead node detection and worker heartbeat sender"
 ```
 
 ---
 
-### Task 10: Worker mode — nexad --mode worker startup flow
+### Task 10: Worker mode — helyosd --mode worker startup flow
 
 **Files:**
-- Create: `crates/nexad/src/cluster/worker.rs`
-- Modify: `crates/nexad/src/cluster/mod.rs`
-- Modify: `crates/nexad/src/main.rs`
+- Create: `crates/helyosd/src/cluster/worker.rs`
+- Modify: `crates/helyosd/src/cluster/mod.rs`
+- Modify: `crates/helyosd/src/main.rs`
 
 - [ ] **Step 1: Implement worker startup**
 
-Create `crates/nexad/src/cluster/worker.rs`:
+Create `crates/helyosd/src/cluster/worker.rs`:
 
 ```rust
 use std::sync::Arc;
@@ -2260,16 +2260,16 @@ use std::sync::Arc;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use nexa_core::domain::models::*;
-use nexa_core::ports::runtime::ContainerRuntime;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::models::*;
+use helyos_core::ports::runtime::ContainerRuntime;
+use helyos_core::ports::state::StateStore;
 
 use crate::cluster::heartbeat;
 use crate::cluster::proto;
 use crate::cluster::proto::cluster_service_client::ClusterServiceClient;
 use crate::cluster::server;
 
-/// Start nexad in worker mode.
+/// Start helyosd in worker mode.
 /// 1. Collect local resources
 /// 2. Register with master via gRPC
 /// 3. Start local gRPC server to receive pod assignments
@@ -2394,9 +2394,9 @@ fn gethostname() -> String {
 }
 ```
 
-- [ ] **Step 2: Add hostname crate to nexad dependencies**
+- [ ] **Step 2: Add hostname crate to helyosd dependencies**
 
-In `crates/nexad/Cargo.toml`, add under `[dependencies]`:
+In `crates/helyosd/Cargo.toml`, add under `[dependencies]`:
 
 ```toml
 hostname = "0.4"
@@ -2410,15 +2410,15 @@ hostname = "0.4"
 
 - [ ] **Step 3: Register in cluster/mod.rs**
 
-In `crates/nexad/src/cluster/mod.rs`, add:
+In `crates/helyosd/src/cluster/mod.rs`, add:
 
 ```rust
 pub mod worker;
 ```
 
-- [ ] **Step 4: Update nexad CLI to support --mode and --join**
+- [ ] **Step 4: Update helyosd CLI to support --mode and --join**
 
-Replace `crates/nexad/src/main.rs`:
+Replace `crates/helyosd/src/main.rs`:
 
 ```rust
 mod adapters;
@@ -2431,7 +2431,7 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "nexad", about = "NexaNet daemon", version)]
+#[command(name = "helyosd", about = "Helyos daemon", version)]
 struct Cli {
     #[arg(long, default_value = "0.0.0.0")]
     host: String,
@@ -2439,7 +2439,7 @@ struct Cli {
     #[arg(long, default_value = "6443")]
     port: u16,
 
-    #[arg(long, default_value = "/var/lib/nexa")]
+    #[arg(long, default_value = "/var/lib/helyos")]
     data_dir: String,
 
     /// Node mode: single, master, or worker
@@ -2480,7 +2480,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn start_single_node(cli: &Cli) -> anyhow::Result<()> {
-    info!("starting nexad in single-node mode on {}:{}", cli.host, cli.port);
+    info!("starting helyosd in single-node mode on {}:{}", cli.host, cli.port);
 
     let orchestrator = engine::Orchestrator::new().await?;
     let addr = format!("{}:{}", cli.host, cli.port);
@@ -2489,7 +2489,7 @@ async fn start_single_node(cli: &Cli) -> anyhow::Result<()> {
 
 async fn start_master(cli: &Cli) -> anyhow::Result<()> {
     info!(
-        "starting nexad in master mode — API on {}:{}, gRPC on {}:{}",
+        "starting helyosd in master mode — API on {}:{}, gRPC on {}:{}",
         cli.host, cli.port, cli.host, cli.grpc_port
     );
 
@@ -2551,11 +2551,11 @@ async fn start_worker(cli: &Cli) -> anyhow::Result<()> {
     let listen_addr = format!("{}:{}", cli.host, cli.grpc_port);
 
     // Create runtime and state for the worker
-    let docker = nexa_core::runtime::DockerRuntime::new()?;
+    let docker = helyos_core::runtime::DockerRuntime::new()?;
     docker.ping().await?;
-    let runtime: std::sync::Arc<dyn nexa_core::ports::runtime::ContainerRuntime> =
+    let runtime: std::sync::Arc<dyn helyos_core::ports::runtime::ContainerRuntime> =
         std::sync::Arc::new(docker);
-    let state: std::sync::Arc<dyn nexa_core::ports::state::StateStore> =
+    let state: std::sync::Arc<dyn helyos_core::ports::state::StateStore> =
         std::sync::Arc::new(adapters::state::InMemoryStateStore::new());
 
     cluster::worker::start_worker(
@@ -2572,13 +2572,13 @@ async fn start_worker(cli: &Cli) -> anyhow::Result<()> {
 - [ ] **Step 5: Verify compilation**
 
 ```bash
-cargo check -p nexad 2>&1
+cargo check -p helyosd 2>&1
 ```
 
 Expected: may have errors due to `orchestrator.runtime()`, `orchestrator.state()`, `orchestrator.get_cluster_token_hash()` not existing yet — those are added in Task 12. For now, ensure the worker path compiles:
 
 ```bash
-cargo check -p nexad 2>&1 | head -20
+cargo check -p helyosd 2>&1 | head -20
 ```
 
 If the master path causes errors, comment it out temporarily and verify worker mode compiles.
@@ -2586,26 +2586,26 @@ If the master path causes errors, comment it out temporarily and verify worker m
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexad/src/cluster/worker.rs crates/nexad/src/cluster/mod.rs crates/nexad/src/main.rs Cargo.toml crates/nexad/Cargo.toml
+git add crates/helyosd/src/cluster/worker.rs crates/helyosd/src/cluster/mod.rs crates/helyosd/src/main.rs Cargo.toml crates/helyosd/Cargo.toml
 git commit -m "feat: implement worker mode startup flow with registration and heartbeat"
 ```
 
 ---
 
-### Task 11: Master mode — nexad --mode master startup flow
+### Task 11: Master mode — helyosd --mode master startup flow
 
 **Files:**
-- Modify: `crates/nexad/src/engine/orchestrator.rs` (expose runtime, state, token)
+- Modify: `crates/helyosd/src/engine/orchestrator.rs` (expose runtime, state, token)
 - The main.rs master path was already written in Task 10
 
 - [ ] **Step 1: Add runtime(), state(), get_cluster_token_hash() to Orchestrator**
 
-In `crates/nexad/src/engine/orchestrator.rs`, add these fields and methods.
+In `crates/helyosd/src/engine/orchestrator.rs`, add these fields and methods.
 
 Add to the `Orchestrator` struct:
 
 ```rust
-state: Arc<dyn nexa_core::ports::state::StateStore>,
+state: Arc<dyn helyos_core::ports::state::StateStore>,
 ```
 
 Update `Orchestrator::new()` to create and store the state:
@@ -2616,7 +2616,7 @@ pub async fn new() -> anyhow::Result<Arc<Self>> {
     runtime.ping().await?;
     info!("connected to Docker runtime");
 
-    let state: Arc<dyn nexa_core::ports::state::StateStore> =
+    let state: Arc<dyn helyos_core::ports::state::StateStore> =
         Arc::new(crate::adapters::state::InMemoryStateStore::new());
 
     Ok(Arc::new(Self {
@@ -2636,7 +2636,7 @@ pub fn runtime(&self) -> Arc<dyn ContainerRuntime> {
     self.runtime.clone()
 }
 
-pub fn state(&self) -> Arc<dyn nexa_core::ports::state::StateStore> {
+pub fn state(&self) -> Arc<dyn helyos_core::ports::state::StateStore> {
     self.state.clone()
 }
 
@@ -2655,7 +2655,7 @@ Add a method to register the master node in state:
 
 ```rust
 pub async fn register_master_node(&self) -> anyhow::Result<()> {
-    use nexa_core::domain::models::*;
+    use helyos_core::domain::models::*;
 
     let hostname = hostname::get()
         .map(|h| h.to_string_lossy().to_string())
@@ -2681,11 +2681,11 @@ pub async fn register_master_node(&self) -> anyhow::Result<()> {
 
 - [ ] **Step 3: Add import for sysinfo and hostname in orchestrator**
 
-In `crates/nexad/src/engine/orchestrator.rs`, ensure `use nexa_core::ports::state::StateStore;` is imported, and add `sysinfo` and `hostname` to the uses at the top.
+In `crates/helyosd/src/engine/orchestrator.rs`, ensure `use helyos_core::ports::state::StateStore;` is imported, and add `sysinfo` and `hostname` to the uses at the top.
 
 - [ ] **Step 4: Call register_master_node in master startup**
 
-In `crates/nexad/src/main.rs`, in the `start_master()` function, after creating the orchestrator:
+In `crates/helyosd/src/main.rs`, in the `start_master()` function, after creating the orchestrator:
 
 ```rust
 orchestrator.register_master_node().await?;
@@ -2694,7 +2694,7 @@ orchestrator.register_master_node().await?;
 - [ ] **Step 5: Verify compilation**
 
 ```bash
-cargo check -p nexad 2>&1
+cargo check -p helyosd 2>&1
 ```
 
 Expected: compiles with no errors. All three modes (single, master, worker) should have valid code paths.
@@ -2702,7 +2702,7 @@ Expected: compiles with no errors. All three modes (single, master, worker) shou
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexad/src/engine/orchestrator.rs crates/nexad/src/main.rs
+git add crates/helyosd/src/engine/orchestrator.rs crates/helyosd/src/main.rs
 git commit -m "feat: implement master mode with self-registration and gRPC/API dual server"
 ```
 
@@ -2711,14 +2711,14 @@ git commit -m "feat: implement master mode with self-registration and gRPC/API d
 ### Task 12: Update orchestrator to route pod operations through ClusterTransport
 
 **Files:**
-- Modify: `crates/nexad/src/engine/orchestrator.rs`
+- Modify: `crates/helyosd/src/engine/orchestrator.rs`
 
 - [ ] **Step 1: Add ClusterTransport to Orchestrator**
 
 Add a `transport` field to the `Orchestrator` struct:
 
 ```rust
-transport: Arc<dyn nexa_core::ports::cluster::ClusterTransport>,
+transport: Arc<dyn helyos_core::ports::cluster::ClusterTransport>,
 ```
 
 Update `Orchestrator::new()` to accept a transport or default to `LocalTransport`:
@@ -2730,9 +2730,9 @@ pub async fn new() -> anyhow::Result<Arc<Self>> {
     info!("connected to Docker runtime");
 
     let runtime_arc: Arc<dyn ContainerRuntime> = Arc::new(runtime);
-    let state: Arc<dyn nexa_core::ports::state::StateStore> =
+    let state: Arc<dyn helyos_core::ports::state::StateStore> =
         Arc::new(crate::adapters::state::InMemoryStateStore::new());
-    let transport: Arc<dyn nexa_core::ports::cluster::ClusterTransport> =
+    let transport: Arc<dyn helyos_core::ports::cluster::ClusterTransport> =
         Arc::new(crate::adapters::transport::LocalTransport::new(runtime_arc.clone()));
 
     Ok(Arc::new(Self {
@@ -2750,14 +2750,14 @@ Also add a constructor that accepts a custom transport for master mode:
 
 ```rust
 pub async fn with_transport(
-    transport: Arc<dyn nexa_core::ports::cluster::ClusterTransport>,
+    transport: Arc<dyn helyos_core::ports::cluster::ClusterTransport>,
 ) -> anyhow::Result<Arc<Self>> {
     let runtime = DockerRuntime::new()?;
     runtime.ping().await?;
     info!("connected to Docker runtime");
 
     let runtime_arc: Arc<dyn ContainerRuntime> = Arc::new(runtime);
-    let state: Arc<dyn nexa_core::ports::state::StateStore> =
+    let state: Arc<dyn helyos_core::ports::state::StateStore> =
         Arc::new(crate::adapters::state::InMemoryStateStore::new());
 
     Ok(Arc::new(Self {
@@ -2847,8 +2847,8 @@ async fn select_node(&self) -> Option<Uuid> {
 - [ ] **Step 4: Verify compilation and run existing tests**
 
 ```bash
-cargo check -p nexad 2>&1
-cargo test -p nexad 2>&1
+cargo check -p helyosd 2>&1
+cargo test -p helyosd 2>&1
 ```
 
 Expected: compiles. Existing tests pass (single-node mode uses LocalTransport by default).
@@ -2856,7 +2856,7 @@ Expected: compiles. Existing tests pass (single-node mode uses LocalTransport by
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexad/src/engine/orchestrator.rs
+git add crates/helyosd/src/engine/orchestrator.rs
 git commit -m "feat: route pod operations through ClusterTransport with basic node scheduling"
 ```
 
@@ -2865,15 +2865,15 @@ git commit -m "feat: route pod operations through ClusterTransport with basic no
 ### Task 13: CLI commands — cluster init, token, nodes, node drain/rm
 
 **Files:**
-- Modify: `crates/nexa-cli/src/main.rs`
-- Modify: `crates/nexa-cli/src/commands.rs`
-- Modify: `crates/nexa-cli/src/client.rs`
-- Modify: `crates/nexad/src/api/routes.rs`
-- Modify: `crates/nexad/src/api/handlers.rs`
+- Modify: `crates/helyos-cli/src/main.rs`
+- Modify: `crates/helyos-cli/src/commands.rs`
+- Modify: `crates/helyos-cli/src/client.rs`
+- Modify: `crates/helyosd/src/api/routes.rs`
+- Modify: `crates/helyosd/src/api/handlers.rs`
 
-- [ ] **Step 1: Add cluster and node API endpoints to nexad**
+- [ ] **Step 1: Add cluster and node API endpoints to helyosd**
 
-In `crates/nexad/src/api/handlers.rs`, add:
+In `crates/helyosd/src/api/handlers.rs`, add:
 
 ```rust
 // --- Cluster ---
@@ -2964,7 +2964,7 @@ pub async fn remove_node(
 
 - [ ] **Step 2: Add cluster and node routes**
 
-In `crates/nexad/src/api/routes.rs`, add routes inside `Router::new()`:
+In `crates/helyosd/src/api/routes.rs`, add routes inside `Router::new()`:
 
 ```rust
 // Cluster
@@ -2979,7 +2979,7 @@ In `crates/nexad/src/api/routes.rs`, add routes inside `Router::new()`:
 
 - [ ] **Step 3: Add orchestrator methods for cluster/node management**
 
-In `crates/nexad/src/engine/orchestrator.rs`, add:
+In `crates/helyosd/src/engine/orchestrator.rs`, add:
 
 ```rust
 pub async fn init_cluster(&self) -> anyhow::Result<String> {
@@ -3015,7 +3015,7 @@ pub async fn drain_node(&self, name: &str) -> Result<()> {
         .state
         .get_node_by_name(name)
         .await?
-        .ok_or_else(|| NexaError::Runtime(format!("node '{name}' not found")))?;
+        .ok_or_else(|| HelyosError::Runtime(format!("node '{name}' not found")))?;
 
     let mut updated = node;
     updated.status = NodeStatus::Draining;
@@ -3031,11 +3031,11 @@ pub async fn remove_node(&self, name: &str) -> Result<()> {
         .state
         .get_node_by_name(name)
         .await?
-        .ok_or_else(|| NexaError::Runtime(format!("node '{name}' not found")))?;
+        .ok_or_else(|| HelyosError::Runtime(format!("node '{name}' not found")))?;
 
     // Ensure node is drained first
     if node.status != NodeStatus::Draining && node.role != NodeRole::Master {
-        return Err(NexaError::Runtime(format!(
+        return Err(HelyosError::Runtime(format!(
             "node '{name}' must be drained before removal (current status: {})",
             node.status
         )));
@@ -3049,7 +3049,7 @@ pub async fn remove_node(&self, name: &str) -> Result<()> {
 
 - [ ] **Step 4: Add CLI commands for cluster and nodes**
 
-In `crates/nexa-cli/src/main.rs`, add to the `Commands` enum:
+In `crates/helyos-cli/src/main.rs`, add to the `Commands` enum:
 
 ```rust
 /// Manage the cluster
@@ -3125,30 +3125,30 @@ Commands::Node { command } => match command {
 
 - [ ] **Step 5: Implement CLI command functions**
 
-In `crates/nexa-cli/src/commands.rs`, add:
+In `crates/helyos-cli/src/commands.rs`, add:
 
 ```rust
-use nexa_core::domain::models::Node;
+use helyos_core::domain::models::Node;
 
-pub async fn cluster_init(client: &NexaClient) -> Result<()> {
+pub async fn cluster_init(client: &HelyosClient) -> Result<()> {
     let resp: serde_json::Value = client.post_empty_json("/api/v1/cluster/init").await?;
     let token = resp["token"].as_str().unwrap_or("unknown");
     output::print_success("Cluster initialized");
     println!("\nJoin token (save this — it won't be shown again):\n");
     println!("  {token}\n");
     println!("Join workers with:");
-    println!("  nexad --mode worker --join <master-ip>:6444 --token {token}");
+    println!("  helyosd --mode worker --join <master-ip>:6444 --token {token}");
     Ok(())
 }
 
-pub async fn cluster_token_show(client: &NexaClient) -> Result<()> {
+pub async fn cluster_token_show(client: &HelyosClient) -> Result<()> {
     let resp: serde_json::Value = client.get("/api/v1/cluster/token").await?;
     let token = resp["token"].as_str().unwrap_or("not set");
     println!("{token}");
     Ok(())
 }
 
-pub async fn cluster_token_rotate(client: &NexaClient) -> Result<()> {
+pub async fn cluster_token_rotate(client: &HelyosClient) -> Result<()> {
     let resp: serde_json::Value = client.post_empty_json("/api/v1/cluster/token/rotate").await?;
     let token = resp["token"].as_str().unwrap_or("unknown");
     output::print_success("Token rotated");
@@ -3156,7 +3156,7 @@ pub async fn cluster_token_rotate(client: &NexaClient) -> Result<()> {
     Ok(())
 }
 
-pub async fn list_nodes(client: &NexaClient) -> Result<()> {
+pub async fn list_nodes(client: &HelyosClient) -> Result<()> {
     let nodes: Vec<Node> = client.get("/api/v1/nodes").await?;
 
     let rows: Vec<Vec<String>> = nodes
@@ -3183,13 +3183,13 @@ pub async fn list_nodes(client: &NexaClient) -> Result<()> {
     Ok(())
 }
 
-pub async fn node_drain(client: &NexaClient, name: &str) -> Result<()> {
+pub async fn node_drain(client: &HelyosClient, name: &str) -> Result<()> {
     client.post_empty(&format!("/api/v1/nodes/{name}/drain")).await?;
     output::print_success(&format!("Node '{name}' is draining"));
     Ok(())
 }
 
-pub async fn node_rm(client: &NexaClient, name: &str) -> Result<()> {
+pub async fn node_rm(client: &HelyosClient, name: &str) -> Result<()> {
     client.delete(&format!("/api/v1/nodes/{name}")).await?;
     output::print_success(&format!("Node '{name}' removed"));
     Ok(())
@@ -3206,9 +3206,9 @@ fn format_bytes(bytes: u64) -> String {
 }
 ```
 
-- [ ] **Step 6: Add post_empty_json to NexaClient**
+- [ ] **Step 6: Add post_empty_json to HelyosClient**
 
-In `crates/nexa-cli/src/client.rs`, add:
+In `crates/helyos-cli/src/client.rs`, add:
 
 ```rust
 pub async fn post_empty_json<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
@@ -3226,8 +3226,8 @@ pub async fn post_empty_json<T: DeserializeOwned>(&self, path: &str) -> Result<T
 - [ ] **Step 7: Verify compilation**
 
 ```bash
-cargo check -p nexa-cli 2>&1
-cargo check -p nexad 2>&1
+cargo check -p helyos-cli 2>&1
+cargo check -p helyosd 2>&1
 ```
 
 Expected: both compile with no errors.
@@ -3235,7 +3235,7 @@ Expected: both compile with no errors.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add crates/nexa-cli/src/ crates/nexad/src/api/ crates/nexad/src/engine/orchestrator.rs
+git add crates/helyos-cli/src/ crates/helyosd/src/api/ crates/helyosd/src/engine/orchestrator.rs
 git commit -m "feat: add CLI commands for cluster init, token management, and node operations"
 ```
 
@@ -3244,9 +3244,9 @@ git commit -m "feat: add CLI commands for cluster init, token management, and no
 ### Task 14: SQLite migration for nodes + cluster_config tables
 
 **Files:**
-- Create: `crates/nexad/src/adapters/state/sqlite.rs`
-- Modify: `crates/nexad/src/adapters/state/mod.rs`
-- Modify: `crates/nexad/Cargo.toml`
+- Create: `crates/helyosd/src/adapters/state/sqlite.rs`
+- Modify: `crates/helyosd/src/adapters/state/mod.rs`
+- Modify: `crates/helyosd/Cargo.toml`
 
 - [ ] **Step 1: Add rusqlite dependency**
 
@@ -3256,7 +3256,7 @@ In `Cargo.toml` (workspace root), add to `[workspace.dependencies]`:
 rusqlite = { version = "0.32", features = ["bundled"] }
 ```
 
-In `crates/nexad/Cargo.toml`, add under `[dependencies]`:
+In `crates/helyosd/Cargo.toml`, add under `[dependencies]`:
 
 ```toml
 rusqlite = { workspace = true }
@@ -3264,7 +3264,7 @@ rusqlite = { workspace = true }
 
 - [ ] **Step 2: Implement SqliteStateStore**
 
-Create `crates/nexad/src/adapters/state/sqlite.rs`:
+Create `crates/helyosd/src/adapters/state/sqlite.rs`:
 
 ```rust
 use std::path::Path;
@@ -3277,9 +3277,9 @@ use tokio::sync::Mutex;
 use tracing::info;
 use uuid::Uuid;
 
-use nexa_core::domain::models::*;
-use nexa_core::error::{NexaError, Result};
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::models::*;
+use helyos_core::error::{HelyosError, Result};
+use helyos_core::ports::state::StateStore;
 
 pub struct SqliteStateStore {
     conn: Arc<Mutex<Connection>>,
@@ -3414,7 +3414,7 @@ impl StateStore for SqliteStateStore {
                 node.last_heartbeat.to_rfc3339(),
             ],
         )
-        .map_err(|e| NexaError::Runtime(format!("sqlite insert_node: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("sqlite insert_node: {e}")))?;
         Ok(())
     }
 
@@ -3422,12 +3422,12 @@ impl StateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare("SELECT id, name, address, role, status, cpu_cores, memory_bytes, cpu_available, memory_available, running_pods, joined_at, last_heartbeat FROM nodes WHERE id = ?1")
-            .map_err(|e| NexaError::Runtime(format!("sqlite get_node: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("sqlite get_node: {e}")))?;
 
         let node = stmt
             .query_row(params![id.to_string()], Self::row_to_node)
             .optional()
-            .map_err(|e| NexaError::Runtime(format!("sqlite get_node: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("sqlite get_node: {e}")))?;
 
         Ok(node)
     }
@@ -3436,12 +3436,12 @@ impl StateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare("SELECT id, name, address, role, status, cpu_cores, memory_bytes, cpu_available, memory_available, running_pods, joined_at, last_heartbeat FROM nodes WHERE name = ?1")
-            .map_err(|e| NexaError::Runtime(format!("sqlite get_node_by_name: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("sqlite get_node_by_name: {e}")))?;
 
         let node = stmt
             .query_row(params![name], Self::row_to_node)
             .optional()
-            .map_err(|e| NexaError::Runtime(format!("sqlite get_node_by_name: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("sqlite get_node_by_name: {e}")))?;
 
         Ok(node)
     }
@@ -3450,11 +3450,11 @@ impl StateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare("SELECT id, name, address, role, status, cpu_cores, memory_bytes, cpu_available, memory_available, running_pods, joined_at, last_heartbeat FROM nodes ORDER BY joined_at")
-            .map_err(|e| NexaError::Runtime(format!("sqlite list_nodes: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("sqlite list_nodes: {e}")))?;
 
         let nodes = stmt
             .query_map([], Self::row_to_node)
-            .map_err(|e| NexaError::Runtime(format!("sqlite list_nodes: {e}")))?
+            .map_err(|e| HelyosError::Runtime(format!("sqlite list_nodes: {e}")))?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -3489,14 +3489,14 @@ impl StateStore for SqliteStateStore {
                 node.last_heartbeat.to_rfc3339(),
             ],
         )
-        .map_err(|e| NexaError::Runtime(format!("sqlite update_node: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("sqlite update_node: {e}")))?;
         Ok(())
     }
 
     async fn delete_node(&self, id: &Uuid) -> Result<()> {
         let conn = self.conn.lock().await;
         conn.execute("DELETE FROM nodes WHERE id = ?1", params![id.to_string()])
-            .map_err(|e| NexaError::Runtime(format!("sqlite delete_node: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("sqlite delete_node: {e}")))?;
         Ok(())
     }
 
@@ -3504,12 +3504,12 @@ impl StateStore for SqliteStateStore {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare("SELECT value FROM cluster_config WHERE key = ?1")
-            .map_err(|e| NexaError::Runtime(format!("sqlite get_cluster_config: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("sqlite get_cluster_config: {e}")))?;
 
         let value = stmt
             .query_row(params![key], |row| row.get::<_, String>(0))
             .optional()
-            .map_err(|e| NexaError::Runtime(format!("sqlite get_cluster_config: {e}")))?;
+            .map_err(|e| HelyosError::Runtime(format!("sqlite get_cluster_config: {e}")))?;
 
         Ok(value)
     }
@@ -3521,7 +3521,7 @@ impl StateStore for SqliteStateStore {
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![key, value],
         )
-        .map_err(|e| NexaError::Runtime(format!("sqlite set_cluster_config: {e}")))?;
+        .map_err(|e| HelyosError::Runtime(format!("sqlite set_cluster_config: {e}")))?;
         Ok(())
     }
 
@@ -3654,7 +3654,7 @@ mod tests {
 
 - [ ] **Step 3: Add tempfile as dev dependency**
 
-In `crates/nexad/Cargo.toml`, add:
+In `crates/helyosd/Cargo.toml`, add:
 
 ```toml
 [dev-dependencies]
@@ -3669,7 +3669,7 @@ tempfile = "3"
 
 - [ ] **Step 4: Register SqliteStateStore in state/mod.rs**
 
-Update `crates/nexad/src/adapters/state/mod.rs`:
+Update `crates/helyosd/src/adapters/state/mod.rs`:
 
 ```rust
 mod memory;
@@ -3681,7 +3681,7 @@ pub use sqlite::SqliteStateStore;
 
 - [ ] **Step 5: Add rusqlite optional import**
 
-In `crates/nexad/src/adapters/state/sqlite.rs`, add this use at the top (for `.optional()`):
+In `crates/helyosd/src/adapters/state/sqlite.rs`, add this use at the top (for `.optional()`):
 
 ```rust
 use rusqlite::OptionalExtension;
@@ -3690,7 +3690,7 @@ use rusqlite::OptionalExtension;
 - [ ] **Step 6: Verify compilation and run tests**
 
 ```bash
-cargo test -p nexad -- sqlite 2>&1
+cargo test -p helyosd -- sqlite 2>&1
 ```
 
 Expected: all 6 SQLite tests pass.
@@ -3698,7 +3698,7 @@ Expected: all 6 SQLite tests pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/state/sqlite.rs crates/nexad/src/adapters/state/mod.rs crates/nexad/Cargo.toml Cargo.toml
+git add crates/helyosd/src/adapters/state/sqlite.rs crates/helyosd/src/adapters/state/mod.rs crates/helyosd/Cargo.toml Cargo.toml
 git commit -m "feat: implement SqliteStateStore with nodes and cluster_config table migrations"
 ```
 
@@ -3721,8 +3721,8 @@ cargo test --workspace 2>&1
 - [ ] **Verify all three daemon modes parse correctly**
 
 ```bash
-cargo build -p nexad 2>&1
-./target/debug/nexad --help
+cargo build -p helyosd 2>&1
+./target/debug/helyosd --help
 ```
 
 Expected output includes `--mode`, `--join`, `--token`, `--grpc-port` flags.

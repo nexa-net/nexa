@@ -1,9 +1,9 @@
-# Example Prometheus scrape configuration for NexaNet.
+# Example Prometheus scrape configuration for Helyos.
 # Add these entries to your prometheus.yml under scrape_configs.
 
 scrape_configs:
   # Static single-node / small clusters: list targets inline.
-  - job_name: "nexad"
+  - job_name: "helyosd"
     metrics_path: /metrics
     scrape_interval: 15s
     static_configs:
@@ -13,20 +13,20 @@ scrape_configs:
 
   # Service discovery for dynamic clusters.
   #
-  # Drop one or more target files into /etc/prometheus/nexa-targets/ and
+  # Drop one or more target files into /etc/prometheus/helyos-targets/ and
   # Prometheus picks up changes without a reload. Each JSON file looks like:
   #
   #   [ { "targets": ["10.0.0.11:6443", "10.0.0.12:6443"],
   #       "labels":  { "cluster": "prod" } } ]
   #
   # A sample file is shipped at deploy/prometheus/targets.example.json.
-  - job_name: "nexad-discovered"
+  - job_name: "helyosd-discovered"
     metrics_path: /metrics
     scrape_interval: 15s
     file_sd_configs:
       - files:
-          - /etc/prometheus/nexa-targets/*.json
-          - /etc/prometheus/nexa-targets/*.yml
+          - /etc/prometheus/helyos-targets/*.json
+          - /etc/prometheus/helyos-targets/*.yml
         refresh_interval: 30s
     relabel_configs:
       # Keep `instance` as host:port even after other relabeling.
@@ -34,11 +34,11 @@ scrape_configs:
         target_label: instance
 
   # Alternative: DNS-based discovery (uncomment if you publish A/SRV records
-  # for your nexad control-plane nodes, e.g. via the built-in nexad DNS).
-  # - job_name: "nexad-dns"
+  # for your helyosd control-plane nodes, e.g. via the built-in helyosd DNS).
+  # - job_name: "helyosd-dns"
   #   metrics_path: /metrics
   #   scrape_interval: 15s
   #   dns_sd_configs:
-  #     - names: ["nexad.service.nexa.local"]
+  #     - names: ["helyosd.service.helyos.local"]
   #       type: A
   #       port: 6443

@@ -1,11 +1,11 @@
 groups:
-  - name: nexanet
+  - name: helyos
     rules:
-      - alert: NexaHighErrorRate
+      - alert: HelyosHighErrorRate
         expr: >
-          sum(rate(nexa_http_requests_total{status=~"5.."}[5m]))
+          sum(rate(helyos_http_requests_total{status=~"5.."}[5m]))
           /
-          sum(rate(nexa_http_requests_total[5m]))
+          sum(rate(helyos_http_requests_total[5m]))
           > 0.05
         for: 5m
         labels:
@@ -14,8 +14,8 @@ groups:
           summary: "High API error rate"
           description: "5xx error rate is above 5% for the last 5 minutes."
 
-      - alert: NexaContainerOOM
-        expr: increase(nexa_container_events_total{event="oom"}[5m]) > 0
+      - alert: HelyosContainerOOM
+        expr: increase(helyos_container_events_total{event="oom"}[5m]) > 0
         for: 1m
         labels:
           severity: critical
@@ -23,19 +23,19 @@ groups:
           summary: "Container OOM detected"
           description: "A container was killed due to out-of-memory in the last 5 minutes."
 
-      - alert: NexaNodeDown
-        expr: nexa_nodes_total < 1
+      - alert: HelyosNodeDown
+        expr: helyos_nodes_total < 1
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "No cluster nodes"
-          description: "nexa_nodes_total has been below 1 for 2 minutes."
+          description: "helyos_nodes_total has been below 1 for 2 minutes."
 
-      - alert: NexaHighAPILatency
+      - alert: HelyosHighAPILatency
         expr: >
           histogram_quantile(0.99,
-            sum(rate(nexa_http_request_duration_seconds_bucket[5m])) by (le)
+            sum(rate(helyos_http_request_duration_seconds_bucket[5m])) by (le)
           ) > 2
         for: 5m
         labels:
@@ -44,11 +44,11 @@ groups:
           summary: "High API latency"
           description: "API p99 latency is above 2 seconds for the last 5 minutes."
 
-      - alert: NexaProxyUpstreamErrors
+      - alert: HelyosProxyUpstreamErrors
         expr: >
-          sum(rate(nexa_proxy_errors_total[5m]))
+          sum(rate(helyos_proxy_errors_total[5m]))
           /
-          (sum(rate(nexa_proxy_requests_total[5m])) + sum(rate(nexa_proxy_errors_total[5m])))
+          (sum(rate(helyos_proxy_requests_total[5m])) + sum(rate(helyos_proxy_errors_total[5m])))
           > 0.1
         for: 5m
         labels:
@@ -57,10 +57,10 @@ groups:
           summary: "High proxy error rate"
           description: "Proxy error rate is above 10% for the last 5 minutes."
 
-      - alert: NexaSchedulerSlow
+      - alert: HelyosSchedulerSlow
         expr: >
           histogram_quantile(0.99,
-            sum(rate(nexa_schedule_duration_seconds_bucket[5m])) by (le)
+            sum(rate(helyos_schedule_duration_seconds_bucket[5m])) by (le)
           ) > 0.5
         for: 5m
         labels:
@@ -70,19 +70,19 @@ groups:
           description: "Scheduler p99 latency is above 500ms for the last 5 minutes."
 
       # --- Process / availability ---
-      - alert: NexaDaemonDown
+      - alert: HelyosDaemonDown
         # `up` is synthesized by Prometheus for every scrape target.
-        expr: up{job=~"nexad.*"} == 0
+        expr: up{job=~"helyosd.*"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "nexad target is down"
-          description: "Prometheus cannot scrape nexad at {{ $labels.instance }} — the daemon process is down or unreachable for 1 minute."
+          summary: "helyosd target is down"
+          description: "Prometheus cannot scrape helyosd at {{ $labels.instance }} — the daemon process is down or unreachable for 1 minute."
 
       # --- Crash loops ---
-      - alert: NexaContainerCrashLoop
-        expr: increase(nexa_container_events_total{event="died"}[15m]) > 5
+      - alert: HelyosContainerCrashLoop
+        expr: increase(helyos_container_events_total{event="died"}[15m]) > 5
         for: 5m
         labels:
           severity: warning
@@ -91,26 +91,26 @@ groups:
           description: "More than 5 container deaths in the last 15 minutes ({{ $value | printf \"%.0f\" }}) — a workload is likely crash-looping."
 
       # --- Split-brain ---
-      - alert: NexaClusterSplitBrain
+      - alert: HelyosClusterSplitBrain
         # Control-plane instances disagree on the cluster node count for a
         # sustained period — a network partition or split-brain is likely.
-        # Requires scraping more than one nexad control-plane instance.
-        expr: (max(nexa_nodes_total) - min(nexa_nodes_total)) > 0
+        # Requires scraping more than one helyosd control-plane instance.
+        expr: (max(helyos_nodes_total) - min(helyos_nodes_total)) > 0
         for: 5m
         labels:
           severity: critical
         annotations:
           summary: "Cluster split-brain suspected"
-          description: "nexad instances report disagreeing node counts (spread={{ $value | printf \"%.0f\" }}) for 5 minutes — investigate for a network partition."
+          description: "helyosd instances report disagreeing node counts (spread={{ $value | printf \"%.0f\" }}) for 5 minutes — investigate for a network partition."
 
-  # These rules depend on companion exporters scraped alongside nexad:
+  # These rules depend on companion exporters scraped alongside helyosd:
   #   - node_exporter        -> disk-space rules
   #   - blackbox_exporter     -> TLS certificate-expiry rules
   # They are inert (no series, never fire) until those exporters are configured.
-  - name: nexanet-host
+  - name: helyos-host
     rules:
       # --- Disk space ---
-      - alert: NexaNodeDiskSpaceLow
+      - alert: HelyosNodeDiskSpaceLow
         expr: >
           (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) < 0.10
@@ -121,7 +121,7 @@ groups:
           summary: "Low disk space"
           description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is below 10% free."
 
-      - alert: NexaNodeDiskSpaceCritical
+      - alert: HelyosNodeDiskSpaceCritical
         expr: >
           (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) < 0.05
@@ -133,7 +133,7 @@ groups:
           description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is below 5% free — writes may fail imminently."
 
       # --- TLS certificate expiry ---
-      - alert: NexaTlsCertExpiringSoon
+      - alert: HelyosTlsCertExpiringSoon
         expr: (probe_ssl_earliest_cert_expiry - time()) < (14 * 24 * 3600)
         for: 1h
         labels:
@@ -142,7 +142,7 @@ groups:
           summary: "TLS certificate expiring soon"
           description: "The certificate probed for {{ $labels.instance }} expires in less than 14 days."
 
-      - alert: NexaTlsCertExpiringCritical
+      - alert: HelyosTlsCertExpiringCritical
         expr: (probe_ssl_earliest_cert_expiry - time()) < (3 * 24 * 3600)
         for: 1h
         labels:

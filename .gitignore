@@ -5,8 +5,8 @@
 .env
 *.log
 .superpowers
-nexa-cli/
-nexa-core/
-nexa-proxy/
-nexa-std/
-nexad/
+helyos-cli/
+helyos-core/
+helyos-proxy/
+helyos-std/
+helyosd/

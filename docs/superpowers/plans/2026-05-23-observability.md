@@ -1,10 +1,10 @@
-# NexaNet Observability Implementation Plan
+# Helyos Observability Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add Prometheus metrics exposition to nexad with full-stack coverage, Grafana dashboard, and alerting rules.
+**Goal:** Add Prometheus metrics exposition to helyosd with full-stack coverage, Grafana dashboard, and alerting rules.
 
-**Architecture:** MetricsPort trait in nexa-core (hexagonal port), PrometheusMetrics adapter in nexad using the `prometheus` crate. Metrics recorded via dependency injection; HTTP metrics via Tower middleware; `/metrics` endpoint on the nexad server.
+**Architecture:** MetricsPort trait in helyos-core (hexagonal port), PrometheusMetrics adapter in helyosd using the `prometheus` crate. Metrics recorded via dependency injection; HTTP metrics via Tower middleware; `/metrics` endpoint on the helyosd server.
 
 **Tech Stack:** `prometheus` crate (counters, gauges, histograms), `async-trait`, axum middleware (Tower)
 
@@ -12,7 +12,7 @@
 
 ## File Structure
 
-### nexa-core
+### helyos-core
 | File | Responsibility |
 |---|---|
 | `src/ports/metrics.rs` (CREATE) | MetricsPort trait + NoOpMetrics |
@@ -20,7 +20,7 @@
 | `src/domain/orchestrator.rs` (MODIFY) | Accept `Option<Arc<dyn MetricsPort>>`, instrument handlers |
 | `Cargo.toml` (no change needed — async-trait already a dependency) | — |
 
-### nexad
+### helyosd
 | File | Responsibility |
 |---|---|
 | `src/adapters/metrics/mod.rs` (CREATE) | Module re-export |
@@ -33,24 +33,24 @@
 | `src/main.rs` (MODIFY) | Wire PrometheusMetrics into orchestrator, AppState, event_watcher |
 | `Cargo.toml` (MODIFY) | Add `prometheus` dependency |
 
-### Deploy configs (under NexaNet meta-repo)
+### Deploy configs (under Helyos meta-repo)
 | File | Responsibility |
 |---|---|
-| `deploy/grafana/nexanet-dashboard.json` (CREATE) | Grafana dashboard |
+| `deploy/grafana/helyos-dashboard.json` (CREATE) | Grafana dashboard |
 | `deploy/prometheus/alerts.yml` (CREATE) | Prometheus alerting rules |
 | `deploy/prometheus/scrape-config.yml` (CREATE) | Example scrape config |
 
 ---
 
-### Task 1: MetricsPort Trait and NoOpMetrics (nexa-core)
+### Task 1: MetricsPort Trait and NoOpMetrics (helyos-core)
 
 **Files:**
-- Create: `nexa-core/src/ports/metrics.rs`
-- Modify: `nexa-core/src/ports/mod.rs`
+- Create: `helyos-core/src/ports/metrics.rs`
+- Modify: `helyos-core/src/ports/mod.rs`
 
 - [ ] **Step 1: Write the test for NoOpMetrics**
 
-In `nexa-core/src/ports/metrics.rs`, add the trait and NoOpMetrics with a test at the bottom:
+In `helyos-core/src/ports/metrics.rs`, add the trait and NoOpMetrics with a test at the bottom:
 
 ```rust
 use async_trait::async_trait;
@@ -104,34 +104,34 @@ mod tests {
 
 - [ ] **Step 2: Add the module to ports/mod.rs**
 
-Add `pub mod metrics;` to `nexa-core/src/ports/mod.rs` (after the existing modules).
+Add `pub mod metrics;` to `helyos-core/src/ports/mod.rs` (after the existing modules).
 
 - [ ] **Step 3: Run tests to verify**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-core && cargo test ports::metrics`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-core && cargo test ports::metrics`
 Expected: PASS — the noop_metrics_implements_trait test passes.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core
+cd /Users/nassime/GitHub/Helyos/helyos-core
 git add src/ports/metrics.rs src/ports/mod.rs
 git commit -m "feat: add MetricsPort trait and NoOpMetrics"
 ```
 
 ---
 
-### Task 2: PrometheusMetrics Adapter (nexad)
+### Task 2: PrometheusMetrics Adapter (helyosd)
 
 **Files:**
-- Create: `nexad/src/adapters/metrics/mod.rs`
-- Create: `nexad/src/adapters/metrics/prometheus.rs`
-- Modify: `nexad/src/adapters/mod.rs`
-- Modify: `nexad/Cargo.toml`
+- Create: `helyosd/src/adapters/metrics/mod.rs`
+- Create: `helyosd/src/adapters/metrics/prometheus.rs`
+- Modify: `helyosd/src/adapters/mod.rs`
+- Modify: `helyosd/Cargo.toml`
 
-- [ ] **Step 1: Add prometheus dependency to nexad/Cargo.toml**
+- [ ] **Step 1: Add prometheus dependency to helyosd/Cargo.toml**
 
-Add to `[dependencies]` section in `nexad/Cargo.toml`:
+Add to `[dependencies]` section in `helyosd/Cargo.toml`:
 
 ```toml
 prometheus = "0.13"
@@ -139,7 +139,7 @@ prometheus = "0.13"
 
 - [ ] **Step 2: Create the module file**
 
-Create `nexad/src/adapters/metrics/mod.rs`:
+Create `helyosd/src/adapters/metrics/mod.rs`:
 
 ```rust
 mod prometheus;
@@ -148,10 +148,10 @@ pub use self::prometheus::PrometheusMetrics;
 
 - [ ] **Step 3: Write PrometheusMetrics with tests**
 
-Create `nexad/src/adapters/metrics/prometheus.rs`:
+Create `helyosd/src/adapters/metrics/prometheus.rs`:
 
 ```rust
-use nexa_core::ports::metrics::MetricsPort;
+use helyos_core::ports::metrics::MetricsPort;
 use prometheus::{
     Encoder, GaugeVec, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, Opts, Registry,
     TextEncoder,
@@ -177,14 +177,14 @@ impl PrometheusMetrics {
         let registry = Registry::new();
 
         let http_requests_total = IntCounterVec::new(
-            Opts::new("nexa_http_requests_total", "Total HTTP requests"),
+            Opts::new("helyos_http_requests_total", "Total HTTP requests"),
             &["method", "path", "status"],
         )
         .unwrap();
 
         let http_request_duration = HistogramVec::new(
             HistogramOpts::new(
-                "nexa_http_request_duration_seconds",
+                "helyos_http_request_duration_seconds",
                 "HTTP request duration in seconds",
             ),
             &["method", "path"],
@@ -192,14 +192,14 @@ impl PrometheusMetrics {
         .unwrap();
 
         let container_events_total = IntCounterVec::new(
-            Opts::new("nexa_container_events_total", "Total container lifecycle events"),
+            Opts::new("helyos_container_events_total", "Total container lifecycle events"),
             &["event"],
         )
         .unwrap();
 
         let schedule_duration = HistogramVec::new(
             HistogramOpts::new(
-                "nexa_schedule_duration_seconds",
+                "helyos_schedule_duration_seconds",
                 "Scheduler decision duration in seconds",
             ),
             &["strategy"],
@@ -207,28 +207,28 @@ impl PrometheusMetrics {
         .unwrap();
 
         let deployment_ops_total = IntCounterVec::new(
-            Opts::new("nexa_deployment_ops_total", "Total deployment operations"),
+            Opts::new("helyos_deployment_ops_total", "Total deployment operations"),
             &["op"],
         )
         .unwrap();
 
         let nodes_total =
-            IntGauge::new("nexa_nodes_total", "Current number of cluster nodes").unwrap();
+            IntGauge::new("helyos_nodes_total", "Current number of cluster nodes").unwrap();
 
-        let pods_total = IntGauge::new("nexa_pods_total", "Current number of pods").unwrap();
+        let pods_total = IntGauge::new("helyos_pods_total", "Current number of pods").unwrap();
 
         let deployments_total =
-            IntGauge::new("nexa_deployments_total", "Current number of deployments").unwrap();
+            IntGauge::new("helyos_deployments_total", "Current number of deployments").unwrap();
 
         let proxy_requests_total = IntCounterVec::new(
-            Opts::new("nexa_proxy_requests_total", "Total proxy requests"),
+            Opts::new("helyos_proxy_requests_total", "Total proxy requests"),
             &["domain", "status"],
         )
         .unwrap();
 
         let proxy_request_duration = HistogramVec::new(
             HistogramOpts::new(
-                "nexa_proxy_request_duration_seconds",
+                "helyos_proxy_request_duration_seconds",
                 "Proxy upstream request duration in seconds",
             ),
             &["domain"],
@@ -236,7 +236,7 @@ impl PrometheusMetrics {
         .unwrap();
 
         let proxy_errors_total = IntCounterVec::new(
-            Opts::new("nexa_proxy_errors_total", "Total proxy errors"),
+            Opts::new("helyos_proxy_errors_total", "Total proxy errors"),
             &["domain", "error_type"],
         )
         .unwrap();
@@ -348,8 +348,8 @@ mod tests {
         let m = PrometheusMetrics::new();
         m.record_http_request("GET", "/health", 200, 0.001);
         let output = m.encode();
-        assert!(output.contains("nexa_http_requests_total"));
-        assert!(output.contains("nexa_http_request_duration_seconds"));
+        assert!(output.contains("helyos_http_requests_total"));
+        assert!(output.contains("helyos_http_request_duration_seconds"));
     }
 
     #[test]
@@ -357,7 +357,7 @@ mod tests {
         let m = PrometheusMetrics::new();
         m.record_container_event("died");
         let output = m.encode();
-        assert!(output.contains("nexa_container_events_total"));
+        assert!(output.contains("helyos_container_events_total"));
         assert!(output.contains("died"));
     }
 
@@ -368,9 +368,9 @@ mod tests {
         m.set_pod_count(10);
         m.set_deployment_count(5);
         let output = m.encode();
-        assert!(output.contains("nexa_nodes_total 3"));
-        assert!(output.contains("nexa_pods_total 10"));
-        assert!(output.contains("nexa_deployments_total 5"));
+        assert!(output.contains("helyos_nodes_total 3"));
+        assert!(output.contains("helyos_pods_total 10"));
+        assert!(output.contains("helyos_deployments_total 5"));
     }
 
     #[test]
@@ -379,7 +379,7 @@ mod tests {
         m.record_deployment_op("deploy");
         m.record_deployment_op("scale");
         let output = m.encode();
-        assert!(output.contains("nexa_deployment_ops_total"));
+        assert!(output.contains("helyos_deployment_ops_total"));
         assert!(output.contains("deploy"));
         assert!(output.contains("scale"));
     }
@@ -390,8 +390,8 @@ mod tests {
         m.record_proxy_request("api.example.com", 200, 0.05);
         m.record_proxy_error("api.example.com", "connection_refused");
         let output = m.encode();
-        assert!(output.contains("nexa_proxy_requests_total"));
-        assert!(output.contains("nexa_proxy_errors_total"));
+        assert!(output.contains("helyos_proxy_requests_total"));
+        assert!(output.contains("helyos_proxy_errors_total"));
         assert!(output.contains("api.example.com"));
     }
 
@@ -407,33 +407,33 @@ mod tests {
 
 - [ ] **Step 4: Add metrics module to adapters/mod.rs**
 
-Add `pub mod metrics;` to `nexad/src/adapters/mod.rs`.
+Add `pub mod metrics;` to `helyosd/src/adapters/mod.rs`.
 
 - [ ] **Step 5: Run tests to verify**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test adapters::metrics`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test adapters::metrics`
 Expected: PASS — all 7 tests pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/adapters/metrics/ src/adapters/mod.rs Cargo.toml
 git commit -m "feat: add PrometheusMetrics adapter implementing MetricsPort"
 ```
 
 ---
 
-### Task 3: Add MetricsPort to Orchestrator (nexa-core)
+### Task 3: Add MetricsPort to Orchestrator (helyos-core)
 
 **Files:**
-- Modify: `nexa-core/src/domain/orchestrator.rs`
+- Modify: `helyos-core/src/domain/orchestrator.rs`
 
 The Orchestrator struct (line 390) and `spawn()` (line 410) need a metrics field. The run loop handlers need instrumentation.
 
 - [ ] **Step 1: Add metrics field to Orchestrator struct**
 
-At `nexa-core/src/domain/orchestrator.rs:390`, add the import and field:
+At `helyos-core/src/domain/orchestrator.rs:390`, add the import and field:
 
 Add to the imports at the top of the file (around line 22, after the existing `use crate::ports::...` lines):
 ```rust
@@ -447,7 +447,7 @@ Add to the `Orchestrator` struct (after `route_store` field at line 405):
 
 - [ ] **Step 2: Update spawn() to accept metrics parameter**
 
-At `nexa-core/src/domain/orchestrator.rs:410`, add `metrics: Option<Arc<dyn MetricsPort>>` as the 9th parameter to `spawn()`:
+At `helyos-core/src/domain/orchestrator.rs:410`, add `metrics: Option<Arc<dyn MetricsPort>>` as the 9th parameter to `spawn()`:
 
 ```rust
     pub fn spawn(
@@ -562,35 +562,35 @@ In `select_node` (line 995), wrap the scheduler call with timing. Replace the `s
 Every call site that creates `Orchestrator::spawn(...)` needs the new 9th argument `None` added (for now — wiring real metrics comes in Task 6).
 
 Search the codebase for `Orchestrator::spawn(` — there are callers in:
-1. `nexad/tests/api_integration.rs` (line 134) — add `None,` after the `Some(route_store),` argument
-2. `nexa-core/src/domain/orchestrator.rs` itself in tests (search for `Orchestrator::spawn` in the `#[cfg(test)]` blocks at the bottom of the file) — add `None,` as the last argument to each call
+1. `helyosd/tests/api_integration.rs` (line 134) — add `None,` after the `Some(route_store),` argument
+2. `helyos-core/src/domain/orchestrator.rs` itself in tests (search for `Orchestrator::spawn` in the `#[cfg(test)]` blocks at the bottom of the file) — add `None,` as the last argument to each call
 
 - [ ] **Step 11: Run tests to verify**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexa-core && cargo test`
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyos-core && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test`
 Expected: both PASS
 
 - [ ] **Step 12: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core
+cd /Users/nassime/GitHub/Helyos/helyos-core
 git add src/domain/orchestrator.rs
 git commit -m "feat: add MetricsPort to Orchestrator with handler instrumentation"
 ```
 
 ---
 
-### Task 4: /metrics Endpoint and HTTP Middleware (nexad)
+### Task 4: /metrics Endpoint and HTTP Middleware (helyosd)
 
 **Files:**
-- Modify: `nexad/src/api/mod.rs`
-- Modify: `nexad/src/api/handlers.rs`
-- Modify: `nexad/src/api/routes.rs`
+- Modify: `helyosd/src/api/mod.rs`
+- Modify: `helyosd/src/api/handlers.rs`
+- Modify: `helyosd/src/api/routes.rs`
 
 - [ ] **Step 1: Add metrics to AppState**
 
-In `nexad/src/api/mod.rs`, update the AppState struct and `serve()` function:
+In `helyosd/src/api/mod.rs`, update the AppState struct and `serve()` function:
 
 ```rust
 mod handlers;
@@ -598,9 +598,9 @@ pub mod routes;
 
 use std::sync::Arc;
 
-use nexa_core::domain::orchestrator::OrchestratorHandle;
-use nexa_core::ports::metrics::MetricsPort;
-use nexa_core::ports::state::StateStore;
+use helyos_core::domain::orchestrator::OrchestratorHandle;
+use helyos_core::ports::metrics::MetricsPort;
+use helyos_core::ports::state::StateStore;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -623,7 +623,7 @@ pub async fn serve(
     let app = routes::build(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("nexad API listening on {addr}");
+    tracing::info!("helyosd API listening on {addr}");
 
     axum::serve(listener, app).await?;
     Ok(())
@@ -632,7 +632,7 @@ pub async fn serve(
 
 - [ ] **Step 2: Add metrics handler and middleware to handlers.rs**
 
-Add at the top of `nexad/src/api/handlers.rs`, alongside existing imports:
+Add at the top of `helyosd/src/api/handlers.rs`, alongside existing imports:
 
 ```rust
 use axum::middleware::Next;
@@ -640,7 +640,7 @@ use axum::http::Request as AxumRequest;
 use std::time::Instant;
 ```
 
-Add two new functions at the bottom of `nexad/src/api/handlers.rs` (before any `#[cfg(test)]` block):
+Add two new functions at the bottom of `helyosd/src/api/handlers.rs` (before any `#[cfg(test)]` block):
 
 ```rust
 pub async fn metrics_endpoint(State(state): AppStateExtractor) -> impl IntoResponse {
@@ -678,7 +678,7 @@ pub async fn metrics_middleware(
 }
 ```
 
-**Important:** For the `metrics_endpoint` handler to work via downcasting, we need to add `as_any()` to the MetricsPort trait. Go back to `nexa-core/src/ports/metrics.rs` and add:
+**Important:** For the `metrics_endpoint` handler to work via downcasting, we need to add `as_any()` to the MetricsPort trait. Go back to `helyos-core/src/ports/metrics.rs` and add:
 
 ```rust
 use std::any::Any;
@@ -696,7 +696,7 @@ Add this implementation to `NoOpMetrics`:
     }
 ```
 
-And in `nexad/src/adapters/metrics/prometheus.rs`, add to the `MetricsPort for PrometheusMetrics` impl:
+And in `helyosd/src/adapters/metrics/prometheus.rs`, add to the `MetricsPort for PrometheusMetrics` impl:
 ```rust
     fn as_any(&self) -> &dyn Any {
         self
@@ -705,7 +705,7 @@ And in `nexad/src/adapters/metrics/prometheus.rs`, add to the `MetricsPort for P
 
 - [ ] **Step 3: Wire the /metrics route and middleware in routes.rs**
 
-Replace `nexad/src/api/routes.rs` content with:
+Replace `helyosd/src/api/routes.rs` content with:
 
 ```rust
 use axum::Router;
@@ -802,16 +802,16 @@ pub fn build(state: AppState) -> Router {
 
 - [ ] **Step 4: Update api_integration.rs test to pass metrics**
 
-In `nexad/tests/api_integration.rs`, the `TestServer::new()` method constructs `AppState`. Update it:
+In `helyosd/tests/api_integration.rs`, the `TestServer::new()` method constructs `AppState`. Update it:
 
 Add import:
 ```rust
-use nexa_core::ports::metrics::NoOpMetrics;
+use helyos_core::ports::metrics::NoOpMetrics;
 ```
 
 Update the AppState construction (around line 146):
 ```rust
-        let metrics: Arc<dyn nexa_core::ports::metrics::MetricsPort> = Arc::new(NoOpMetrics);
+        let metrics: Arc<dyn helyos_core::ports::metrics::MetricsPort> = Arc::new(NoOpMetrics);
 ```
 
 Update the Orchestrator::spawn call to add `None,` as the last (9th) argument.
@@ -829,31 +829,31 @@ Also update the `serve()` call in main.rs (done in Task 6).
 
 - [ ] **Step 5: Run tests to verify**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core
+cd /Users/nassime/GitHub/Helyos/helyos-core
 git add src/ports/metrics.rs
 git commit -m "feat: add as_any() to MetricsPort for downcasting"
 
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/api/mod.rs src/api/handlers.rs src/api/routes.rs tests/api_integration.rs
 git commit -m "feat: add /metrics endpoint and HTTP metrics middleware"
 ```
 
 ---
 
-### Task 5: Instrument Event Watcher (nexad)
+### Task 5: Instrument Event Watcher (helyosd)
 
 **Files:**
-- Modify: `nexad/src/adapters/event_watcher.rs`
+- Modify: `helyosd/src/adapters/event_watcher.rs`
 
 - [ ] **Step 1: Update spawn_event_watcher signature**
 
-Modify `nexad/src/adapters/event_watcher.rs` to accept an `Option<Arc<dyn MetricsPort>>`:
+Modify `helyosd/src/adapters/event_watcher.rs` to accept an `Option<Arc<dyn MetricsPort>>`:
 
 ```rust
 use std::sync::Arc;
@@ -863,9 +863,9 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use nexa_core::domain::orchestrator::Command;
-use nexa_core::ports::metrics::MetricsPort;
-use nexa_core::ports::runtime::{ContainerRuntime, RuntimeEvent};
+use helyos_core::domain::orchestrator::Command;
+use helyos_core::ports::metrics::MetricsPort;
+use helyos_core::ports::runtime::{ContainerRuntime, RuntimeEvent};
 
 pub fn spawn_event_watcher(
     runtime: Arc<dyn ContainerRuntime>,
@@ -895,7 +895,7 @@ pub fn spawn_event_watcher(
 
 ```rust
 async fn handle_event_stream(
-    mut stream: nexa_core::ports::runtime::EventStream,
+    mut stream: helyos_core::ports::runtime::EventStream,
     tx: &mpsc::Sender<Command>,
     metrics: Option<&dyn MetricsPort>,
 ) {
@@ -957,7 +957,7 @@ Add to the test module:
 ```rust
     #[tokio::test]
     async fn event_watcher_records_metrics_on_die() {
-        use nexa_core::ports::metrics::NoOpMetrics;
+        use helyos_core::ports::metrics::NoOpMetrics;
 
         let pod_id = Uuid::new_v4();
         let events = vec![RuntimeEvent::ContainerDied {
@@ -965,7 +965,7 @@ Add to the test module:
             exit_code: 1,
         }];
         let (tx, _rx) = mpsc::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
         let metrics = NoOpMetrics;
         handle_event_stream(stream, &tx, Some(&metrics)).await;
@@ -974,30 +974,30 @@ Add to the test module:
 
 - [ ] **Step 5: Run tests to verify**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test adapters::event_watcher`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test adapters::event_watcher`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/adapters/event_watcher.rs
 git commit -m "feat: instrument event watcher with MetricsPort"
 ```
 
 ---
 
-### Task 6: Wire Everything in nexad main.rs
+### Task 6: Wire Everything in helyosd main.rs
 
 **Files:**
-- Modify: `nexad/src/main.rs`
+- Modify: `helyosd/src/main.rs`
 
 - [ ] **Step 1: Update imports**
 
-Add to the imports at the top of `nexad/src/main.rs`:
+Add to the imports at the top of `helyosd/src/main.rs`:
 
 ```rust
-use nexa_core::ports::metrics::MetricsPort;
+use helyos_core::ports::metrics::MetricsPort;
 ```
 
 - [ ] **Step 2: Update spawn_orchestrator to accept and pass metrics**
@@ -1011,10 +1011,10 @@ fn spawn_orchestrator(
     secret_store: Arc<dyn SecretStore>,
     dns: Option<Arc<dyn DnsProvider>>,
     master_ip: Option<String>,
-    proxy: Option<Arc<dyn nexa_core::ports::proxy::ProxyBackend>>,
-    route_store: Option<Arc<dyn nexa_core::ports::route_store::RouteStore>>,
+    proxy: Option<Arc<dyn helyos_core::ports::proxy::ProxyBackend>>,
+    route_store: Option<Arc<dyn helyos_core::ports::route_store::RouteStore>>,
     metrics: Option<Arc<dyn MetricsPort>>,
-) -> nexa_core::domain::orchestrator::OrchestratorHandle {
+) -> helyos_core::domain::orchestrator::OrchestratorHandle {
 ```
 
 Update the `Orchestrator::spawn(...)` call inside this function (line 212) to pass `metrics.clone()` as the 9th argument:
@@ -1036,7 +1036,7 @@ Update the `Orchestrator::spawn(...)` call inside this function (line 212) to pa
 Update the `spawn_event_watcher` call (line 229) to pass metrics:
 
 ```rust
-    nexad::adapters::event_watcher::spawn_event_watcher(
+    helyosd::adapters::event_watcher::spawn_event_watcher(
         Arc::clone(runtime),
         handle.command_sender(),
         metrics,
@@ -1051,7 +1051,7 @@ After the `let (proxy, route_store) = init_proxy(cli)?;` line (line 277), add:
 
 ```rust
     let metrics: Arc<dyn MetricsPort> =
-        Arc::new(nexad::adapters::metrics::PrometheusMetrics::new());
+        Arc::new(helyosd::adapters::metrics::PrometheusMetrics::new());
 ```
 
 Update `spawn_orchestrator` call to pass `Some(metrics.clone())`:
@@ -1069,65 +1069,65 @@ Update `spawn_orchestrator` call to pass `Some(metrics.clone())`:
     );
 ```
 
-Update the `nexad::api::serve` call (line 304) to pass metrics:
+Update the `helyosd::api::serve` call (line 304) to pass metrics:
 
 ```rust
-    nexad::api::serve(handle, Arc::clone(&store), metrics, &addr).await
+    helyosd::api::serve(handle, Arc::clone(&store), metrics, &addr).await
 ```
 
 - [ ] **Step 4: Update start_master similarly**
 
-Apply the same changes to `start_master` (line 309): create `PrometheusMetrics`, pass to `spawn_orchestrator`, pass to `nexad::api::serve`.
+Apply the same changes to `start_master` (line 309): create `PrometheusMetrics`, pass to `spawn_orchestrator`, pass to `helyosd::api::serve`.
 
 - [ ] **Step 5: Run tests and cargo check**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo check`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo check`
 Expected: PASS — no compilation errors.
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add src/main.rs
-git commit -m "feat: wire PrometheusMetrics into nexad startup"
+git commit -m "feat: wire PrometheusMetrics into helyosd startup"
 ```
 
 ---
 
-### Task 7: Push nexa-core and Update nexad Dependency
+### Task 7: Push helyos-core and Update helyosd Dependency
 
-Since nexad depends on nexa-core via git, nexa-core changes must be pushed first.
+Since helyosd depends on helyos-core via git, helyos-core changes must be pushed first.
 
-- [ ] **Step 1: Push nexa-core**
+- [ ] **Step 1: Push helyos-core**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core
+cd /Users/nassime/GitHub/Helyos/helyos-core
 git push origin main
 ```
 
-- [ ] **Step 2: Update nexad's lock file**
+- [ ] **Step 2: Update helyosd's lock file**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
-cargo update -p nexa-core
+cd /Users/nassime/GitHub/Helyos/helyosd
+cargo update -p helyos-core
 ```
 
-- [ ] **Step 3: Verify nexad compiles and tests pass**
+- [ ] **Step 3: Verify helyosd compiles and tests pass**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 cargo test
 ```
 
 - [ ] **Step 4: Commit lock file if changed**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add Cargo.lock
-git commit -m "chore: update nexa-core dependency (MetricsPort)"
+git commit -m "chore: update helyos-core dependency (MetricsPort)"
 ```
 
 ---
@@ -1135,18 +1135,18 @@ git commit -m "chore: update nexa-core dependency (MetricsPort)"
 ### Task 8: Grafana Dashboard (deploy config)
 
 **Files:**
-- Create: `deploy/grafana/nexanet-dashboard.json`
+- Create: `deploy/grafana/helyos-dashboard.json`
 
 - [ ] **Step 1: Create deploy directories**
 
 ```bash
-mkdir -p /Users/nassime/GitHub/NexaNet/deploy/grafana
-mkdir -p /Users/nassime/GitHub/NexaNet/deploy/prometheus
+mkdir -p /Users/nassime/GitHub/Helyos/deploy/grafana
+mkdir -p /Users/nassime/GitHub/Helyos/deploy/prometheus
 ```
 
 - [ ] **Step 2: Write dashboard JSON**
 
-Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containing 4 rows:
+Create `deploy/grafana/helyos-dashboard.json` with a Grafana dashboard containing 4 rows:
 
 ```json
 {
@@ -1158,8 +1158,8 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "pluginId": "prometheus"
     }
   ],
-  "title": "NexaNet Overview",
-  "uid": "nexanet-overview",
+  "title": "Helyos Overview",
+  "uid": "helyos-overview",
   "version": 1,
   "schemaVersion": 39,
   "templating": {
@@ -1167,7 +1167,7 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       {
         "name": "instance",
         "type": "query",
-        "query": "label_values(nexa_http_requests_total, instance)",
+        "query": "label_values(helyos_http_requests_total, instance)",
         "datasource": "${DS_PROMETHEUS}",
         "multi": true,
         "includeAll": true
@@ -1181,7 +1181,7 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_http_requests_total{instance=~\"$instance\"}[5m])) by (method)",
+          "expr": "sum(rate(helyos_http_requests_total{instance=~\"$instance\"}[5m])) by (method)",
           "legendFormat": "{{method}}"
         }
       ]
@@ -1192,15 +1192,15 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(helyos_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
           "legendFormat": "p50"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(helyos_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
           "legendFormat": "p95"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(nexa_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(helyos_http_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le))",
           "legendFormat": "p99"
         }
       ]
@@ -1211,7 +1211,7 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_http_requests_total{instance=~\"$instance\",status=~\"5..\"}[5m])) / sum(rate(nexa_http_requests_total{instance=~\"$instance\"}[5m])) * 100",
+          "expr": "sum(rate(helyos_http_requests_total{instance=~\"$instance\",status=~\"5..\"}[5m])) / sum(rate(helyos_http_requests_total{instance=~\"$instance\"}[5m])) * 100",
           "legendFormat": "5xx %"
         }
       ]
@@ -1222,7 +1222,7 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_container_events_total{instance=~\"$instance\"}[5m])) by (event)",
+          "expr": "sum(rate(helyos_container_events_total{instance=~\"$instance\"}[5m])) by (event)",
           "legendFormat": "{{event}}"
         }
       ]
@@ -1232,9 +1232,9 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "type": "stat",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
       "targets": [
-        { "expr": "nexa_nodes_total{instance=~\"$instance\"}", "legendFormat": "Nodes" },
-        { "expr": "nexa_pods_total{instance=~\"$instance\"}", "legendFormat": "Pods" },
-        { "expr": "nexa_deployments_total{instance=~\"$instance\"}", "legendFormat": "Deployments" }
+        { "expr": "helyos_nodes_total{instance=~\"$instance\"}", "legendFormat": "Nodes" },
+        { "expr": "helyos_pods_total{instance=~\"$instance\"}", "legendFormat": "Pods" },
+        { "expr": "helyos_deployments_total{instance=~\"$instance\"}", "legendFormat": "Deployments" }
       ]
     },
     {
@@ -1243,7 +1243,7 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_deployment_ops_total{instance=~\"$instance\"}[5m])) by (op)",
+          "expr": "sum(rate(helyos_deployment_ops_total{instance=~\"$instance\"}[5m])) by (op)",
           "legendFormat": "{{op}}"
         }
       ]
@@ -1254,11 +1254,11 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum(rate(nexa_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
+          "expr": "histogram_quantile(0.99, sum(rate(helyos_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
           "legendFormat": "p99 {{strategy}}"
         },
         {
-          "expr": "histogram_quantile(0.50, sum(rate(nexa_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
+          "expr": "histogram_quantile(0.50, sum(rate(helyos_schedule_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, strategy))",
           "legendFormat": "p50 {{strategy}}"
         }
       ]
@@ -1269,7 +1269,7 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_schedule_duration_seconds_count{instance=~\"$instance\"}[5m])) by (strategy) * 60",
+          "expr": "sum(rate(helyos_schedule_duration_seconds_count{instance=~\"$instance\"}[5m])) by (strategy) * 60",
           "legendFormat": "{{strategy}}"
         }
       ]
@@ -1280,7 +1280,7 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_proxy_requests_total{instance=~\"$instance\"}[5m])) by (domain)",
+          "expr": "sum(rate(helyos_proxy_requests_total{instance=~\"$instance\"}[5m])) by (domain)",
           "legendFormat": "{{domain}}"
         }
       ]
@@ -1291,11 +1291,11 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(nexa_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
+          "expr": "histogram_quantile(0.50, sum(rate(helyos_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
           "legendFormat": "p50 {{domain}}"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(nexa_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
+          "expr": "histogram_quantile(0.95, sum(rate(helyos_proxy_request_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (le, domain))",
           "legendFormat": "p95 {{domain}}"
         }
       ]
@@ -1306,7 +1306,7 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
       "targets": [
         {
-          "expr": "sum(rate(nexa_proxy_errors_total{instance=~\"$instance\"}[5m])) by (domain, error_type)",
+          "expr": "sum(rate(helyos_proxy_errors_total{instance=~\"$instance\"}[5m])) by (domain, error_type)",
           "legendFormat": "{{domain}} - {{error_type}}"
         }
       ]
@@ -1318,9 +1318,9 @@ Create `deploy/grafana/nexanet-dashboard.json` with a Grafana dashboard containi
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet
-git add deploy/grafana/nexanet-dashboard.json
-git commit -m "feat: add Grafana dashboard for NexaNet observability"
+cd /Users/nassime/GitHub/Helyos
+git add deploy/grafana/helyos-dashboard.json
+git commit -m "feat: add Grafana dashboard for Helyos observability"
 ```
 
 ---
@@ -1336,13 +1336,13 @@ Create `deploy/prometheus/alerts.yml`:
 
 ```yaml
 groups:
-  - name: nexanet
+  - name: helyos
     rules:
-      - alert: NexaHighErrorRate
+      - alert: HelyosHighErrorRate
         expr: >
-          sum(rate(nexa_http_requests_total{status=~"5.."}[5m]))
+          sum(rate(helyos_http_requests_total{status=~"5.."}[5m]))
           /
-          sum(rate(nexa_http_requests_total[5m]))
+          sum(rate(helyos_http_requests_total[5m]))
           > 0.05
         for: 5m
         labels:
@@ -1351,27 +1351,27 @@ groups:
           summary: "High API error rate"
           description: "5xx error rate is above 5% for the last 5 minutes."
 
-      - alert: NexaContainerOOM
-        expr: increase(nexa_container_events_total{event="oom"}[5m]) > 0
+      - alert: HelyosContainerOOM
+        expr: increase(helyos_container_events_total{event="oom"}[5m]) > 0
         labels:
           severity: critical
         annotations:
           summary: "Container OOM detected"
           description: "A container was killed due to out-of-memory in the last 5 minutes."
 
-      - alert: NexaNodeDown
-        expr: nexa_nodes_total < 1
+      - alert: HelyosNodeDown
+        expr: helyos_nodes_total < 1
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: "No cluster nodes"
-          description: "nexa_nodes_total has been below 1 for 2 minutes."
+          description: "helyos_nodes_total has been below 1 for 2 minutes."
 
-      - alert: NexaHighAPILatency
+      - alert: HelyosHighAPILatency
         expr: >
           histogram_quantile(0.99,
-            sum(rate(nexa_http_request_duration_seconds_bucket[5m])) by (le)
+            sum(rate(helyos_http_request_duration_seconds_bucket[5m])) by (le)
           ) > 2
         for: 5m
         labels:
@@ -1380,11 +1380,11 @@ groups:
           summary: "High API latency"
           description: "API p99 latency is above 2 seconds for the last 5 minutes."
 
-      - alert: NexaProxyUpstreamErrors
+      - alert: HelyosProxyUpstreamErrors
         expr: >
-          sum(rate(nexa_proxy_errors_total[5m]))
+          sum(rate(helyos_proxy_errors_total[5m]))
           /
-          (sum(rate(nexa_proxy_requests_total[5m])) + sum(rate(nexa_proxy_errors_total[5m])))
+          (sum(rate(helyos_proxy_requests_total[5m])) + sum(rate(helyos_proxy_errors_total[5m])))
           > 0.1
         for: 5m
         labels:
@@ -1393,10 +1393,10 @@ groups:
           summary: "High proxy error rate"
           description: "Proxy error rate is above 10% for the last 5 minutes."
 
-      - alert: NexaSchedulerSlow
+      - alert: HelyosSchedulerSlow
         expr: >
           histogram_quantile(0.99,
-            sum(rate(nexa_schedule_duration_seconds_bucket[5m])) by (le)
+            sum(rate(helyos_schedule_duration_seconds_bucket[5m])) by (le)
           ) > 0.5
         for: 5m
         labels:
@@ -1409,9 +1409,9 @@ groups:
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet
+cd /Users/nassime/GitHub/Helyos
 git add deploy/prometheus/alerts.yml
-git commit -m "feat: add Prometheus alerting rules for NexaNet"
+git commit -m "feat: add Prometheus alerting rules for Helyos"
 ```
 
 ---
@@ -1426,11 +1426,11 @@ git commit -m "feat: add Prometheus alerting rules for NexaNet"
 Create `deploy/prometheus/scrape-config.yml`:
 
 ```yaml
-# Example Prometheus scrape configuration for NexaNet.
+# Example Prometheus scrape configuration for Helyos.
 # Add these entries to your prometheus.yml under scrape_configs.
 
 scrape_configs:
-  - job_name: "nexad"
+  - job_name: "helyosd"
     static_configs:
       - targets: ["localhost:6443"]
     metrics_path: /metrics
@@ -1440,21 +1440,21 @@ scrape_configs:
 - [ ] **Step 2: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet
+cd /Users/nassime/GitHub/Helyos
 git add deploy/prometheus/scrape-config.yml
 git commit -m "feat: add example Prometheus scrape config"
 ```
 
 ---
 
-### Task 11: Integration Test — /metrics Endpoint (nexad)
+### Task 11: Integration Test — /metrics Endpoint (helyosd)
 
 **Files:**
-- Modify: `nexad/tests/api_integration.rs`
+- Modify: `helyosd/tests/api_integration.rs`
 
 - [ ] **Step 1: Add metrics endpoint test**
 
-Add this test to `nexad/tests/api_integration.rs` (after the existing tests):
+Add this test to `helyosd/tests/api_integration.rs` (after the existing tests):
 
 ```rust
 #[tokio::test]
@@ -1470,7 +1470,7 @@ async fn metrics_endpoint_returns_prometheus_format() {
     let body = resp.text().await.unwrap();
     // NoOpMetrics is used in tests, so body may be minimal.
     // Just verify the endpoint responds with the right content type.
-    assert!(resp.headers().get("content-type").is_some() || body.contains("nexa_") || body.is_empty() || body.contains("# no prometheus"));
+    assert!(resp.headers().get("content-type").is_some() || body.contains("helyos_") || body.is_empty() || body.contains("# no prometheus"));
 }
 ```
 
@@ -1479,8 +1479,8 @@ Wait — the test uses `NoOpMetrics`, which means the endpoint will return "# no
 Change the metrics construction in `TestServer::new()` from `NoOpMetrics` to:
 
 ```rust
-        use nexad::adapters::metrics::PrometheusMetrics;
-        let metrics: Arc<dyn nexa_core::ports::metrics::MetricsPort> =
+        use helyosd::adapters::metrics::PrometheusMetrics;
+        let metrics: Arc<dyn helyos_core::ports::metrics::MetricsPort> =
             Arc::new(PrometheusMetrics::new());
 ```
 
@@ -1509,11 +1509,11 @@ async fn metrics_endpoint_returns_prometheus_format() {
 
     let body = resp.text().await.unwrap();
     assert!(
-        body.contains("nexa_http_requests_total"),
-        "expected nexa_http_requests_total in metrics output"
+        body.contains("helyos_http_requests_total"),
+        "expected helyos_http_requests_total in metrics output"
     );
     assert!(
-        body.contains("nexa_http_request_duration_seconds"),
+        body.contains("helyos_http_request_duration_seconds"),
         "expected duration histogram in metrics output"
     );
 }
@@ -1521,13 +1521,13 @@ async fn metrics_endpoint_returns_prometheus_format() {
 
 - [ ] **Step 2: Run tests**
 
-Run: `cd /Users/nassime/GitHub/NexaNet/nexad && cargo test metrics_endpoint`
+Run: `cd /Users/nassime/GitHub/Helyos/helyosd && cargo test metrics_endpoint`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexad
+cd /Users/nassime/GitHub/Helyos/helyosd
 git add tests/api_integration.rs
 git commit -m "test: add /metrics endpoint integration test"
 ```
@@ -1539,8 +1539,8 @@ git commit -m "test: add /metrics endpoint integration test"
 - [ ] **Step 1: Run full test suite across all repos**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core && cargo test
-cd /Users/nassime/GitHub/NexaNet/nexad && cargo test
+cd /Users/nassime/GitHub/Helyos/helyos-core && cargo test
+cd /Users/nassime/GitHub/Helyos/helyosd && cargo test
 ```
 
 Expected: all PASS.
@@ -1548,8 +1548,8 @@ Expected: all PASS.
 - [ ] **Step 2: Run cargo fmt and clippy across all repos**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core && cargo fmt --check && cargo clippy -- -D warnings
-cd /Users/nassime/GitHub/NexaNet/nexad && cargo fmt --check && cargo clippy -- -D warnings
+cd /Users/nassime/GitHub/Helyos/helyos-core && cargo fmt --check && cargo clippy -- -D warnings
+cd /Users/nassime/GitHub/Helyos/helyosd && cargo fmt --check && cargo clippy -- -D warnings
 ```
 
 Fix any issues and commit.
@@ -1557,11 +1557,11 @@ Fix any issues and commit.
 - [ ] **Step 3: Push all repos**
 
 ```bash
-cd /Users/nassime/GitHub/NexaNet/nexa-core && git push origin main
-cd /Users/nassime/GitHub/NexaNet/nexad && git push origin main
-cd /Users/nassime/GitHub/NexaNet && git push origin main
+cd /Users/nassime/GitHub/Helyos/helyos-core && git push origin main
+cd /Users/nassime/GitHub/Helyos/helyosd && git push origin main
+cd /Users/nassime/GitHub/Helyos && git push origin main
 ```
 
 - [ ] **Step 4: Verify CI passes on all repos**
 
-Check GitHub Actions for nexa-core, nexad — all should be green.
+Check GitHub Actions for helyos-core, helyosd — all should be green.

@@ -1,4 +1,4 @@
-# Audit Production-Readiness — NexaNet
+# Audit Production-Readiness — Helyos
 
 **Date**: 2026-05-26  
 **Derniere mise a jour**: 2026-06-04  
@@ -9,25 +9,25 @@
 
 ## Vue d'ensemble
 
-| Severite | nexa-core | nexad | nexa-cli | Infra | **Total** | **Corrige** |
+| Severite | helyos-core | helyosd | helyos-cli | Infra | **Total** | **Corrige** |
 |----------|-----------|-------|----------|-------|-----------|-------------|
 | CRITICAL | 1 | 4 | 1 | 2 | **8** | **8 (100%)** |
 | HIGH | 8 | 10 | 7 | 7 | **32** | **32 (100%)** |
 | MEDIUM | 13 | 9 | 10 | 14 | **46** | **38 (83%)** |
 | LOW | 8 | 9 | 12 | 11 | **40** | **32 (80%)** |
 
-**Progression : 110/126 issues corrigees (87%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 38/46 MEDIUM corriges (nexa-core 9/13, nexad 9/9, nexa-cli 10/10, infra 11/14). 32/40 LOW corriges. Les ~8 MEDIUM et ~8 LOW restants sont soit trop invasifs (builder pattern, `NexaError` refactor structurel, `Command` enum, consolidation dual-SQLite), soit non applicables au setup multi-repo (Cargo workspace, drift de deps partagees), soit hors scope d'un pass de cleanup (proto `bytes`→messages structures, property-based/fuzz testing, suites d'integration completes CLI/gRPC).
+**Progression : 110/126 issues corrigees (87%).** Les 8 CRITICAL et 32 HIGH sont tous resolus. 38/46 MEDIUM corriges (helyos-core 9/13, helyosd 9/9, helyos-cli 10/10, infra 11/14). 32/40 LOW corriges. Les ~8 MEDIUM et ~8 LOW restants sont soit trop invasifs (builder pattern, `HelyosError` refactor structurel, `Command` enum, consolidation dual-SQLite), soit non applicables au setup multi-repo (Cargo workspace, drift de deps partagees), soit hors scope d'un pass de cleanup (proto `bytes`→messages structures, property-based/fuzz testing, suites d'integration completes CLI/gRPC).
 
-Mise a jour 2026-06-04 : ajout validation de config au demarrage + metrique sur echec de persistence (nexa-core), tests containerd offline (nexad), fichier de config `~/.nexa/config.toml` + tests d'erreur client + pinning de versions (nexa-cli), alertes Prometheus (disk/cert/split-brain/crash-loop/process-down) + service discovery, doc d'architecture, coverage + SBOM + buf lint en CI, `google.protobuf.Empty`, migration de suppression de la table `secrets` morte, constante de capacite du broadcast channel, message d'allocateur de subnet corrige. Tous les crates : `cargo test` + `cargo clippy -D warnings` verts.
+Mise a jour 2026-06-04 : ajout validation de config au demarrage + metrique sur echec de persistence (helyos-core), tests containerd offline (helyosd), fichier de config `~/.helyos/config.toml` + tests d'erreur client + pinning de versions (helyos-cli), alertes Prometheus (disk/cert/split-brain/crash-loop/process-down) + service discovery, doc d'architecture, coverage + SBOM + buf lint en CI, `google.protobuf.Empty`, migration de suppression de la table `secrets` morte, constante de capacite du broadcast channel, message d'allocateur de subnet corrige. Tous les crates : `cargo test` + `cargo clippy -D warnings` verts.
 
 Mise a jour 2026-06-04 (CI verte + release) : la CI des 3 crates est passee au vert.
-- **Security Audit** : il echouait car `Cargo.lock` n'etait jamais commite (`Couldn't load ./Cargo.lock`). Les lockfiles sont desormais commites, et le job utilise un `cargo audit` explicite avec une liste `--ignore` documentee. Vraies vulnerabilites **corrigees** (pas masquees) : `protobuf` RUSTSEC-2024-0437 (prometheus `default-features=false`), `time` RUSTSEC-2026-0009 (>=0.3.47, MSRV nexad -> 1.88), `atty` RUSTSEC-2021-0145/2024-0375 (`std::io::IsTerminal`). Avis sans correctif (transitifs non maintenus : `rsa` mysql-only, `rustls-pemfile`, `number_prefix`, `paste`, `lru`) ignores avec justification.
+- **Security Audit** : il echouait car `Cargo.lock` n'etait jamais commite (`Couldn't load ./Cargo.lock`). Les lockfiles sont desormais commites, et le job utilise un `cargo audit` explicite avec une liste `--ignore` documentee. Vraies vulnerabilites **corrigees** (pas masquees) : `protobuf` RUSTSEC-2024-0437 (prometheus `default-features=false`), `time` RUSTSEC-2026-0009 (>=0.3.47, MSRV helyosd -> 1.88), `atty` RUSTSEC-2021-0145/2024-0375 (`std::io::IsTerminal`). Avis sans correctif (transitifs non maintenus : `rsa` mysql-only, `rustls-pemfile`, `number_prefix`, `paste`, `lru`) ignores avec justification.
 - **fmt** : `cargo fmt` applique repo-wide (skew rustfmt historique) ; 2 `collapsible_if` corriges en let-chains.
-- **Propagation** : `nexa-core` **v0.1.5** publie (validation de config + metrique de persistence) ; `nexad` et `nexa-cli` bumpes sur `tag = "v0.1.5"`.
+- **Propagation** : `helyos-core` **v0.1.5** publie (validation de config + metrique de persistence) ; `helyosd` et `helyos-cli` bumpes sur `tag = "v0.1.5"`.
 
-Mise a jour 2026-06-04 (serde_yaml_ng) : migration `serde_yml`/`serde_yaml 0.9` -> **`serde_yaml_ng`** (fork maintenu, drop-in) dans les 3 crates, eliminant RUSTSEC-2025-0067/0068 (plus ignores, reellement corriges). `nexa-core` **v0.1.6** publie et adopte par `nexad`/`nexa-cli`. Resultat : `nexa-core` n'a **plus aucun avis** `cargo audit` ; `nexad` n'ignore plus que `rsa` + `rustls-pemfile` (sans correctif amont), `nexa-cli` que `number_prefix` + `paste` + `lru` (idem).
+Mise a jour 2026-06-04 (serde_yaml_ng) : migration `serde_yml`/`serde_yaml 0.9` -> **`serde_yaml_ng`** (fork maintenu, drop-in) dans les 3 crates, eliminant RUSTSEC-2025-0067/0068 (plus ignores, reellement corriges). `helyos-core` **v0.1.6** publie et adopte par `helyosd`/`helyos-cli`. Resultat : `helyos-core` n'a **plus aucun avis** `cargo audit` ; `helyosd` n'ignore plus que `rsa` + `rustls-pemfile` (sans correctif amont), `helyos-cli` que `number_prefix` + `paste` + `lru` (idem).
 
-Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
+Note : helyos-proxy a ete supprime (repo supprime, crate retire, references nettoyees) et remplace par des reverse proxies etablis (Traefik par defaut, avec options Nginx et Caddy).
 
 ---
 
@@ -37,17 +37,17 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 | # | Crate | Issue | Status | Commit |
 |---|-------|-------|--------|--------|
-| 1 | nexad | **Aucune authentification sur l'API HTTP** — deploy, secrets, drain, token rotation accessibles sans auth | ✅ Corrige | `c50f153` — Bearer token auth middleware (Argon2id), routes publiques/protegees separees |
-| 2 | nexad | **API ecoute sur 0.0.0.0 par defaut** — combine avec zero auth = daemon ouvert au reseau | ✅ Corrige | `8334bd6` — Default bind 127.0.0.1 (API + DNS) |
-| 3 | nexad | **Join token stocke en clair** dans SQLite — seul le hash devrait etre persiste | ✅ Corrige | `aedcfc8` — Seul le hash est persiste, plaintext affiche une seule fois |
-| 4 | nexa-cli | **Secrets passes en arguments CLI** — visibles via `ps aux`, shell history, audit logs | ✅ Corrige | `e9b2f5d` — Lecture depuis stdin (pipe ou prompt interactif) |
+| 1 | helyosd | **Aucune authentification sur l'API HTTP** — deploy, secrets, drain, token rotation accessibles sans auth | ✅ Corrige | `c50f153` — Bearer token auth middleware (Argon2id), routes publiques/protegees separees |
+| 2 | helyosd | **API ecoute sur 0.0.0.0 par defaut** — combine avec zero auth = daemon ouvert au reseau | ✅ Corrige | `8334bd6` — Default bind 127.0.0.1 (API + DNS) |
+| 3 | helyosd | **Join token stocke en clair** dans SQLite — seul le hash devrait etre persiste | ✅ Corrige | `aedcfc8` — Seul le hash est persiste, plaintext affiche une seule fois |
+| 4 | helyos-cli | **Secrets passes en arguments CLI** — visibles via `ps aux`, shell history, audit logs | ✅ Corrige | `e9b2f5d` — Lecture depuis stdin (pipe ou prompt interactif) |
 
 ### Cluster — Pods fantomes
 
 | # | Crate | Issue | Status | Commit |
 |---|-------|-------|--------|--------|
-| 5 | nexad | **`stop_pod` et `remove_pod` sont des no-ops** dans ClusterServer — retournent `success: true` sans rien faire | ✅ Corrige | `c50f153` — stop_container + remove_container avec timeout |
-| 6 | nexad | **Aucun graceful shutdown** du daemon — containers orphelins, etat incoherent | ✅ Corrige | `4179300` — CancellationToken + SIGINT/SIGTERM handler + axum graceful shutdown |
+| 5 | helyosd | **`stop_pod` et `remove_pod` sont des no-ops** dans ClusterServer — retournent `success: true` sans rien faire | ✅ Corrige | `c50f153` — stop_container + remove_container avec timeout |
+| 6 | helyosd | **Aucun graceful shutdown** du daemon — containers orphelins, etat incoherent | ✅ Corrige | `4179300` — CancellationToken + SIGINT/SIGTERM handler + axum graceful shutdown |
 
 ### Supply Chain
 
@@ -64,54 +64,54 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 | # | Crate | Issue | Status | Commit |
 |---|-------|-------|--------|--------|
-| 1 | nexad | gRPC cluster sans TLS : tokens, pod specs et heartbeats en clair | ✅ Corrige | `a02bb4f` — Self-signed CA + server certs via rcgen, TLS optionnel sur gRPC server/client |
-| 2 | nexad | `import_cert` stocke la cle privee en clair malgre le champ `key_pem_enc` | ✅ Corrige | `cf48ea1` — AES-256-GCM encryption avec master key |
-| 3 | nexa-cli | Join tokens affiches en clair sans auth cote API | ✅ Corrige | `355bd82` — Bearer token auth requis pour afficher le join token |
-| 4 | nexa-cli | Zero support d'authentification dans le client HTTP | ✅ Corrige | `355bd82` — `NexaClient::new(base_url, token)` avec Bearer auth headers |
-| 5 | nexa-cli | Cle privee TLS envoyee en HTTP potentiellement non chiffre | ✅ Corrige | `1f358de` — Warning affiché pour les ops sensibles sur HTTP non-localhost |
+| 1 | helyosd | gRPC cluster sans TLS : tokens, pod specs et heartbeats en clair | ✅ Corrige | `a02bb4f` — Self-signed CA + server certs via rcgen, TLS optionnel sur gRPC server/client |
+| 2 | helyosd | `import_cert` stocke la cle privee en clair malgre le champ `key_pem_enc` | ✅ Corrige | `cf48ea1` — AES-256-GCM encryption avec master key |
+| 3 | helyos-cli | Join tokens affiches en clair sans auth cote API | ✅ Corrige | `355bd82` — Bearer token auth requis pour afficher le join token |
+| 4 | helyos-cli | Zero support d'authentification dans le client HTTP | ✅ Corrige | `355bd82` — `HelyosClient::new(base_url, token)` avec Bearer auth headers |
+| 5 | helyos-cli | Cle privee TLS envoyee en HTTP potentiellement non chiffre | ✅ Corrige | `1f358de` — Warning affiché pour les ops sensibles sur HTTP non-localhost |
 | 6 | infra | Aucun `cargo audit` / `cargo deny` dans la CI | ✅ Corrige | `320cf29` / `e454524` / `d53ded4` — `rustsec/audit-check@v2` ajoute aux 3 repos |
 
 ### Correctness (9)
 
 | # | Crate | Issue | Status | Commit |
 |---|-------|-------|--------|--------|
-| 7 | nexad | `container_exists` utilise pour checker les networks Docker — check toujours false | ✅ Corrige | `c50f153` — Utilise `create_network` directement (ignore error si deja existant) |
-| 8 | nexad | Containerd ne redirige pas stdout/stderr vers les log files | ✅ Corrige | `cf48ea1` — `--log-uri` et `--stderr-uri` pour redirection fichier |
-| 9 | nexad | CNI `attach`/`detach` sont des stubs non implementes | ✅ Corrige | `2dc3f8e` — Marque comme experimental avec doc warnings |
-| 10 | nexad | WireGuard overlay est un no-op | ✅ Corrige | `2dc3f8e` — Marque comme experimental avec doc warnings |
-| 11 | nexad | Routes et certificats stockes en memoire seulement — perdus au restart | ✅ Corrige | `cf48ea1` — `SqliteRouteStore` avec tables routes, certificates, subnet_allocations |
-| 12 | nexad | Reschedule callback est un TODO — pods perdus quand un worker meurt | ✅ Corrige | `cf48ea1` — Reschedule pods sur workers sains quand un worker meurt |
-| 13 | nexad | `stream_logs` retourne un stream vide dans ClusterServer | ✅ Corrige | `c50f153` — Forward container logs via runtime |
-| 14 | nexa-core | `handle_create_project` ne persiste pas en state store | ✅ Corrige | `ec637f5` — Appels `set_cluster_config` apres creation |
-| 15 | nexa-core | `TlsMode::Auto` avec email vide — ACME va echouer | ✅ Corrige | `ec637f5` — Validation email avant persist, rejet si vide |
+| 7 | helyosd | `container_exists` utilise pour checker les networks Docker — check toujours false | ✅ Corrige | `c50f153` — Utilise `create_network` directement (ignore error si deja existant) |
+| 8 | helyosd | Containerd ne redirige pas stdout/stderr vers les log files | ✅ Corrige | `cf48ea1` — `--log-uri` et `--stderr-uri` pour redirection fichier |
+| 9 | helyosd | CNI `attach`/`detach` sont des stubs non implementes | ✅ Corrige | `2dc3f8e` — Marque comme experimental avec doc warnings |
+| 10 | helyosd | WireGuard overlay est un no-op | ✅ Corrige | `2dc3f8e` — Marque comme experimental avec doc warnings |
+| 11 | helyosd | Routes et certificats stockes en memoire seulement — perdus au restart | ✅ Corrige | `cf48ea1` — `SqliteRouteStore` avec tables routes, certificates, subnet_allocations |
+| 12 | helyosd | Reschedule callback est un TODO — pods perdus quand un worker meurt | ✅ Corrige | `cf48ea1` — Reschedule pods sur workers sains quand un worker meurt |
+| 13 | helyosd | `stream_logs` retourne un stream vide dans ClusterServer | ✅ Corrige | `c50f153` — Forward container logs via runtime |
+| 14 | helyos-core | `handle_create_project` ne persiste pas en state store | ✅ Corrige | `ec637f5` — Appels `set_cluster_config` apres creation |
+| 15 | helyos-core | `TlsMode::Auto` avec email vide — ACME va echouer | ✅ Corrige | `ec637f5` — Validation email avant persist, rejet si vide |
 
 ### Robustesse (4)
 
 | # | Crate | Issue | Status | Commit |
 |---|-------|-------|--------|--------|
-| 16 | nexa-core | Mutex `.unwrap()` partout (25+ sites) — crash en cas de poison | ✅ Corrige | `3930dce` — Migration `parking_lot::Mutex` (pas de poison) |
-| 17 | nexad | RwLock `.unwrap()` dans DNS, route store, CNI, proxy adapter | ✅ Corrige | `c50f153` — Migration `parking_lot::RwLock` / `Mutex` |
-| 18 | nexa-cli | Aucun timeout HTTP client — commandes bloquees indefiniment | ✅ Corrige | `355bd82` — `connect_timeout(5s)` + `timeout(30s)` |
-| 19 | nexa-cli | TUI panic laisse le terminal en raw mode | ✅ Corrige | `355bd82` — `std::panic::set_hook` restaure le terminal |
+| 16 | helyos-core | Mutex `.unwrap()` partout (25+ sites) — crash en cas de poison | ✅ Corrige | `3930dce` — Migration `parking_lot::Mutex` (pas de poison) |
+| 17 | helyosd | RwLock `.unwrap()` dans DNS, route store, CNI, proxy adapter | ✅ Corrige | `c50f153` — Migration `parking_lot::RwLock` / `Mutex` |
+| 18 | helyos-cli | Aucun timeout HTTP client — commandes bloquees indefiniment | ✅ Corrige | `355bd82` — `connect_timeout(5s)` + `timeout(30s)` |
+| 19 | helyos-cli | TUI panic laisse le terminal en raw mode | ✅ Corrige | `355bd82` — `std::panic::set_hook` restaure le terminal |
 
 ### Testing (4)
 
 | # | Crate | Issue | Status | Commit |
 |---|-------|-------|--------|--------|
-| 20 | nexa-cli | Zero tests d'integration, zero tests sur les 16 commandes | ⚠️ Non resolu | Reste a faire — pas d'integration tests ajoutees |
-| 21 | nexad | Zero tests pour la communication gRPC cluster | ⚠️ Non resolu | Reste a faire — pas de tests gRPC ajoutees |
+| 20 | helyos-cli | Zero tests d'integration, zero tests sur les 16 commandes | ⚠️ Non resolu | Reste a faire — pas d'integration tests ajoutees |
+| 21 | helyosd | Zero tests pour la communication gRPC cluster | ⚠️ Non resolu | Reste a faire — pas de tests gRPC ajoutees |
 | 22 | infra | Release workflow publie meme si le build echoue (`if: always()`) | ✅ Corrige | `320cf29` / `d53ded4` — `if: ${{ !cancelled() && needs.build.result == 'success' }}` |
-| 23 | infra | `nexa-core` et `nexad` pointent vers des commits git differents de nexa-core | ✅ Corrige | `a3c4219` / `80bd649` — Les deux pointent vers `v0.1.2` |
+| 23 | infra | `helyos-core` et `helyosd` pointent vers des commits git differents de helyos-core | ✅ Corrige | `a3c4219` / `80bd649` — Les deux pointent vers `v0.1.2` |
 
 ### Deps & Infra (5)
 
 | # | Crate | Issue | Status | Commit |
 |---|-------|-------|--------|--------|
-| 24 | nexa-core | `serde_yaml 0.9` est deprecated | ✅ Corrige | `7e31324` / `80bd649` — Migration vers `serde_yml 0.0.12` |
+| 24 | helyos-core | `serde_yaml 0.9` est deprecated | ✅ Corrige | `7e31324` / `80bd649` — Migration vers `serde_yml 0.0.12` |
 | 25 | infra | Pas de Cargo workspace — pas de resolution unifiee des deps | ⚠️ Non resolu | Architecture multi-repo — workspace non applicable |
 | 26 | infra | Aucun Dockerfile dans tout le projet | ✅ Corrige | `c50f153` — Dockerfile multi-stage (rust:1.85-bookworm → debian:bookworm-slim) |
 | 27 | infra | Aucun manifest de deploiement (Helm, docker-compose, systemd hardened) | ⚠️ Non resolu | Reste a faire |
-| 28 | infra | nexa-core reference par git sans `rev`/`tag` — builds non reproductibles | ✅ Corrige | `a3c4219` / `80bd649` — Pinne a `tag = "v0.1.2"` |
+| 28 | infra | helyos-core reference par git sans `rev`/`tag` — builds non reproductibles | ✅ Corrige | `a3c4219` / `80bd649` — Pinne a `tag = "v0.1.2"` |
 
 **Note** : 4 issues HIGH marquees ⚠️ sont soit non applicables (workspace dans un setup multi-repo), soit necessitent un effort significant (tests d'integration, manifests de deploiement). Les 28 autres sont resolues.
 
@@ -119,12 +119,12 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 ## MEDIUM (46) — A traiter pour la qualite production
 
-### nexa-core (13)
+### helyos-core (13)
 
 - ~~In-memory adapters dans `ports/`~~ → ✅ Deplaces dans `adapters/` (`src/adapters/`)
 - `Orchestrator::spawn` a 9 parametres `Option` positionnels — builder pattern necessaire
 - ~~Regex recompilee a chaque appel~~ → ✅ `LazyLock<Regex>` (`src/config.rs`)
-- Error variants stringly-typed (`NexaError::Runtime(String)`)
+- Error variants stringly-typed (`HelyosError::Runtime(String)`)
 - ~~Persistence failures logguees en warning, pas d'alerte metrique~~ → ✅ `MetricsPort::record_persistence_error` (methode defaultee) incrementee dans les 6 helpers `persist_*` (`src/domain/orchestrator.rs`, `src/ports/metrics.rs`)
 - ~~Scale-down trie par UUID~~ → ✅ Tri par `created_at` timestamp
 - Pas de property-based testing ni fuzz testing
@@ -135,7 +135,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - ~~`tokio features = ["full"]`~~ → ✅ Features minimales `sync/rt/time/macros`
 - ~~Pas de validation de configuration au demarrage~~ → ✅ `DeploymentSpec::validate()` publique, appelee au choke point `handle_deploy` (couvre HTTP/YAML/gRPC/reschedule) (`src/config.rs`, `src/domain/orchestrator.rs`)
 
-### nexad (9)
+### helyosd (9)
 
 - ~~Token verification avec comparaison non constant-time~~ → ✅ `constant_time_eq` (`src/cluster/token.rs`)
 - ~~Silent error swallowing dans heartbeat monitor~~ → ✅ Errors logguees avec `tracing::warn!`
@@ -147,31 +147,31 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - ~~Health checker interval hardcode a 1s~~ → ✅ Configurable via `with_interval()`
 - ~~`node_stats` handler bloque 200ms~~ → ✅ `spawn_blocking`
 
-### nexa-cli (10)
+### helyos-cli (10)
 
 - ~~`print_json` utilise `unwrap()`~~ → ✅ Erreur geree gracieusement
 - ~~Detection d'erreur connexion par string matching~~ → ✅ Types `reqwest::Error` (.is_connect/.is_timeout)
-- ~~SSE event stream cree son propre client hors `NexaClient`~~ → ✅ Reutilise `NexaClient.http_client()`
+- ~~SSE event stream cree son propre client hors `HelyosClient`~~ → ✅ Reutilise `HelyosClient.http_client()`
 - ~~URL path parameters non percent-encoded~~ → ✅ `urlencoding::encode()` partout
 - ~~Query parameters non encodes~~ → ✅ `urlencoding::encode()` sur les valeurs
 - ~~Pas de support `NO_COLOR`~~ → ✅ `console::set_colors_enabled(false)` si `NO_COLOR` set
-- ~~Pas de fichier de configuration (`~/.nexa/config`)~~ → ✅ `~/.nexa/config.toml` (override `NEXA_CONFIG`), precedence flag > env > fichier > defaut, module std-only sans nouvelle dep (`src/config.rs`)
-- ~~`nexa logs` sans interruption gracieuse~~ → ✅ `tokio::select!` + `signal::ctrl_c()`
+- ~~Pas de fichier de configuration (`~/.helyos/config`)~~ → ✅ `~/.helyos/config.toml` (override `HELYOS_CONFIG`), precedence flag > env > fichier > defaut, module std-only sans nouvelle dep (`src/config.rs`)
+- ~~`helyos logs` sans interruption gracieuse~~ → ✅ `tokio::select!` + `signal::ctrl_c()`
 - ~~Loose version pinning sur toutes les deps~~ → ✅ Deps directes pinnees a `major.minor` du lockfile (`Cargo.toml`)
 - ~~Pas de tests pour `client.rs` error handling~~ → ✅ Tests unitaires offline de `format_api_error` / `error_hint` / normalisation `base_url` (`src/client.rs`)
 
 ### Infra (14)
 
 - ~~Scrape config Prometheus utilise seulement `static_configs`~~ → ✅ `file_sd_configs` + exemple `dns_sd_configs` + fichier de cibles d'exemple (`deploy/prometheus/scrape-config.yml`, `targets.example.json`)
-- ~~Alertes manquantes : disk space, cert expiry, split-brain, crash loops, process down~~ → ✅ Ajoutees (`deploy/prometheus/alerts.yml`) : `NexaDaemonDown`, `NexaContainerCrashLoop`, `NexaClusterSplitBrain`, `NexaNodeDiskSpace{Low,Critical}`, `NexaTlsCertExpiring{Soon,Critical}`
-- ~~Proto sans versioning~~ → ✅ `nexa.cluster.v1`
+- ~~Alertes manquantes : disk space, cert expiry, split-brain, crash loops, process down~~ → ✅ Ajoutees (`deploy/prometheus/alerts.yml`) : `HelyosDaemonDown`, `HelyosContainerCrashLoop`, `HelyosClusterSplitBrain`, `HelyosNodeDiskSpace{Low,Critical}`, `HelyosTlsCertExpiring{Soon,Critical}`
+- ~~Proto sans versioning~~ → ✅ `helyos.cluster.v1`
 - ~~String-typed enumerations dans le proto (status, action)~~ → ✅ Proto enums `NodeStatusProto`, `PodStatusProto`, `PodActionType`
 - `bytes` fields pour des donnees structurees dans le proto
 - Version misalignment entre crates (0.1.0 vs 0.2.0) → ⚠️ Politique de versioning documentee (`docs/architecture.md` §8) ; alignement effectif laisse au process de release multi-repo
 - Shared dependency version drift sans workspace
 - ~~Service units user-level seulement~~ → ✅ Hardening systemd (NoNewPrivileges, ProtectSystem, etc.)
 - ~~Pas de mecanisme d'uninstall~~ → ✅ `install.sh --uninstall`
-- ~~nexa-core CI ne lance que `cargo test --lib`~~ → ✅ `cargo test` (tous les tests)
+- ~~helyos-core CI ne lance que `cargo test --lib`~~ → ✅ `cargo test` (tous les tests)
 - ~~Pas de CI multi-plateforme~~ → ✅ macOS ajoute aux 3 repos
 - ~~Pas de documentation architecture~~ → ✅ `docs/architecture.md` (layout multi-repo, hexagonal, protocole cluster, flux de requete, persistence, securite, observabilite, versioning)
 - ~~Pas de CONTRIBUTING.md~~ → ✅ CONTRIBUTING.md ajoute
@@ -181,7 +181,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 ## LOW (40) — Polish et dette technique
 
-### nexa-core (8)
+### helyos-core (8)
 
 - ~~Glob re-export dans models (`pub use deployment::*`)~~ → ✅ Re-exports explicites nommes
 - ~~Clippy suppression blanket (`too_many_arguments`)~~ → ✅ `#[allow]` cible sur `Orchestrator::spawn` uniquement
@@ -192,7 +192,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - ~~CI `cargo test --lib` rate les integration tests~~ → ✅ `cargo test` (tous les tests)
 - ~~Pas de schema versioning dans l'etat persiste~~ → ✅ `STATE_SCHEMA_VERSION` constant
 
-### nexad (9)
+### helyosd (9)
 
 - ~~Master key genere avec `thread_rng()` au lieu de `OsRng`~~ → ✅ `OsRng` directement
 - ~~Dead schema : table `secrets` dans les migrations jamais utilisee~~ → ✅ Migration forward `DROP TABLE IF EXISTS secrets` (les vrais secrets vivent dans `secrets.db` chiffre) (`migrations/20260523000006_drop_dead_secrets_table.sql`)
@@ -204,20 +204,20 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - `rand` 0.8 outdated (0.9 disponible)
 - ~~Broadcast channel capacity hardcode a 256~~ → ✅ Constante `CLUSTER_EVENT_CHANNEL_CAPACITY` (`src/main.rs`)
 
-### nexa-cli (12)
+### helyos-cli (12)
 
 - ~~Pas de validation du `--server` URL~~ → ✅ Validation `reqwest::Url::parse()` avant utilisation
 - ~~Pas de shell completion (`clap_complete`)~~ → ✅ Subcommande `completions` (bash/zsh/fish/powershell)
-- ~~`nexa rm` / `project delete` sans confirmation `--yes`~~ → ✅ Prompt `dialoguer::Confirm` + flag `--yes`
+- ~~`helyos rm` / `project delete` sans confirmation `--yes`~~ → ✅ Prompt `dialoguer::Confirm` + flag `--yes`
 - ~~`event::poll()` unwrap dans le thread TUI~~ → ✅ Deja gere via `unwrap_or(false)`
 - ~~`spinner expect()` sur template~~ → ✅ Fallback si template invalide
 - ~~Status message TUI jamais cleared~~ → ✅ Auto-clear apres 5s via `status_message_at`
 - TUI log view est un snapshot statique, pas un live tail
 - ~~`status` commande hardcode "single-node"~~ → ✅ Detection dynamique via `/api/v1/nodes`
-- ~~`nexa setup cni` hardcode `linux` dans l'URL de telechargement~~ → ✅ `std::env::consts::OS`
-- ~~`nexa deploy` timeout hardcode a 60s~~ → ✅ Flag `--timeout` (defaut 60s)
+- ~~`helyos setup cni` hardcode `linux` dans l'URL de telechargement~~ → ✅ `std::env::consts::OS`
+- ~~`helyos deploy` timeout hardcode a 60s~~ → ✅ Flag `--timeout` (defaut 60s)
 - ~~`tracing` et `uuid` declares mais jamais utilises~~ → ✅ Supprimes du Cargo.toml
-- ~~`nexa-core` git dependency sans rev/tag~~ → ✅ Pinne a `tag = "v0.1.4"`
+- ~~`helyos-core` git dependency sans rev/tag~~ → ✅ Pinne a `tag = "v0.1.4"`
 
 ### Infra (10)
 
@@ -225,12 +225,12 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 - ~~Pas de code coverage en CI~~ → ✅ Job `coverage` (`cargo-llvm-cov` → lcov en artifact) ajoute aux 3 crates
 - ~~Benchmarks sur chaque push (bruyant)~~ → ✅ Schedule hebdomadaire + workflow_dispatch
 - ~~Custom `Empty` message dans le proto~~ → ✅ `import "google/protobuf/empty.proto"` + `google.protobuf.Empty` (mappe sur `()`), message custom supprime (`proto/cluster.proto`, `src/cluster/server.rs`)
-- ~~Pas de proto linting (`buf`)~~ → ✅ `buf.yaml` (lint BASIC + breaking FILE) + workflow `proto.yml` (`buf lint`) dans nexad
-- ~~Pas de `cargo doc` en CI~~ → ✅ `cargo doc --no-deps` ajoute au CI nexa-core
+- ~~Pas de proto linting (`buf`)~~ → ✅ `buf.yaml` (lint BASIC + breaking FILE) + workflow `proto.yml` (`buf lint`) dans helyosd
+- ~~Pas de `cargo doc` en CI~~ → ✅ `cargo doc --no-deps` ajoute au CI helyos-core
 - ~~Example YAML avec credentials hardcodes~~ → ✅ Placeholders `<db-user>:<db-password>`
 - ~~Pas de fichier NOTICE (Apache-2.0 section 4d)~~ → ✅ Fichier NOTICE cree
-- ~~Pas de SBOM generation~~ → ✅ `anchore/sbom-action` (SPDX) dans les release workflows nexad + nexa-cli, attache a la release + checksums
-- ~~OOM alert sans `for` duration~~ → ✅ `for: 1m` ajoute a `NexaContainerOOM`
+- ~~Pas de SBOM generation~~ → ✅ `anchore/sbom-action` (SPDX) dans les release workflows helyosd + helyos-cli, attache a la release + checksums
+- ~~OOM alert sans `for` duration~~ → ✅ `for: 1m` ajoute a `HelyosContainerOOM`
 
 ---
 
@@ -238,9 +238,9 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 ### Phase 1 — Securite (semaine 1-2)
 
-1. Ajouter un middleware d'authentification Bearer token sur l'API nexad
+1. Ajouter un middleware d'authentification Bearer token sur l'API helyosd
 2. Hasher le join token avant stockage, ne montrer le clair qu'une seule fois
-3. Lire les secrets depuis stdin au lieu d'arguments CLI : `echo $SECRET | nexa secret set KEY -p app`
+3. Lire les secrets depuis stdin au lieu d'arguments CLI : `echo $SECRET | helyos secret set KEY -p app`
 4. Activer TLS sur le gRPC cluster (tonic supporte TLS nativement)
 5. Mettre `/metrics` sur un listener interne separe
 6. Ajouter `cargo audit` a tous les CI workflows
@@ -250,7 +250,7 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 7. Implementer `stop_pod`/`remove_pod` dans ClusterServer (forward vers le runtime local)
 8. Fixer le check reseau Docker (utiliser l'API network, pas `container_exists`)
 9. Persister les routes/certs en SQLite au lieu de l'in-memory store
-10. Implementer le graceful shutdown (`tokio::signal` + `CancellationToken`) dans nexad
+10. Implementer le graceful shutdown (`tokio::signal` + `CancellationToken`) dans helyosd
 11. Fixer `handle_create_project` pour persister en state store
 
 ### Phase 3 — Robustesse (semaine 3-4)
@@ -263,14 +263,14 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 ### Phase 4 — Infra & Testing (semaine 4-6)
 
 16. Creer un Cargo workspace unifie
-17. Ajouter Dockerfiles multi-stage pour nexad
+17. Ajouter Dockerfiles multi-stage pour helyosd
 18. Ajouter checksums SHA-256 aux releases + verification dans install.sh
 19. Ecrire des tests pour les commandes CLI et le gRPC cluster
 20. Implementer le pod rescheduling quand un worker meurt
 
 ### Phase 5 — Polish (semaine 6-8)
 
-21. Proto versioning (`nexa.cluster.v1`), remplacer les string-typed enums par des proto enums
+21. Proto versioning (`helyos.cluster.v1`), remplacer les string-typed enums par des proto enums
 22. Builder pattern pour `Orchestrator::spawn`
 23. Lazy regex compilation, index secondaires pour les lookups O(n)
 24. Documentation architecture, runbooks, CONTRIBUTING.md
@@ -280,9 +280,9 @@ Note : nexa-proxy a ete supprime (repo supprime, crate retire, references nettoy
 
 ## Annexes — Rapports detailles par crate
 
-### A. nexa-core
+### A. helyos-core
 
-**Crate**: `nexa-core` v0.1.0  
+**Crate**: `helyos-core` v0.1.0  
 **Lignes**: ~3,300 Rust | **Tests**: ~130
 
 #### Architecture
@@ -299,7 +299,7 @@ Points faibles :
 - Regex `unwrap()` sur des patterns constants — safe mais recompile a chaque appel
 - ~~25+ sites de `Mutex.lock().unwrap()`~~ → ✅ Migration parking_lot (pas de poison)
 - `persist_*` methods logguent les erreurs mais ne les remontent pas
-- `NexaError` variants transportent seulement des `String`
+- `HelyosError` variants transportent seulement des `String`
 
 #### Performance
 
@@ -318,9 +318,9 @@ Points faibles :
 
 ---
 
-### B. nexad
+### B. helyosd
 
-**Crate**: `nexad` v0.2.0  
+**Crate**: `helyosd` v0.2.0  
 **Architecture**: Adapters pour runtime (Docker/containerd), DNS (hickory/noop), proxy (nginx/caddy/traefik), state (SQLite), secrets (encrypted SQLite), transport (gRPC/local), networking (WireGuard/CNI), health, metrics (Prometheus)
 
 #### Securite
@@ -361,9 +361,9 @@ Points faibles :
 
 ---
 
-### C. nexa-cli
+### C. helyos-cli
 
-**Crate**: `nexa-cli` v0.2.0  
+**Crate**: `helyos-cli` v0.2.0  
 **Lignes**: ~3,600 Rust | **Tests**: 24 unit tests
 
 #### Points forts
@@ -371,13 +371,13 @@ Points faibles :
 - Clean clap v4 derive-based commands avec `propagate_version`
 - Excellent systeme de sortie panel/table/spinner avec palette GitHub-Dark
 - Support `--json` consistant sur toutes les commandes
-- `NEXA_ICONS=nerd` pour les utilisateurs Nerd Font
+- `HELYOS_ICONS=nerd` pour les utilisateurs Nerd Font
 - Error hints actionables (`error_hint()` pour 401/403/404/500/502/503)
 
 #### Securite
 
 - ~~**Secrets en arguments CLI**~~ → ✅ Lecture depuis stdin (pipe ou prompt interactif)
-- ~~**Aucun support d'authentification** dans le client HTTP~~ → ✅ Bearer token auth avec `--token` / `NEXA_API_TOKEN`
+- ~~**Aucun support d'authentification** dans le client HTTP~~ → ✅ Bearer token auth avec `--token` / `HELYOS_API_TOKEN`
 - ~~Cle privee TLS envoyee en HTTP non chiffre~~ → ✅ Warning affiche pour ops sensibles sur HTTP non-localhost
 
 #### Client
@@ -385,15 +385,15 @@ Points faibles :
 - ~~**Aucun timeout** HTTP~~ → ✅ `connect_timeout(5s)` + `timeout(30s)`
 - **Aucun retry** pour les erreurs transitoires
 - ~~URL path parameters non percent-encoded~~ → ✅ `urlencoding::encode()` partout
-- ~~SSE event stream cree son propre client hors `NexaClient`~~ → ✅ Reutilise `NexaClient.http_client()`
+- ~~SSE event stream cree son propre client hors `HelyosClient`~~ → ✅ Reutilise `HelyosClient.http_client()`
 
 #### UX
 
-- ~~Pas de fichier de configuration (`~/.nexa/config`)~~ → ✅ `~/.nexa/config.toml` (precedence flag > env > fichier > defaut)
+- ~~Pas de fichier de configuration (`~/.helyos/config`)~~ → ✅ `~/.helyos/config.toml` (precedence flag > env > fichier > defaut)
 - ~~Pas de shell completion~~ → ✅ Subcommande `completions` (bash/zsh/fish/powershell)
 - ~~TUI panic laisse le terminal casse~~ → ✅ `std::panic::set_hook` restaure le terminal
 - Pas de signal handling pendant `deploy` polling
-- ~~`nexa logs` sans interruption gracieuse~~ → ✅ `tokio::select!` + `signal::ctrl_c()`
+- ~~`helyos logs` sans interruption gracieuse~~ → ✅ `tokio::select!` + `signal::ctrl_c()`
 
 #### Testing
 
@@ -408,7 +408,7 @@ Points faibles :
 #### Install Script (`install.sh`)
 
 - ~~Telecharge et installe des binaires **sans verification de checksum**~~ → ✅ SHA-256 verification ajoutee
-- `pkill -x nexad` peut tuer le process d'un autre utilisateur
+- `pkill -x helyosd` peut tuer le process d'un autre utilisateur
 - Pas de `set -u` — variables non definies silencieusement vides
 
 #### CI/CD
@@ -416,13 +416,13 @@ Points faibles :
 - ~~**Aucun security scanning**~~ → ✅ `rustsec/audit-check@v2` ajoute aux 3 repos
 - ~~Release workflow publie meme si le build echoue~~ → ✅ Conditionne au succes du build
 - ~~Aucune signature d'artifacts~~ → ✅ sha256sums.txt publie avec chaque release
-- nexa-core CI ne lance que `cargo test --lib`
+- helyos-core CI ne lance que `cargo test --lib`
 - Pas de CI multi-plateforme (macOS non teste)
 - `cross` installe depuis git sans version pin
 
 #### Proto (`cluster.proto`)
 
-- Pas de versioning du package (`nexa.cluster` au lieu de `nexa.cluster.v1`)
+- Pas de versioning du package (`helyos.cluster` au lieu de `helyos.cluster.v1`)
 - String-typed enumerations (status, action) au lieu de proto enums
 - `bytes` fields pour des donnees structurees (pod_spec, pod_data)
 - ~~Custom `Empty` message au lieu de `google.protobuf.Empty`~~ → ✅ `google.protobuf.Empty` (+ `buf lint` via `buf.yaml`)
@@ -430,13 +430,13 @@ Points faibles :
 #### Cross-Crate
 
 - **Pas de Cargo workspace** — 3 crates independants sans resolution unifiee (architecture multi-repo)
-- ~~`nexa-core` pointe vers des **commits git differents**~~ → ✅ Les deux pointent vers `v0.1.2`
-- ~~`nexa-core` reference par git **sans rev/tag**~~ → ✅ Pinne a `tag = "v0.1.2"`
+- ~~`helyos-core` pointe vers des **commits git differents**~~ → ✅ Les deux pointent vers `v0.1.2`
+- ~~`helyos-core` reference par git **sans rev/tag**~~ → ✅ Pinne a `tag = "v0.1.2"`
 - Version misalignment (0.1.0 vs 0.2.0 sans semver stable)
 
 #### Deploiement
 
-- ~~**Aucun Dockerfile** dans tout le projet~~ → ✅ Dockerfile multi-stage pour nexad
+- ~~**Aucun Dockerfile** dans tout le projet~~ → ✅ Dockerfile multi-stage pour helyosd
 - Aucun manifest de deploiement (Helm, docker-compose, Terraform)
 - Service units user-level seulement (pas de hardening systemd)
 - Pas de mecanisme d'uninstall

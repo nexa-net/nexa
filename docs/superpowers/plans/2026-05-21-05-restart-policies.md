@@ -5,12 +5,12 @@
 > **Multi-Repo Path Mapping:** This project uses separate repos. Translate paths as follows:
 > | Plan path prefix | Repo | Local path |
 > |---|---|---|
-> | `crates/nexa-core/` | [`nexa-core`](https://github.com/nexa-net/nexa-core) | `/Users/nassime/GitHub/nexa-core/` |
-> | `crates/nexad/` | [`nexad`](https://github.com/nexa-net/nexad) | `/Users/nassime/GitHub/nexad/` |
-> | `crates/nexa-cli/` | [`nexa-cli`](https://github.com/nexa-net/nexa-cli) | `/Users/nassime/GitHub/nexa-cli/` |
+> | `crates/helyos-core/` | [`helyos-core`](https://github.com/helyos-labs/helyos-core) | `/Users/nassime/GitHub/helyos-core/` |
+> | `crates/helyosd/` | [`helyosd`](https://github.com/helyos-labs/helyosd) | `/Users/nassime/GitHub/helyosd/` |
+> | `crates/helyos-cli/` | [`helyos-cli`](https://github.com/helyos-labs/helyos-cli) | `/Users/nassime/GitHub/helyos-cli/` |
 
 >
-> `cargo check -p <crate>` → `cargo check` in the target repo. `nexa-core` dep: `git = "https://github.com/nexa-net/nexa-core"`
+> `cargo check -p <crate>` → `cargo check` in the target repo. `helyos-core` dep: `git = "https://github.com/helyos-labs/helyos-core"`
 
 **Goal:** Implement automatic pod restart with exponential backoff, crash-loop protection, and container event detection so pods self-heal on failure according to their deployment's restart policy.
 
@@ -23,11 +23,11 @@
 ### Task 1: Add RuntimeEvent, EventStream, and events() to ContainerRuntime trait
 
 **Files:**
-- Modify: `crates/nexa-core/src/ports/runtime.rs`
+- Modify: `crates/helyos-core/src/ports/runtime.rs`
 
 - [ ] **Step 1: Write a failing test that references the new types**
 
-Add to `crates/nexa-core/src/ports/runtime.rs` at the bottom:
+Add to `crates/helyos-core/src/ports/runtime.rs` at the bottom:
 
 ```rust
 #[cfg(test)]
@@ -55,12 +55,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexa-core -- ports::runtime::tests 2>&1`
+Run: `cargo test -p helyos-core -- ports::runtime::tests 2>&1`
 Expected: FAIL — `RuntimeEvent` does not exist
 
 - [ ] **Step 2: Add RuntimeEvent enum and EventStream type alias**
 
-Add to `crates/nexa-core/src/ports/runtime.rs`, after the `LogStream` type alias:
+Add to `crates/helyos-core/src/ports/runtime.rs`, after the `LogStream` type alias:
 
 ```rust
 /// Stream of container runtime events (deaths, starts, OOMs).
@@ -80,17 +80,17 @@ Add to the `ContainerRuntime` trait body:
 
 ```rust
     /// Returns a stream of container lifecycle events.
-    /// Implementations should filter to containers labeled `managed-by=nexanet`.
+    /// Implementations should filter to containers labeled `managed-by=helyos`.
     async fn events(&self) -> Result<EventStream>;
 ```
 
-Run: `cargo test -p nexa-core -- ports::runtime::tests 2>&1`
+Run: `cargo test -p helyos-core -- ports::runtime::tests 2>&1`
 Expected: test passes (but the workspace will not compile until the Docker adapter implements `events()` — that is Task 7)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/ports/runtime.rs
+git add crates/helyos-core/src/ports/runtime.rs
 git commit -m "feat: add RuntimeEvent, EventStream, and events() to ContainerRuntime trait"
 ```
 
@@ -99,12 +99,12 @@ git commit -m "feat: add RuntimeEvent, EventStream, and events() to ContainerRun
 ### Task 2: Create domain/restart.rs with RestartState, should_restart(), and backoff logic
 
 **Files:**
-- Create: `crates/nexa-core/src/domain/restart.rs`
-- Modify: `crates/nexa-core/src/domain/mod.rs`
+- Create: `crates/helyos-core/src/domain/restart.rs`
+- Modify: `crates/helyos-core/src/domain/mod.rs`
 
 - [ ] **Step 1: Write failing tests for should_restart() and backoff calculation**
 
-Create `crates/nexa-core/src/domain/restart.rs`:
+Create `crates/helyos-core/src/domain/restart.rs`:
 
 ```rust
 use std::time::Duration;
@@ -353,7 +353,7 @@ mod tests {
 
 - [ ] **Step 2: Register the module in domain/mod.rs**
 
-Add to `crates/nexa-core/src/domain/mod.rs`:
+Add to `crates/helyos-core/src/domain/mod.rs`:
 
 ```rust
 pub mod restart;
@@ -361,13 +361,13 @@ pub mod restart;
 
 - [ ] **Step 3: Run tests to verify they pass**
 
-Run: `cargo test -p nexa-core -- domain::restart 2>&1`
+Run: `cargo test -p helyos-core -- domain::restart 2>&1`
 Expected: all 11 tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/restart.rs crates/nexa-core/src/domain/mod.rs
+git add crates/helyos-core/src/domain/restart.rs crates/helyos-core/src/domain/mod.rs
 git commit -m "feat: add restart domain logic with should_restart, backoff, and RestartState"
 ```
 
@@ -376,12 +376,12 @@ git commit -m "feat: add restart domain logic with should_restart, backoff, and 
 ### Task 3: Add CrashLoopBackoff to PodStatus, add ContainerExited + RestartPod to Command enum
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/models/pod.rs`
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/models/pod.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
 
 - [ ] **Step 1: Write failing test that uses CrashLoopBackoff variant**
 
-Add to the bottom of `crates/nexa-core/src/domain/models/pod.rs`:
+Add to the bottom of `crates/helyos-core/src/domain/models/pod.rs`:
 
 ```rust
 #[cfg(test)]
@@ -410,12 +410,12 @@ mod tests {
 }
 ```
 
-Run: `cargo test -p nexa-core -- domain::models::pod::tests 2>&1`
+Run: `cargo test -p helyos-core -- domain::models::pod::tests 2>&1`
 Expected: FAIL — `CrashLoopBackoff` variant and `restart_count` field do not exist
 
 - [ ] **Step 2: Add CrashLoopBackoff to PodStatus and restart_count to Pod**
 
-In `crates/nexa-core/src/domain/models/pod.rs`, add the variant to the `PodStatus` enum:
+In `crates/helyos-core/src/domain/models/pod.rs`, add the variant to the `PodStatus` enum:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -460,12 +460,12 @@ PodStatus::CrashLoopBackoff => write!(f, "CrashLoopBackoff"),
 
 - [ ] **Step 3: Run test to verify it passes**
 
-Run: `cargo test -p nexa-core -- domain::models::pod::tests 2>&1`
+Run: `cargo test -p helyos-core -- domain::models::pod::tests 2>&1`
 Expected: 2 tests pass
 
 - [ ] **Step 4: Add ContainerExited and RestartPod to the Command enum**
 
-In `crates/nexa-core/src/domain/orchestrator.rs`, add two new variants to `Command`:
+In `crates/helyos-core/src/domain/orchestrator.rs`, add two new variants to `Command`:
 
 ```rust
 pub enum Command {
@@ -509,13 +509,13 @@ Command::HealthReport { pod_id, healthy } => {
 
 - [ ] **Step 5: Verify workspace compiles and all tests pass**
 
-Run: `cargo test -p nexa-core 2>&1`
+Run: `cargo test -p helyos-core 2>&1`
 Expected: all tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/models/pod.rs crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/models/pod.rs crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "feat: add CrashLoopBackoff status, restart_count, ContainerExited and RestartPod commands"
 ```
 
@@ -524,12 +524,12 @@ git commit -m "feat: add CrashLoopBackoff status, restart_count, ContainerExited
 ### Task 4: Implement container event watcher
 
 **Files:**
-- Create: `crates/nexad/src/adapters/event_watcher.rs`
-- Modify: `crates/nexad/src/adapters/mod.rs`
+- Create: `crates/helyosd/src/adapters/event_watcher.rs`
+- Modify: `crates/helyosd/src/adapters/mod.rs`
 
 - [ ] **Step 1: Write a test for the event-to-command mapping logic**
 
-Create `crates/nexad/src/adapters/event_watcher.rs`:
+Create `crates/helyosd/src/adapters/event_watcher.rs`:
 
 ```rust
 use std::collections::HashMap;
@@ -540,8 +540,8 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use nexa_core::domain::orchestrator::Command;
-use nexa_core::ports::runtime::{ContainerRuntime, RuntimeEvent};
+use helyos_core::domain::orchestrator::Command;
+use helyos_core::ports::runtime::{ContainerRuntime, RuntimeEvent};
 
 /// Spawns a background task that listens to container runtime events and
 /// forwards relevant ones as Commands to the orchestrator.
@@ -568,7 +568,7 @@ pub fn spawn_event_watcher(
 }
 
 async fn handle_event_stream(
-    mut stream: nexa_core::ports::runtime::EventStream,
+    mut stream: helyos_core::ports::runtime::EventStream,
     tx: &mpsc::Sender<Command>,
 ) {
     while let Some(event) = stream.next().await {
@@ -604,8 +604,8 @@ async fn handle_event_stream(
 
 /// Extract the pod ID from a container ID.
 ///
-/// The Docker adapter's event stream is already filtered to `managed-by=nexanet`
-/// containers and includes the `nexa.pod-id` label in the RuntimeEvent's container_id
+/// The Docker adapter's event stream is already filtered to `managed-by=helyos`
+/// containers and includes the `helyos.pod-id` label in the RuntimeEvent's container_id
 /// field (we use the label value, not the Docker container hash).
 ///
 /// However, if the event stream only provides the Docker container ID, we need
@@ -618,7 +618,7 @@ fn extract_pod_id_from_container(container_id: &str) -> Option<Uuid> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nexa_core::ports::runtime::RuntimeEvent;
+    use helyos_core::ports::runtime::RuntimeEvent;
 
     #[test]
     fn extract_pod_id_parses_valid_uuid() {
@@ -643,7 +643,7 @@ mod tests {
         ];
 
         let (tx, mut rx) = mpsc::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
 
         handle_event_stream(stream, &tx).await;
@@ -669,7 +669,7 @@ mod tests {
         ];
 
         let (tx, mut rx) = mpsc::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
 
         handle_event_stream(stream, &tx).await;
@@ -693,7 +693,7 @@ mod tests {
         ];
 
         let (tx, mut rx) = mpsc::channel(16);
-        let stream: nexa_core::ports::runtime::EventStream =
+        let stream: helyos_core::ports::runtime::EventStream =
             Box::pin(futures::stream::iter(events));
 
         handle_event_stream(stream, &tx).await;
@@ -705,7 +705,7 @@ mod tests {
 
 - [ ] **Step 2: Register the module**
 
-Add to `crates/nexad/src/adapters/mod.rs`:
+Add to `crates/helyosd/src/adapters/mod.rs`:
 
 ```rust
 pub mod event_watcher;
@@ -714,13 +714,13 @@ pub mod runtime;
 
 - [ ] **Step 3: Run tests to verify they pass**
 
-Run: `cargo test -p nexad -- adapters::event_watcher 2>&1`
+Run: `cargo test -p helyosd -- adapters::event_watcher 2>&1`
 Expected: all 5 tests pass
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/event_watcher.rs crates/nexad/src/adapters/mod.rs
+git add crates/helyosd/src/adapters/event_watcher.rs crates/helyosd/src/adapters/mod.rs
 git commit -m "feat: add container event watcher that translates runtime events to orchestrator commands"
 ```
 
@@ -729,11 +729,11 @@ git commit -m "feat: add container event watcher that translates runtime events 
 ### Task 5: Handle ContainerExited in the orchestrator loop
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
 
 - [ ] **Step 1: Write failing tests for restart decision flow**
 
-Add to the `tests` module in `crates/nexa-core/src/domain/orchestrator.rs`:
+Add to the `tests` module in `crates/helyos-core/src/domain/orchestrator.rs`:
 
 ```rust
 #[tokio::test]
@@ -881,12 +881,12 @@ impl OrchestratorHandle {
 }
 ```
 
-Run: `cargo test -p nexa-core -- container_exited 2>&1`
+Run: `cargo test -p helyos-core -- container_exited 2>&1`
 Expected: FAIL — placeholder match arms do nothing
 
 - [ ] **Step 2: Add RestartState tracking to Orchestrator**
 
-In `crates/nexa-core/src/domain/orchestrator.rs`, add the import and field:
+In `crates/helyos-core/src/domain/orchestrator.rs`, add the import and field:
 
 ```rust
 use std::collections::HashMap as StdHashMap;
@@ -1017,16 +1017,16 @@ async fn handle_container_exited(&mut self, pod_id: Uuid, exit_code: i64) {
 
 - [ ] **Step 4: Run tests to verify restart decision logic**
 
-Run: `cargo test -p nexa-core -- container_exited 2>&1`
+Run: `cargo test -p helyos-core -- container_exited 2>&1`
 Expected: `container_exited_with_never_policy_marks_failed` and `on_failure_policy_does_not_restart_on_clean_exit` pass; `container_exited_with_always_policy_triggers_restart` still fails because `RestartPod` handler is not yet implemented (Task 6)
 
-Run: `cargo test -p nexa-core -- crash_loop_backoff 2>&1`
+Run: `cargo test -p helyos-core -- crash_loop_backoff 2>&1`
 Expected: passes (the crash loop test only checks status, not actual restart)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "feat: handle ContainerExited with restart policy evaluation and crash-loop detection"
 ```
 
@@ -1035,7 +1035,7 @@ git commit -m "feat: handle ContainerExited with restart policy evaluation and c
 ### Task 6: Handle RestartPod in the orchestrator loop
 
 **Files:**
-- Modify: `crates/nexa-core/src/domain/orchestrator.rs`
+- Modify: `crates/helyos-core/src/domain/orchestrator.rs`
 
 - [ ] **Step 1: Replace the RestartPod placeholder with real handler**
 
@@ -1092,7 +1092,7 @@ async fn handle_restart_pod(&mut self, pod_id: Uuid) {
     };
 
     let container_name = pod.container_name();
-    let network_name = format!("nexa-{}", spec.project);
+    let network_name = format!("helyos-{}", spec.project);
 
     let _ = self.runtime.pull_image(&spec.image).await;
 
@@ -1111,10 +1111,10 @@ async fn handle_restart_pod(&mut self, pod_id: Uuid) {
         .collect();
 
     let mut labels = StdHashMap::new();
-    labels.insert("managed-by".to_string(), "nexanet".to_string());
-    labels.insert("nexa.project".to_string(), spec.project.clone());
-    labels.insert("nexa.deployment".to_string(), spec.deployment.name.clone());
-    labels.insert("nexa.pod-id".to_string(), pod_id.to_string());
+    labels.insert("managed-by".to_string(), "helyos".to_string());
+    labels.insert("helyos.project".to_string(), spec.project.clone());
+    labels.insert("helyos.deployment".to_string(), spec.deployment.name.clone());
+    labels.insert("helyos.pod-id".to_string(), pod_id.to_string());
 
     let config = ContainerConfig {
         name: container_name.clone(),
@@ -1206,13 +1206,13 @@ async fn handle_health_report(&mut self, pod_id: Uuid, healthy: bool) {
 
 - [ ] **Step 3: Run all restart-related tests**
 
-Run: `cargo test -p nexa-core -- domain::orchestrator 2>&1`
+Run: `cargo test -p helyos-core -- domain::orchestrator 2>&1`
 Expected: all tests pass, including the restart tests from Task 5
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexa-core/src/domain/orchestrator.rs
+git add crates/helyos-core/src/domain/orchestrator.rs
 git commit -m "feat: implement RestartPod handler with container recreation and health report integration"
 ```
 
@@ -1221,7 +1221,7 @@ git commit -m "feat: implement RestartPod handler with container recreation and 
 ### Task 7: Implement Docker events() in the Docker adapter
 
 **Files:**
-- Modify: `crates/nexad/src/adapters/runtime/docker.rs`
+- Modify: `crates/helyosd/src/adapters/runtime/docker.rs`
 
 - [ ] **Step 1: Add events() implementation to DockerRuntime**
 
@@ -1246,7 +1246,7 @@ async fn events(&self) -> Result<EventStream> {
     );
     filters.insert(
         "label".to_string(),
-        vec!["managed-by=nexanet".to_string()],
+        vec!["managed-by=helyos".to_string()],
     );
 
     let options = EventsOptions::<String> {
@@ -1264,7 +1264,7 @@ async fn events(&self) -> Result<EventStream> {
                 let actor = event.actor.as_ref();
                 let container_id = actor
                     .and_then(|a| a.attributes.as_ref())
-                    .and_then(|attrs| attrs.get("nexa.pod-id"))
+                    .and_then(|attrs| attrs.get("helyos.pod-id"))
                     .cloned()
                     .unwrap_or_default();
 
@@ -1302,10 +1302,10 @@ async fn events(&self) -> Result<EventStream> {
 Ensure these are present:
 
 ```rust
-use nexa_core::ports::runtime::{EventStream, RuntimeEvent};
+use helyos_core::ports::runtime::{EventStream, RuntimeEvent};
 ```
 
-(These should already be available via `use nexa_core::ports::runtime::*;`)
+(These should already be available via `use helyos_core::ports::runtime::*;`)
 
 - [ ] **Step 3: Verify the full workspace compiles**
 
@@ -1315,20 +1315,20 @@ Expected: compiles (warnings OK)
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/adapters/runtime/docker.rs
+git add crates/helyosd/src/adapters/runtime/docker.rs
 git commit -m "feat: implement Docker event stream with filtering for managed containers"
 ```
 
 ---
 
-### Task 8: Wire event watcher into nexad main.rs
+### Task 8: Wire event watcher into helyosd main.rs
 
 **Files:**
-- Modify: `crates/nexad/src/main.rs`
+- Modify: `crates/helyosd/src/main.rs`
 
 - [ ] **Step 1: Add event watcher startup to main()**
 
-In `crates/nexad/src/main.rs`, after the orchestrator handle is created and before `api::serve()`, add:
+In `crates/helyosd/src/main.rs`, after the orchestrator handle is created and before `api::serve()`, add:
 
 ```rust
 use crate::adapters::event_watcher;
@@ -1354,13 +1354,13 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    info!("starting nexad on {}:{}", cli.host, cli.port);
+    info!("starting helyosd on {}:{}", cli.host, cli.port);
 
     let runtime = adapters::runtime::DockerRuntime::new()?;
     runtime.ping().await?;
     info!("connected to Docker runtime");
 
-    let runtime_arc: Arc<dyn nexa_core::ports::runtime::ContainerRuntime> = Arc::new(runtime);
+    let runtime_arc: Arc<dyn helyos_core::ports::runtime::ContainerRuntime> = Arc::new(runtime);
     let handle = Orchestrator::spawn(Arc::clone(&runtime_arc));
 
     // Start container event watcher
@@ -1394,8 +1394,8 @@ Expected: all tests pass (domain::restart, domain::orchestrator, adapters::event
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/nexad/src/main.rs crates/nexa-core/src/domain/orchestrator.rs
-git commit -m "feat: wire container event watcher into nexad startup"
+git add crates/helyosd/src/main.rs crates/helyos-core/src/domain/orchestrator.rs
+git commit -m "feat: wire container event watcher into helyosd startup"
 ```
 
 - [ ] **Step 5: Final integration verification**
