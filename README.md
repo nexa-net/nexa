@@ -15,7 +15,7 @@
 [![helyos-cli CI](https://github.com/helyos-labs/helyos-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/helyos-labs/helyos-cli/actions)
 
 
-[Install](#install) · [Quick Start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Docs](#documentation)
+[Install](#install) · [Quick Start](#quick-start) · [Features](#features) · [Comparison](#comparison) · [Docs](#documentation)
 
 </div>
 
@@ -47,13 +47,13 @@ helyos route add api.example.com     Ingress controller config
 curl -sSfL https://raw.githubusercontent.com/helyos-labs/helyos/main/install.sh | sh
 ```
 
-This installs both `helyosd` (daemon) and `helyos` (CLI) to `/usr/local/bin`. Supports Linux (amd64/arm64) and macOS (amd64/arm64).
+This installs both `helyosd` (daemon) and `helyos` (CLI) to `/usr/local/bin`, sets up an auto-start service, and launches the daemon. Supports Linux (amd64/arm64) and macOS (amd64/arm64).
 
 <details>
 <summary><b>Build from source</b></summary>
 
 ```bash
-# Requires Rust 1.85+ and Docker or containerd running on the host
+# Requires Rust 1.85+ (helyosd needs 1.88+) and Docker or containerd running on the host
 
 # Build the daemon
 git clone https://github.com/helyos-labs/helyosd.git
@@ -75,6 +75,8 @@ cd helyos-cli && cargo build --release
 ```bash
 helyosd
 ```
+
+On first run, `helyosd` generates an API token (logged once) and writes a local CLI context. Run the daemon, and `helyos` just works locally — no flags, no config. Bind to a non-loopback address and TLS turns on automatically, with a self-signed cert generated on the spot.
 
 **2. Deploy a service**
 
@@ -116,6 +118,28 @@ helyos scale api 10    # scale to 10 replicas
 
 That's it. No init scripts, no cluster bootstrapping, no 47-page getting-started guide.
 
+### Remote & multi-user access
+
+Whenever the daemon binds a non-loopback address, the API is **HTTPS by default** — refusing plain HTTP unless you explicitly opt in. To drive a remote cluster, log in once — `helyos login` pins the daemon's CA and saves a named context, so every subsequent command is authenticated and encrypted:
+
+```bash
+# Mint a token on the server (or use the one helyosd logged on first run)
+helyos auth token create alice
+
+# Log in from anywhere — pins the CA, stores a context
+helyos login https://cluster.example.com:6443 --token <TOKEN>
+
+# Now the usual commands target the remote cluster
+helyos status
+helyos deploy app.yaml
+
+helyos whoami          # who am I on this server?
+helyos context ls      # switch between clusters
+helyos logout          # drop the token (keeps the pinned CA)
+```
+
+Tokens can also be passed with `--token-stdin` or via `HELYOS_API_TOKEN`. Local use stays zero-config: the daemon writes a context for you on first start.
+
 ---
 
 ## Features
@@ -153,7 +177,19 @@ helyosd --mode worker \
 <tr>
 <td width="50%">
 
-### Automatic TLS
+### Secure by default
+
+```bash
+helyos login https://cluster:6443 \
+  --token <TOKEN>
+```
+
+HTTPS API with a self-signed cert out of the box, bearer-token auth, CA-pinned login, and multi-user API tokens.
+
+</td>
+<td width="50%">
+
+### Automatic TLS for your apps
 
 ```yaml
 network:
@@ -161,9 +197,11 @@ network:
   https: true
 ```
 
-Let's Encrypt certificates provisioned and renewed automatically. Zero config.
+Let's Encrypt certificates provisioned and renewed automatically for public routes. Zero config.
 
 </td>
+</tr>
+<tr>
 <td width="50%">
 
 ### Built-in service discovery
@@ -177,19 +215,19 @@ Every deployment gets a DNS name:
 No CoreDNS setup. No service mesh. It just works.
 
 </td>
-</tr>
-<tr>
 <td width="50%">
 
 ### Encrypted secrets
 
 ```bash
-helyos secret set DB_PASS s3cret -p myapp
+helyos secret set DB_PASS --value s3cret -p myapp
 ```
 
 AES-256-GCM encryption at rest. Per-node master keys. Injected as environment variables.
 
 </td>
+</tr>
+<tr>
 <td width="50%">
 
 ### Health checking & restart
@@ -204,23 +242,14 @@ healthcheck:
 restart: always
 ```
 
-HTTP, TCP, and exec probes with automatic restart on failure.
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Weighted scheduling
-
-Spread or bin-pack strategies across heterogeneous nodes. Weighted round-robin load balancing for traffic.
+HTTP probes with configurable interval, timeout, and retry thresholds — and automatic restart on failure.
 
 </td>
 <td width="50%">
 
 ### Runtime flexibility
 
-Docker and containerd supported out of the box. Auto-detected at startup — no config needed.
+Docker and containerd supported out of the box. Auto-detected at startup — no config needed. Weighted spread/bin-pack scheduling across heterogeneous nodes.
 
 </td>
 </tr>
@@ -234,18 +263,19 @@ Docker and containerd supported out of the box. Auto-detected at startup — no 
 | Category | Feature |
 |---|---|
 | **Orchestration** | Declarative YAML deployments, rolling updates, replica scaling |
+| **Security** | HTTPS API by default, bearer-token auth, CA-pinned `helyos login`, multi-user API tokens, secure-by-default bind |
 | **Clustering** | Master/worker topology, gRPC transport, join tokens, heartbeat monitoring |
 | **Scheduling** | Weighted spread/bin-pack strategies, automatic pod rescheduling on node failure |
 | **Networking** | Per-project Docker networks, CNI support (experimental), WireGuard overlay (experimental) |
-| **Service Discovery** | Embedded DNS server resolving `<service>.<project>.internal` |
+| **Service Discovery** | Embedded DNS server resolving `<deployment>.<project>.internal` |
 | **Routing** | Built-in reverse proxy, nginx/Caddy/Traefik backends, host-based routing |
-| **TLS** | ACME auto-provisioning, certificate import, daily renewal |
+| **TLS** | Self-signed API cert auto-generated (BYO supported), ACME auto-provisioning for routes, daily renewal |
 | **Secrets** | AES-256-GCM encryption at rest, per-node master keys |
-| **Health** | HTTP/TCP/exec probes, configurable thresholds, automatic restart policies |
+| **Health** | HTTP probes, configurable thresholds, automatic restart policies |
 | **Projects** | Logical isolation with suspend/resume, resource management |
 | **Runtimes** | Docker (bollard) and containerd (ctr) with auto-detection |
 | **State** | SQLite persistence — no external database required |
-| **CLI** | Full resource management, JSON output mode, styled terminal tables |
+| **CLI** | Full resource management, named contexts, JSON output mode, styled terminal tables |
 
 </details>
 
@@ -280,8 +310,18 @@ helyos routes [-p PROJECT]             # list routes
 helyos cert import <DOMAIN> --cert FILE --key FILE
 
 # Secrets
-helyos secret set <NAME> <VALUE> -p PROJECT
+helyos secret set <NAME> [--value VALUE] -p PROJECT   # prompts/stdin if no value
 helyos secret list -p PROJECT
+
+# Auth & contexts
+helyos login <SERVER> [--token <T> | --token-stdin]   # pin CA, store a context
+helyos logout [NAME]                   # drop the token from a context
+helyos whoami                          # identity of the active token
+helyos context ls                      # list connection contexts
+helyos context use <NAME>              # switch active cluster
+helyos auth token create <NAME>        # mint a server-side API token (shown once)
+helyos auth token ls                   # list API tokens
+helyos auth token revoke <NAME>        # revoke an API token
 
 # All commands support --json for scripting
 helyos pods --json | jq '.[] | .name'
@@ -295,9 +335,8 @@ helyos pods --json | jq '.[] | .name'
 |:--|:--|
 | Deployment spec format | [`helyosd` README](https://github.com/helyos-labs/helyosd#deployment-specs) |
 | REST API reference | [`helyosd` README](https://github.com/helyos-labs/helyosd#rest-api) |
-| CLI commands | [`helyos-cli` README](https://github.com/helyos-labs/helyos-cli#command-reference) |
-
 | Clustering guide | [`helyosd` README](https://github.com/helyos-labs/helyosd#clustering) |
+| CLI commands | [`helyos-cli` README](https://github.com/helyos-labs/helyos-cli#command-reference) |
 
 ---
 
@@ -326,7 +365,6 @@ Helyos is organized as a multi-repo project under the [`helyos-labs`](https://gi
 | **[`helyos-core`](https://github.com/helyos-labs/helyos-core)** | Core library — domain types, port traits, orchestrator | [![CI](https://github.com/helyos-labs/helyos-core/actions/workflows/ci.yml/badge.svg)](https://github.com/helyos-labs/helyos-core/actions) |
 | **[`helyosd`](https://github.com/helyos-labs/helyosd)** | Daemon — runtime adapters, REST API, clustering | [![CI](https://github.com/helyos-labs/helyosd/actions/workflows/ci.yml/badge.svg)](https://github.com/helyos-labs/helyosd/actions) |
 | **[`helyos-cli`](https://github.com/helyos-labs/helyos-cli)** | CLI tool — deploy, scale, manage from the terminal | [![CI](https://github.com/helyos-labs/helyos-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/helyos-labs/helyos-cli/actions) |
-
 
 ---
 
